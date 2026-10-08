@@ -2,6 +2,8 @@
 
 Written 7 Oct 2026 at the end of the design sessions. Read this first in a new session, then the two files it points to. Nothing in the repository is code yet.
 
+**Update, 8 Oct 2026, evening: milestone 1, phase 0 has started.** Tasks 1 to 3 of `docs/plans/2026-10-08-milestone-1-phase-0.md` are done (git repository, Rust tools, the test distribution `steplet-test`). Where to pick up, and traps already hit: `docs/milestone-1-phase-0-handoff.md`.
+
 **Update, 8 Oct 2026: milestone 0 is finished.** Read `docs/milestone-0-wrap-up.md` (what each runner may promise, the measured numbers, what is still unverified) and the "After milestone 0" section of `docs/decisions.md` (D1 to D8, corrections C1 to C7). Facts 1 and 3 below were corrected by measurement. Next: the milestone 1 plan.
 
 **Update, 7 Oct 2026 evening: milestone 0 is in progress.** Plan: `docs/plans/2026-10-07-milestone-0-execution-boundary.md`. Results with real output: `docs/milestone-0-results.md`. Where to pick up, and traps already hit: `docs/milestone-0-handoff.md`.

@@ -1,0 +1,8 @@
+# Throwaway spike code for milestone 1, phase 0. Not part of the product.
+[workspace]
+resolver = "2"
+members = ["host", "gate"]
+
+[workspace.package]
+edition = "2024"
+publish = false
