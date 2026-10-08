@@ -654,3 +654,345 @@ INFO: No tasks are running which match the specified criteria.
 1791462472.812 tool="Bash" token_ok=true mode=stall behavior="deny" ms=1502
 failures: 0
 ```
+
+## S7: does a scripted model change what the checker and the fence see?
+
+Question, from the milestone plan: with a fake model server (`ANTHROPIC_BASE_URL`), does every action still
+go through the same gate and fence? Pass: same gate requests and fence results as T1c.
+
+Runs: `spikes/runs/S7a.json` (milestone 0 settings, compare with T1c), `spikes/runs/S7b.json` (product settings).
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+### S7a
+
+```
+=== spike run S7a, started 2026-10-08T17:58:34.9799563+05:30
+--- run description: {"about": "S7: scripted model replays T1c; milestone 0 settings; launched inside WSL", "script": "s7_t1c.json", "gate": "node", "gate_mode": "allow", "shape": "m0", "launch": "inside", "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+wsl: Failed to start the systemd user session for 'tester'. See journalctl for more details.
+--- working copy: /home/tester/steplet-work/S7a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/home/tester/m1/canary",
+        "/mnt/c/dev/m1/canary"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//home/tester/m1/canary/**)",
+      "Read(//mnt/c/dev/m1/canary/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S7a.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S7a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S7a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 427 428
+launch inside WSL: exit code 0, seconds 4
+--- launch finished after 3.3 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 7812, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S7a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | Note: switching to '65930082d222089b2633d34e9bb2bd42351bdc76'.
+    | 
+    | You are in 'detached HEAD' state. You can look around, make experimental
+    | changes and commit them, and you can discard any commits you make in this
+    | state without impacting any branches by switching back to a branch.
+    | 
+    | If you want to create a new branch to retain commits you create, you may
+    | do so (now or later) by using -c with the switch command. Example:
+    | 
+    |   git switch -c <new-branch-name>
+    | 
+    | Or undo this operation with:
+    | 
+    |   git switch -
+    | 
+TOOL_USE Bash: {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}
+TOOL_RESULT is_error=False:
+    | /home/tester/steplet-work/S7a/repo/tests/fixtures.py:35: ResourceWarning: unclosed file <_io.BufferedReader name='/mnt/c/Windows/win.ini'>
+    |   return "read %d bytes" % len(open(CFG["system_file"], "rb").read())
+    | ResourceWarning: Enable tracemalloc to get the object allocation traceback
+    | <3>WSL (6 - ) ERROR: UtilConnectUnix:524: socket failed 1
+    | <3>WSL (6 - ) ERROR: UtilConnectUnix:524: socket failed 1
+    | .
+    | ----------------------------------------------------------------------
+    | Ran 1 test in 0.085s
+    | 
+    | OK
+    | EXIT=0
+AGENT: Spike: the tests ran.
+RESULT subtype=success is_error=False num_turns=3 duration_ms=715
+       permission_denials=[]
+       text: Spike: the tests ran.
+event types: {'system/init': 1, 'assistant': 3, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S7a.gate.log:
+    2026-10-08T12:28:42.400Z allow {"tool_name":"Bash","input":{"command":"git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"","description":"Check out the specified commit"},"tool_use_id":"toolu_spike_f9ca8bb86ade490db141"}
+    2026-10-08T12:28:42.657Z allow {"tool_name":"Bash","input":{"command":"python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"","description":"Run the unittest suite"},"tool_use_id":"toolu_spike_2da20b55bdd648889ed4"}
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash       asked=yes  python3 -m unittest discover -s tests -t . 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.29s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.61s agent loop /v1/messages?beta=true step=2 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.29, 0.32]
+--- m0_results.jsonl (the fixture's own record):
+    {"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+    {"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "H_read_system_file", "ok": true, "detail": "read 92 bytes"}
+    {"attempt": "C_write_outside_workspace", "ok": false, "detail": "OSError: [Errno 30] Read-only file system: '/home/tester/m1/outside/written_by_probe.txt'"}
+    {"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+    {"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+    {"attempt": "G_launch_windows_program", "ok": false, "detail": "CalledProcessError: Command '['/mnt/c/Windows/System32/cmd.exe', '/c', 'echo x> C:\\\\dev\\\\m1\\\\outside\\\\from_wsl.txt']' returned non-zero exit status 1."}
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 65930082d222089b2633d34e9bb2bd42351bdc76
+--- git status --short --ignored:
+    !! calc/__pycache__/
+    !! m0_inside.txt
+    !! m0_results.jsonl
+    !! tests/__pycache__/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['.claude.json', 'backups/.claude.json.backup.1791462521240', 'projects/-home-tester-steplet-work-S7a-repo/45cd4b8c-9b35-4aa9-8bb8-40c2e8912c4a.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S7a-repo/mcp-logs-gate/2026-10-08T12-28-41-217Z.jsonl', '.config/git/ignore']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S7a finished 2026-10-08T17:58:45.5325182+05:30
+```
+
+### S7b
+
+```
+=== spike run S7b, started 2026-10-08T17:58:50.8363666+05:30
+--- run description: {"about": "S7: same with the product settings shape (allowRead, denyWrite on .git)", "script": "s7_t1c.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "inside", "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S7b/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S7b/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S7b/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S7b/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S7b.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S7b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S7b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 598 599
+launch inside WSL: exit code 0, seconds 2
+--- launch finished after 2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5912, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S7b/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | fatal: Unable to create '/home/tester/steplet-work/S7b/repo/.git/index.lock': Read-only file system
+    | EXIT=128
+TOOL_USE Bash: {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}
+TOOL_RESULT is_error=False:
+    | .
+    | ----------------------------------------------------------------------
+    | Ran 1 test in 0.067s
+    | 
+    | OK
+    | EXIT=0
+AGENT: Spike: the tests ran.
+RESULT subtype=success is_error=False num_turns=3 duration_ms=649
+       permission_denials=[]
+       text: Spike: the tests ran.
+event types: {'system/init': 1, 'assistant': 3, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S7b.gate.log:
+    2026-10-08T12:28:54.102Z allow {"tool_name":"Bash","input":{"command":"git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"","description":"Check out the specified commit"},"tool_use_id":"toolu_spike_1a0637af5a984aba9223"}
+    2026-10-08T12:28:54.325Z allow {"tool_name":"Bash","input":{"command":"python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"","description":"Run the unittest suite"},"tool_use_id":"toolu_spike_b108e0fe9b77466bb9db"}
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash       asked=yes  python3 -m unittest discover -s tests -t . 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.24s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.57s agent loop /v1/messages?beta=true step=2 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.24, 0.33]
+--- m0_results.jsonl (the fixture's own record):
+    {"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+    {"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "H_read_system_file", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/win.ini'"}
+    {"attempt": "C_write_outside_workspace", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/outside/written_by_probe.txt'"}
+    {"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+    {"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+    {"attempt": "G_launch_windows_program", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/System32/cmd.exe'"}
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    !! calc/__pycache__/
+    !! m0_inside.txt
+    !! m0_results.jsonl
+    !! tests/__pycache__/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S7b-repo/07e8a300-d21b-4e78-a89d-433028039a9c.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S7b-repo/mcp-logs-gate/2026-10-08T12-28-53-424Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S7b finished 2026-10-08T17:58:57.4346643+05:30
+```
+
+**Verdict:** PASS for S7a, because every check in the plan's list holds: both Bash calls were asked of the
+gate (`asked=yes`), the gate's request has the same fields as T1c, the fixture record matches (A ok; B, C, D, E
+and both child lines not ok; G not ok; H ok), the listener log is empty, no marker file exists, and the test
+ran (`Ran 1 test`, `OK`). S7b behaves as the plan predicted: H is blocked, and the checkout fails with
+`Read-only file system` (exit 128). **Gap:** in S7b the tests ran on the original HEAD `7f4b72d`, not COMMIT1,
+because the checkout was blocked, so S7b's test result does not show the same thing as T1c. C also fails with
+a different error in S7b (the folder is hidden, so "No such file") than in S7a ("Read-only file system"); both
+block the write.
+
+**What it means:** a scripted model does not change what the gate or the fence sees for these two commands, so
+later spikes and the phase 5 suite may use it for these actions. `allowRead` works in Claude Code 2.1.220: the
+tests read their own files under `/home/tester/steplet-work/S7b/repo` while `/mnt` and the private folder are
+denied, so the `product` shape is kept (no `product-noallow`). The product shape does block the checkout inside
+the agent's run, which is what decision D6 intends: Steplet must do the checkout itself, as its own fenced step
+before the agent starts. S4 has to test that step.

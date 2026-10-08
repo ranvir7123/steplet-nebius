@@ -1,0 +1,8 @@
+{
+  "about": "Replays T1c: check out COMMIT1, run the tests",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}},
+    {"tool": "Bash", "input": {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}},
+    {"text": "Spike: the tests ran."}
+  ]
+}
