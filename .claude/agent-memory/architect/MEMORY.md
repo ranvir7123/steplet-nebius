@@ -1,0 +1,10 @@
+- [Signing design v1](decision_signing_v1.md) — 2026-10-06: SSHSIG + Ed25519 in metadata, textual canonical form, TOFU pins, GitHub key lookup; rejected options
+- [SKILL.md compatibility constraint](constraint_skillmd_compat.md) — validator rejects unknown top-level fields; NOTE superseded by decisions.md R12 (own typed YAML)
+- [Agent adapter layer](decision_agent_adapter_layer.md) — 2026-10-06: core-owned policy engine, per-agent translators; tiers later replaced by R1/R6
+- [Built-in agent](decision_builtin_agent.md) — 2026-10-06: Rust loop via genai; scope later amended by R3/R24
+- [Risk rating](project_risk_rating_decision.md) — 2026-10-06: worst-finding colour, one Policy::check crate; amended by R8/R9
+- [Provider access facts](provider_access_facts.md) — which consumer AI plans third-party apps may use (as of 2026-10)
+- [Scanner rule sources](reference_scanner_rule_sources.md) — where to copy agent-file security rules from, licence limits
+- [Milestone 1 core choices](decision_m1_core_choices.md) — 2026-10-08: own YAML subset parser, ssh-key, no_std core, Svelte 5, corpus; Windows ssh-keygen traps
+- [M1 runner side](decision_m1_runner_side.md) — 2026-10-08: WSL gate = Windows exe + named pipe; checkout, Codex trials, hostile suite advice
+- Always check docs/decisions.md "Review round 1" R-rows first; they override the 2026-10-06 memos above.
