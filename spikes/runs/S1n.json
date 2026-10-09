@@ -1,0 +1,1 @@
+{"about": "S1: the Node stand-in gate inside WSL, for comparing decision times", "script": "s1_writes.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}

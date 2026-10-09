@@ -1,0 +1,1 @@
+{"about": "S1: gate as a Windows program, host allows; ten writes", "script": "s1_writes.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}

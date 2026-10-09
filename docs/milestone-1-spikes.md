@@ -1622,3 +1622,1590 @@ and the helper process numbers kept rising across runs in the same boot (S2a 512
   Code's processes (S3 depends on this).
 - **Noted for S3, not judged here:** in S2a the fake API key, passed as `ANTHROPIC_API_KEY`, was readable inside the
   fence: in the probe's own environment copy and in two `/proc/<pid>/environ` files of fenced processes.
+
+## S1: the gate as a Windows program started through interop
+
+Question, from the milestone plan: Can Claude Code start a Windows `.exe` through interop as its permission-prompt
+server? Does that program exit when Claude Code is stopped or killed, and come back after a restart? Can a fenced
+program still not start Windows programs (F28)? How long does one decision take? Pass: all yes; the time recorded.
+
+Runs: `spikes/runs/S1a.json`, `S1n.json`, `S1b.json`, `S1s.json`, `S1c.json`, `S1t.json`, `S1k.json`, `S1f.json`.
+`S1a-i.json` was not run: S1a's gate started without `WSL_INTEROP`.
+Every run uses `"env_mode": "systemroot"` (S2: `wsl.exe` fails with an empty environment).
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+### S1a: the Windows gate allows ten writes
+
+The gate log's last line is a bare timestamp: the gate writes each line in pieces, and was stopped while writing its
+exit line, 0.16 s after its last decision.
+
+```
+=== spike run S1a, started 2026-10-09T10:45:26.7146955+05:30
+--- run description: {"about": "S1: gate as a Windows program, host allows; ten writes", "script": "s1_writes.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1a/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1a/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1a/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1a", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1a.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 440 441
+host: pipe \\.\pipe\steplet-spike-S1a created, gate mode allow
+host: wsl.exe started (pid Some(34312), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.4 s
+--- launch finished after 2.4 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 16564, lines: 25, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_01.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_01.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_02.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_02.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_03.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_03.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_04.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_04.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_05.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_05.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_06.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_06.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_07.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_07.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_08.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_08.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_09.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_09.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1a/repo/s1_marker_10.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1a/repo/s1_marker_10.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Bash: {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+AGENT: Spike S1: done.
+RESULT subtype=success is_error=False num_turns=12 duration_ms=572
+       permission_denials=[]
+       text: Spike S1: done.
+event types: {'system/init': 1, 'assistant': 12, 'user': 11, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1a.gate.log:
+    1791522933.306 pid=1956 started; 1 environment variables: SystemRoot
+    1791522933.481 pid=1956 tool="Write" behavior="allow" ms=1 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_01.txt"}
+    1791522933.514 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_02.txt"}
+    1791522933.536 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_03.txt"}
+    1791522933.559 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_04.txt"}
+    1791522933.579 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_05.txt"}
+    1791522933.601 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_06.txt"}
+    1791522933.619 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_07.txt"}
+    1791522933.718 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_08.txt"}
+    1791522933.737 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_09.txt"}
+    1791522933.772 pid=1956 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1a/repo/s1_marker_10.txt"}
+    1791522933.807 pid=1956 tool="Bash" behavior="allow" ms=0 input={"command":"ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"","description":"Save the process list"}
+    1791522933.967
+--- gate log S1a.host-gate.log:
+    1791522933.481 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.514 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.536 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.559 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.579 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.601 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.619 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.675 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","1956","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791522933.718 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.737 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.772 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791522933.807 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_01.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_02.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_03.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_04.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_05.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_06.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_07.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_08.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_09.txt
+    Write      asked=yes  /home/tester/steplet-work/S1a/repo/s1_marker_10.txt
+    Bash       asked=yes  ps -eo pid,args > s1_ps.txt 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.04s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.07s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.09s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.11s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.13s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.15s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.25s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.27s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.29s agent loop /v1/messages?beta=true step=9 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.32s agent loop /v1/messages?beta=true step=10 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.50s agent loop /v1/messages?beta=true step=11 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.04, 0.02, 0.02, 0.02, 0.02, 0.02, 0.1, 0.02, 0.02, 0.04, 0.18]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s1_marker_01.txt
+    ?? s1_marker_02.txt
+    ?? s1_marker_03.txt
+    ?? s1_marker_04.txt
+    ?? s1_marker_05.txt
+    ?? s1_marker_06.txt
+    ?? s1_marker_07.txt
+    ?? s1_marker_08.txt
+    ?? s1_marker_09.txt
+    ?? s1_marker_10.txt
+    ?? s1_ps.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1a-repo/91a9d15f-6da5-4e87-8b02-e937b59c7470.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1a-repo/mcp-logs-gate/2026-10-09T05-15-33-101Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- the fence's own process list: 4 lines; shows the gate: False; shows the run token: False
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1a finished 2026-10-09T10:45:36.7948514+05:30
+```
+
+### S1n: the same through the Node stand-in gate inside WSL
+
+```
+=== spike run S1n, started 2026-10-09T10:46:05.2846980+05:30
+--- run description: {"about": "S1: the Node stand-in gate inside WSL, for comparing decision times", "script": "s1_writes.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1n/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1n/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1n/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1n/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S1n.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1n/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1n/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 428 429
+host: wsl.exe started (pid Some(468), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 3.4 s
+--- launch finished after 3.4 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 16564, lines: 25, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1n/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_01.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_01.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_02.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_02.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_03.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_03.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_04.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_04.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_05.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_05.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_06.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_06.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_07.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_07.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_08.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_08.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_09.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_09.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1n/repo/s1_marker_10.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1n/repo/s1_marker_10.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Bash: {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+AGENT: Spike S1: done.
+RESULT subtype=success is_error=False num_turns=12 duration_ms=597
+       permission_denials=[]
+       text: Spike S1: done.
+event types: {'system/init': 1, 'assistant': 12, 'user': 11, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1n.gate.log:
+    2026-10-09T05:16:12.808Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_01.txt","content":"s1\n"},"tool_use_id":"toolu_spike_8d877aa7325745928c6e"}
+    2026-10-09T05:16:12.849Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_02.txt","content":"s1\n"},"tool_use_id":"toolu_spike_1d0759eb38df4112b8dd"}
+    2026-10-09T05:16:12.871Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_03.txt","content":"s1\n"},"tool_use_id":"toolu_spike_f97c9f57e32b4f9c9760"}
+    2026-10-09T05:16:12.892Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_04.txt","content":"s1\n"},"tool_use_id":"toolu_spike_e28ada0e2e7a49fa8ce1"}
+    2026-10-09T05:16:12.911Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_05.txt","content":"s1\n"},"tool_use_id":"toolu_spike_50acf72f91dd44968ab3"}
+    2026-10-09T05:16:12.932Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_06.txt","content":"s1\n"},"tool_use_id":"toolu_spike_9026809f6ae9445b9e66"}
+    2026-10-09T05:16:12.950Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_07.txt","content":"s1\n"},"tool_use_id":"toolu_spike_babee54653ed47b3a444"}
+    2026-10-09T05:16:13.041Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_08.txt","content":"s1\n"},"tool_use_id":"toolu_spike_4f71a43e60d94a348054"}
+    2026-10-09T05:16:13.061Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_09.txt","content":"s1\n"},"tool_use_id":"toolu_spike_52e826f4bbc74cd79f0d"}
+    2026-10-09T05:16:13.098Z allow {"tool_name":"Write","input":{"file_path":"/home/tester/steplet-work/S1n/repo/s1_marker_10.txt","content":"s1\n"},"tool_use_id":"toolu_spike_461443aaa31742278305"}
+    2026-10-09T05:16:13.140Z allow {"tool_name":"Bash","input":{"command":"ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"","description":"Save the process list"},"tool_use_id":"toolu_spike_bc5610d3f187457fa5c4"}
+--- every tool call the agent made, and whether it asked the checker first:
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_01.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_02.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_03.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_04.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_05.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_06.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_07.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_08.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_09.txt
+    Write      asked=yes  /home/tester/steplet-work/S1n/repo/s1_marker_10.txt
+    Bash       asked=yes  ps -eo pid,args > s1_ps.txt 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.08s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.10s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.12s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.14s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.16s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.18s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.27s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.29s agent loop /v1/messages?beta=true step=9 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.32s agent loop /v1/messages?beta=true step=10 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.51s agent loop /v1/messages?beta=true step=11 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.05, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.09, 0.02, 0.04, 0.19]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s1_marker_01.txt
+    ?? s1_marker_02.txt
+    ?? s1_marker_03.txt
+    ?? s1_marker_04.txt
+    ?? s1_marker_05.txt
+    ?? s1_marker_06.txt
+    ?? s1_marker_07.txt
+    ?? s1_marker_08.txt
+    ?? s1_marker_09.txt
+    ?? s1_marker_10.txt
+    ?? s1_ps.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1n-repo/1ae63d8d-3f6f-4523-a109-57a44c0d9bd0.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1n-repo/mcp-logs-gate/2026-10-09T05-16-11-885Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- the fence's own process list: 4 lines; shows the gate: False; shows the run token: False
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1n finished 2026-10-09T10:46:16.2295236+05:30
+```
+
+### S1b: the host closes the pipe without answering
+
+The `permission_denials` line above is shortened by the harness. Counted from the raw event stream with a JSON
+parser: 11 denials in S1b and 11 in S1s (the ten Writes, 10 different files, plus the Bash call).
+
+```
+=== spike run S1b, started 2026-10-09T10:46:25.9039989+05:30
+--- run description: {"about": "S1: host closes the pipe without answering; every write must be refused", "script": "s1_writes.json", "gate": "exe", "gate_mode": "drop", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1b/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1b/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1b/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1b/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1b", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1b.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 575 576
+host: pipe \\.\pipe\steplet-spike-S1b created, gate mode drop
+host: wsl.exe started (pid Some(27400), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.6 s
+--- launch finished after 1.6 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 17413, lines: 25, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1b/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_01.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_02.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_03.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_04.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_05.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_06.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_07.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_08.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_09.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_10.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+TOOL_USE Bash: {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}
+TOOL_RESULT is_error=True:
+    | Steplet's checker refused: no answer
+AGENT: Spike S1: done.
+RESULT subtype=success is_error=False num_turns=12 duration_ms=422
+       permission_denials=[{"tool_name": "Write", "tool_use_id": "toolu_spike_7194c2d2c7104b749582", "tool_input": {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_01.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_d861463a83e54ee091f6", "tool_input": {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_02.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_12b36e229ecf48b3997e", "tool_input": {"file_path": "/home/tester/steplet-work/S1b/repo/s1_marker_03.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_2d76967de6e348
+       text: Spike S1: done.
+event types: {'system/init': 1, 'assistant': 12, 'user': 11, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1b.gate.log:
+    1791522988.708 pid=18096 started; 1 environment variables: SystemRoot
+    1791522988.898 pid=18096 tool="Write" behavior="deny" ms=2 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_01.txt"}
+    1791522988.931 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_02.txt"}
+    1791522988.956 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_03.txt"}
+    1791522988.977 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_04.txt"}
+    1791522988.998 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_05.txt"}
+    1791522989.016 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_06.txt"}
+    1791522989.035 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_07.txt"}
+    1791522989.054 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_08.txt"}
+    1791522989.075 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_09.txt"}
+    1791522989.094 pid=18096 tool="Write" behavior="deny" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1b/repo/s1_marker_10.txt"}
+    1791522989.173 pid=18096 tool="Bash" behavior="deny" ms=0 input={"command":"ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"","description":"Save the process list"}
+    1791522989.224
+--- gate log S1b.host-gate.log:
+    1791522988.898 tool="Write" mode=drop: closed without answering
+    1791522988.931 tool="Write" mode=drop: closed without answering
+    1791522988.955 tool="Write" mode=drop: closed without answering
+    1791522988.976 tool="Write" mode=drop: closed without answering
+    1791522988.997 tool="Write" mode=drop: closed without answering
+    1791522989.015 tool="Write" mode=drop: closed without answering
+    1791522989.035 tool="Write" mode=drop: closed without answering
+    1791522989.054 tool="Write" mode=drop: closed without answering
+    1791522989.075 tool="Write" mode=drop: closed without answering
+    1791522989.094 tool="Write" mode=drop: closed without answering
+    1791522989.138 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","18096","Console","1","3,944 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791522989.173 tool="Bash" mode=drop: closed without answering
+--- every tool call the agent made, and whether it asked the checker first:
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_01.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_02.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_03.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_04.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_05.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_06.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_07.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_08.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_09.txt
+    Write      asked=yes  /home/tester/steplet-work/S1b/repo/s1_marker_10.txt
+    Bash       asked=yes  ps -eo pid,args > s1_ps.txt 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.07s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.09s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.11s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.13s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.15s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.17s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.19s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.21s agent loop /v1/messages?beta=true step=9 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=10 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.34s agent loop /v1/messages?beta=true step=11 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.05, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.05, 0.08]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1b-repo/2d21127d-cda0-4b71-b13b-ca6690f0cacc.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1b-repo/mcp-logs-gate/2026-10-09T05-16-28-489Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1b finished 2026-10-09T10:46:31.9452462+05:30
+```
+
+### S1s: the host never decides; its own 5 s deadline refuses
+
+```
+=== spike run S1s, started 2026-10-09T10:46:32.3403828+05:30
+--- run description: {"about": "S1: host never decides; its own 5 s deadline must refuse each write", "script": "s1_writes.json", "gate": "exe", "gate_mode": "stall", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot", "deadline_ms": 5000}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1s/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1s/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1s/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1s/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1s", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1s.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1s/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1s/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 664 665
+host: pipe \\.\pipe\steplet-spike-S1s created, gate mode stall
+host: wsl.exe started (pid Some(24684), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 56.4 s
+--- launch finished after 56.5 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 17745, lines: 25, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1s/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_01.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_02.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_03.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_04.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_05.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_06.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_07.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_08.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_09.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_10.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+TOOL_USE Bash: {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}
+TOOL_RESULT is_error=True:
+    | Steplet spike host: no decision before the deadline
+AGENT: Spike S1: done.
+RESULT subtype=success is_error=False num_turns=12 duration_ms=55447
+       permission_denials=[{"tool_name": "Write", "tool_use_id": "toolu_spike_5058d1657cb84346bff9", "tool_input": {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_01.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_a96e676a395e447baa36", "tool_input": {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_02.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_2ab06acef57e46c2b380", "tool_input": {"file_path": "/home/tester/steplet-work/S1s/repo/s1_marker_03.txt", "content": "s1\n"}}, {"tool_name": "Write", "tool_use_id": "toolu_spike_d367d566ebb849
+       text: Spike S1: done.
+event types: {'system/init': 1, 'assistant': 12, 'user': 11, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1s.gate.log:
+    1791522995.004 pid=3416 started; 1 environment variables: SystemRoot
+    1791523000.174 pid=3416 tool="Write" behavior="deny" ms=5007 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_01.txt"}
+    1791523005.216 pid=3416 tool="Write" behavior="deny" ms=5003 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_02.txt"}
+    1791523010.234 pid=3416 tool="Write" behavior="deny" ms=5003 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_03.txt"}
+    1791523015.251 pid=3416 tool="Write" behavior="deny" ms=5001 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_04.txt"}
+    1791523020.289 pid=3416 tool="Write" behavior="deny" ms=5013 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_05.txt"}
+    1791523025.312 pid=3416 tool="Write" behavior="deny" ms=5008 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_06.txt"}
+    1791523030.338 pid=3416 tool="Write" behavior="deny" ms=5010 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_07.txt"}
+    1791523035.355 pid=3416 tool="Write" behavior="deny" ms=5002 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_08.txt"}
+    1791523040.371 pid=3416 tool="Write" behavior="deny" ms=5001 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_09.txt"}
+    1791523045.392 pid=3416 tool="Write" behavior="deny" ms=5007 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1s/repo/s1_marker_10.txt"}
+    1791523050.463 pid=3416 tool="Bash" behavior="deny" ms=5007 input={"command":"ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"","description":"Save the process list"}
+--- gate log S1s.host-gate.log:
+    1791522995.358 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","3416","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791523000.174 tool="Write" token_ok=true mode=stall behavior="deny" ms=5007
+    1791523005.216 tool="Write" token_ok=true mode=stall behavior="deny" ms=5003
+    1791523010.234 tool="Write" token_ok=true mode=stall behavior="deny" ms=5002
+    1791523015.251 tool="Write" token_ok=true mode=stall behavior="deny" ms=5001
+    1791523020.289 tool="Write" token_ok=true mode=stall behavior="deny" ms=5013
+    1791523025.312 tool="Write" token_ok=true mode=stall behavior="deny" ms=5008
+    1791523030.338 tool="Write" token_ok=true mode=stall behavior="deny" ms=5010
+    1791523035.355 tool="Write" token_ok=true mode=stall behavior="deny" ms=5002
+    1791523040.371 tool="Write" token_ok=true mode=stall behavior="deny" ms=5001
+    1791523045.392 tool="Write" token_ok=true mode=stall behavior="deny" ms=5006
+    1791523050.463 tool="Bash" token_ok=true mode=stall behavior="deny" ms=5006
+--- every tool call the agent made, and whether it asked the checker first:
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_01.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_02.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_03.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_04.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_05.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_06.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_07.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_08.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_09.txt
+    Write      asked=yes  /home/tester/steplet-work/S1s/repo/s1_marker_10.txt
+    Bash       asked=yes  ps -eo pid,args > s1_ps.txt 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +5.05s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +10.07s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +15.09s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +20.12s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +25.14s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +30.17s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +35.19s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +40.21s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +45.23s agent loop /v1/messages?beta=true step=9 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +50.27s agent loop /v1/messages?beta=true step=10 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +55.37s agent loop /v1/messages?beta=true step=11 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [5.05, 5.02, 5.02, 5.03, 5.03, 5.02, 5.02, 5.02, 5.02, 5.04, 5.1]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1s-repo/d2c6f020-8ab7-44f1-9e94-d8984acb0785.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1s-repo/mcp-logs-gate/2026-10-09T05-16-34-800Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1s finished 2026-10-09T10:47:33.5448321+05:30
+```
+
+### S1c: the gate crashes on its first decision
+
+The harness marks the first Write `asked=NO` because the gate log holds no decision line for it: the gate received
+the request (`crashing on purpose (first decision only)`) and died before deciding. Claude Code got
+`MCP error -32000: Connection closed` and did not write the file.
+
+```
+=== spike run S1c, started 2026-10-09T10:47:57.4891069+05:30
+--- run description: {"about": "S1: the gate crashes on its first decision; is it restarted, and is that write refused?", "script": "s1_writes.json", "gate": "exe", "gate_mode": "allow", "gate_crash_once": true, "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1c/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1c/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1c/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1c/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1c", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1c.gate.log", "--crash-once"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 439 440
+host: pipe \\.\pipe\steplet-spike-S1c created, gate mode allow
+host: wsl.exe started (pid Some(24656), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.7 s
+--- launch finished after 2.7 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 16431, lines: 25, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1c/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_01.txt", "content": "s1\n"}
+TOOL_RESULT is_error=True:
+    | <tool_use_error>Error calling tool (Write): MCP error -32000: Connection closed</tool_use_error>
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_02.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_02.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_03.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_03.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_04.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_04.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_05.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_05.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_06.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_06.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_07.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_07.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_08.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_08.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_09.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_09.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S1c/repo/s1_marker_10.txt", "content": "s1\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S1c/repo/s1_marker_10.txt (file state is current in your context — no need to Read it back)
+TOOL_USE Bash: {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+AGENT: Spike S1: done.
+RESULT subtype=success is_error=False num_turns=12 duration_ms=635
+       permission_denials=[]
+       text: Spike S1: done.
+event types: {'system/init': 1, 'assistant': 12, 'user': 11, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1c.gate.log:
+    1791523084.371 pid=8784 started; 1 environment variables: SystemRoot
+    1791523084.558 pid=8784 crashing on purpose (first decision only)
+    1791523084.635 pid=11368 started; 1 environment variables: SystemRoot
+    1791523084.638 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_02.txt"}
+    1791523084.672 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_03.txt"}
+    1791523084.696 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_04.txt"}
+    1791523084.721 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_05.txt"}
+    1791523084.742 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_06.txt"}
+    1791523084.762 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_07.txt"}
+    1791523084.784 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_08.txt"}
+    1791523084.807 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_09.txt"}
+    1791523084.849 pid=11368 tool="Write" behavior="allow" ms=0 input={"content":"s1\n","file_path":"/home/tester/steplet-work/S1c/repo/s1_marker_10.txt"}
+    1791523084.922 pid=11368 tool="Bash" behavior="allow" ms=0 input={"command":"ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"","description":"Save the process list"}
+--- gate log S1c.host-gate.log:
+    1791523084.638 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.672 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.696 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.721 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.742 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.762 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.784 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.807 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.849 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523084.887 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","11368","Console","1","3,936 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791523084.922 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Write      asked=NO   /home/tester/steplet-work/S1c/repo/s1_marker_01.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_02.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_03.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_04.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_05.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_06.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_07.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_08.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_09.txt
+    Write      asked=yes  /home/tester/steplet-work/S1c/repo/s1_marker_10.txt
+    Bash       asked=yes  ps -eo pid,args > s1_ps.txt 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.04s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.13s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.15s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.18s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.20s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.22s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.24s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.28s agent loop /v1/messages?beta=true step=9 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.33s agent loop /v1/messages?beta=true step=10 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.55s agent loop /v1/messages?beta=true step=11 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.04, 0.09, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.04, 0.23]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s1_marker_02.txt
+    ?? s1_marker_03.txt
+    ?? s1_marker_04.txt
+    ?? s1_marker_05.txt
+    ?? s1_marker_06.txt
+    ?? s1_marker_07.txt
+    ?? s1_marker_08.txt
+    ?? s1_marker_09.txt
+    ?? s1_marker_10.txt
+    ?? s1_ps.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1c-repo/38c669f2-41c9-479f-9d69-f169dd08805c.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1c-repo/mcp-logs-gate/2026-10-09T05-18-04-138Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- the fence's own process list: 4 lines; shows the gate: False; shows the run token: False
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1c finished 2026-10-09T10:48:07.7128215+05:30
+```
+
+### S1t: stop signal to Claude Code mid-command
+
+```
+=== spike run S1t, started 2026-10-09T10:48:24.3608704+05:30
+--- run description: {"about": "S1: stop signal to Claude Code mid-command; does the gate exit?", "script": "long_sleep.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot", "stop_after_s": 20}, "cleanup": true, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1t/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1t/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1t/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1t/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1t", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1t.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1t/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1t/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 429 430
+host: pipe \\.\pipe\steplet-spike-S1t created, gate mode allow
+host: wsl.exe started (pid Some(17168), environment SystemRoot); task sent on its input, 24 bytes
+host: stop signal at 20.1 s
+host: pkill -TERM -f runs/S1t/settings.json: Ok(Some(0))
+host: wsl.exe ended: Ok(Some(124)), after 20.4 s
+--- launch finished after 20.5 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5055, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1t/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"", "description": "Stay busy", "timeout": 600000}
+SYSTEM task_started: {"task_id": "bhwmuf06h", "tool_use_id": "toolu_spike_c19a9f4ae26e485e9c3f", "description": "Stay busy", "task_type": "local_bash"}
+SYSTEM task_notification: {"task_id": "bhwmuf06h", "tool_use_id": "toolu_spike_c19a9f4ae26e485e9c3f", "status": "stopped", "output_file": "", "summary": "Stay busy"}
+TOOL_RESULT is_error=True:
+    | The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to pro
+RESULT subtype=error_during_execution is_error=True num_turns=3 duration_ms=18281
+       permission_denials=[]
+       text: None
+event types: {'system/init': 1, 'assistant': 1, 'system/task_started': 1, 'system/task_notification': 1, 'user': 2, 'result/error_during_execution': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1t.gate.log:
+    1791523111.004 pid=11048 started; 1 environment variables: SystemRoot
+    1791523111.255 pid=11048 tool="Bash" behavior="allow" ms=1 input={"command":"python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"","description":"Stay busy","timeout":600000}
+--- gate log S1t.host-gate.log:
+    1791523111.256 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523111.495 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","11048","Console","1","3,936 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 -c "import time; open('spike_alive.txt','w').write('x'); time.sleep(600)"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: []
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? spike_alive.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1t-repo/fa795cae-908c-453c-9587-192edfb834d7.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1t-repo/mcp-logs-gate/2026-10-09T05-18-30-776Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+--- clean-up: 0 processes carry the run marker; sessions to stop: none
+--- processes still running for this run: 0
+=== spike run S1t finished 2026-10-09T10:48:58.6028449+05:30
+```
+
+### S1k: hard kill of Claude Code mid-command
+
+```
+=== spike run S1k, started 2026-10-09T10:48:59.0308782+05:30
+--- run description: {"about": "S1: hard kill of Claude Code mid-command; does the gate exit?", "script": "long_sleep.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot", "kill_claude_after_s": 20}, "cleanup": true, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1k/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S1k/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S1k/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S1k/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1k", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1k.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1k/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1k/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 627 628
+host: pipe \\.\pipe\steplet-spike-S1k created, gate mode allow
+host: wsl.exe started (pid Some(27180), environment SystemRoot); task sent on its input, 24 bytes
+host: hard kill of Claude Code at 20.2 s
+host: pkill -KILL -f runs/S1k/settings.json: Ok(Some(0))
+host: wsl.exe ended: Ok(Some(9)), after 20.3 s
+--- launch finished after 20.3 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 2683, lines: 3, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1k/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"", "description": "Stay busy", "timeout": 600000}
+SYSTEM task_started: {"task_id": "bq3ummsur", "tool_use_id": "toolu_spike_daf57f53a02a4f03b904", "description": "Stay busy", "task_type": "local_bash"}
+event types: {'system/init': 1, 'assistant': 1, 'system/task_started': 1}
+top-level events of type 'result': 0
+--- error output:
+    (none)
+--- gate log S1k.gate.log:
+    1791523141.889 pid=34892 started; 1 environment variables: SystemRoot
+    1791523142.094 pid=34892 tool="Bash" behavior="allow" ms=0 input={"command":"python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"","description":"Stay busy","timeout":600000}
+--- gate log S1k.host-gate.log:
+    1791523142.094 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523142.339 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","34892","Console","1","3,936 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 -c "import time; open('spike_alive.txt','w').write('x'); time.sleep(600)"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: []
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? .bash_profile
+    ?? .bashrc
+    ?? .claude/
+    ?? .gitconfig
+    ?? .gitmodules
+    ?? .idea
+    ?? .mcp.json
+    ?? .profile
+    ?? .ripgreprc
+    ?? .vscode
+    ?? .zprofile
+    ?? .zshrc
+    ?? spike_alive.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1k-repo/62561df5-42e8-4f26-a075-ccfce5adb109.jsonl', 'sessions/636.json', 'shell-snapshots/snapshot-bash-1791523142118-u71du5.sh']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1k-repo/mcp-logs-gate/2026-10-09T05-19-01-692Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+--- clean-up: 0 processes carry the run marker; sessions to stop: none
+--- processes still running for this run: 0
+=== spike run S1k finished 2026-10-09T10:49:29.9179357+05:30
+```
+
+### S1f: the fixture through the Windows gate, milestone 0 settings
+
+After the run, `Test-Path C:\dev\m1\outside\from_wsl.txt` printed `False`.
+
+```
+=== spike run S1f, started 2026-10-09T10:49:45.6125776+05:30
+--- run description: {"about": "S1: the fixture through the Windows gate, milestone 0 settings, so attempt G tests interop", "script": "s7_t1c.json", "gate": "exe", "gate_mode": "allow", "shape": "m0", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S1f/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/home/tester/m1/canary",
+        "/mnt/c/dev/m1/canary"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//home/tester/m1/canary/**)",
+      "Read(//mnt/c/dev/m1/canary/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S1f", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S1f.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S1f/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S1f/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 445 446
+host: pipe \\.\pipe\steplet-spike-S1f created, gate mode allow
+host: wsl.exe started (pid Some(35732), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.7 s
+--- launch finished after 2.7 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 7810, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S1f/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | Note: switching to '65930082d222089b2633d34e9bb2bd42351bdc76'.
+    | 
+    | You are in 'detached HEAD' state. You can look around, make experimental
+    | changes and commit them, and you can discard any commits you make in this
+    | state without impacting any branches by switching back to a branch.
+    | 
+    | If you want to create a new branch to retain commits you create, you may
+    | do so (now or later) by using -c with the switch command. Example:
+    | 
+    |   git switch -c <new-branch-name>
+    | 
+    | Or undo this operation with:
+    | 
+    |   git switch -
+    | 
+TOOL_USE Bash: {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}
+TOOL_RESULT is_error=False:
+    | /home/tester/steplet-work/S1f/repo/tests/fixtures.py:35: ResourceWarning: unclosed file <_io.BufferedReader name='/mnt/c/Windows/win.ini'>
+    |   return "read %d bytes" % len(open(CFG["system_file"], "rb").read())
+    | ResourceWarning: Enable tracemalloc to get the object allocation traceback
+    | <3>WSL (6 - ) ERROR: UtilConnectUnix:524: socket failed 1
+    | <3>WSL (6 - ) ERROR: UtilConnectUnix:524: socket failed 1
+    | .
+    | ----------------------------------------------------------------------
+    | Ran 1 test in 0.082s
+    | 
+    | OK
+    | EXIT=0
+AGENT: Spike: the tests ran.
+RESULT subtype=success is_error=False num_turns=3 duration_ms=680
+       permission_denials=[]
+       text: Spike: the tests ran.
+event types: {'system/init': 1, 'assistant': 3, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S1f.gate.log:
+    1791523192.957 pid=31472 started; 1 environment variables: SystemRoot
+    1791523193.178 pid=31472 tool="Bash" behavior="allow" ms=0 input={"command":"git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"","description":"Check out the specified commit"}
+    1791523193.435 pid=31472 tool="Bash" behavior="allow" ms=0 input={"command":"python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"","description":"Run the unittest suite"}
+    1791523193.727
+--- gate log S1f.host-gate.log:
+    1791523193.178 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523193.415 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","31472","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791523193.435 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash       asked=yes  python3 -m unittest discover -s tests -t . 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.28s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.59s agent loop /v1/messages?beta=true step=2 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.28, 0.32]
+--- m0_results.jsonl (the fixture's own record):
+    {"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+    {"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "H_read_system_file", "ok": true, "detail": "read 92 bytes"}
+    {"attempt": "C_write_outside_workspace", "ok": false, "detail": "OSError: [Errno 30] Read-only file system: '/home/tester/m1/outside/written_by_probe.txt'"}
+    {"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+    {"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+    {"attempt": "G_launch_windows_program", "ok": false, "detail": "CalledProcessError: Command '['/mnt/c/Windows/System32/cmd.exe', '/c', 'echo x> C:\\\\dev\\\\m1\\\\outside\\\\from_wsl.txt']' returned non-zero exit status 1."}
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 65930082d222089b2633d34e9bb2bd42351bdc76
+--- git status --short --ignored:
+    !! calc/__pycache__/
+    !! m0_inside.txt
+    !! m0_results.jsonl
+    !! tests/__pycache__/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S1f-repo/ccacc381-ae4e-42e2-b18d-17f8e9c13b19.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S1f-repo/mcp-logs-gate/2026-10-09T05-19-52-754Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S1f finished 2026-10-09T10:49:56.2765473+05:30
+```
+
+### Decision times
+
+| | S1a (Windows gate through interop) | S1n (Node gate inside WSL) |
+|---|---|---|
+| gate's own time per decision (`ms=`) | 0 to 1 ms | not logged by the Node gate |
+| seconds between agent requests (scripted model) | 0.04, 0.02, 0.02, 0.02, 0.02, 0.02, 0.1, 0.02, 0.02, 0.04, 0.18 | 0.05, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.09, 0.02, 0.04, 0.19 |
+| first Write to tenth Write, from the gate log timestamps | 0.291 s (933.481 to 933.772) | 0.290 s (12.808 to 13.098) |
+
+**Verdict:** PASS, because:
+- Claude Code starts the Windows program through interop as its permission-prompt server: `mcp_servers` shows the gate
+  `connected`, all ten Writes `asked=yes`, ten markers exist, the gate log has ten `behavior="allow"` Write lines, and
+  `tasklist` shows `spike-gate.exe` under `LAPTOP-R1RG22O7\RANVIR`;
+- refusals hold: S1b and S1s leave zero markers and 11 `permission_denials` each; S1s refuses each decision after
+  5001 to 5013 ms;
+- it comes back after a crash: S1c's gate log shows `pid=8784` crash and `pid=11368` start 77 ms later; the first
+  Write was refused and not written; Writes 2 to 10 were allowed (nine markers);
+- it exits when Claude Code is stopped or killed: `spike-gate.exe processes still running: 0` in S1t and S1k, and
+  `0 processes carry the run marker` after the clean-up in both; S1t ends with a result event
+  (`subtype=error_during_execution`), as F37 says a stop signal does; S1k has none, as expected after a hard kill;
+- F28 still holds: in S1f, G is `ok: false` and `from_wsl.txt` does not exist while the Windows gate was running for
+  the same Claude Code; every other fixture line matches S7a;
+- the time is recorded above: the Windows gate adds no delay measurable at the scripted model's 10 ms resolution.
+
+**What it means:**
+- The milestone plan's first choice stands: the app's checker can be a Windows program that Claude Code starts
+  through interop. The runner-up (`--permission-prompt-tool stdio`) is not needed.
+- The gate inherits the Windows environment the app gave `wsl.exe` (here one variable, `SystemRoot`), so the app
+  controls what the gate sees.
+- The fence's own process list shows neither the gate nor the run token (S1a), so a fenced program cannot read the
+  token that way.
+- The gate did not log its own exit in S1t and S1k: it was ended from outside rather than on its input closing. It
+  was gone within the 2 s the harness waits; how quickly, and by whom, is not measured.

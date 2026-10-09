@@ -1,0 +1,17 @@
+{
+  "about": "Ten Write calls, each one decision, then the process list as the fence sees it",
+  "steps": [
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_01.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_02.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_03.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_04.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_05.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_06.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_07.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_08.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_09.txt", "content": "s1\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/s1_marker_10.txt", "content": "s1\n"}},
+    {"tool": "Bash", "input": {"command": "ps -eo pid,args > s1_ps.txt 2>&1; echo \"EXIT=$?\"", "description": "Save the process list"}},
+    {"text": "Spike S1: done."}
+  ]
+}
