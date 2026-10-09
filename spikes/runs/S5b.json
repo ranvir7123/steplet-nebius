@@ -1,0 +1,1 @@
+{"about": "S5: the same with an ask rule for Bash", "script": "s5_readonly.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "settings_extra": {"permissions": {"ask": ["Bash"]}}}

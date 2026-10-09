@@ -4519,3 +4519,807 @@ refused the hook command before it ran.
   `~/.claude/debug` were skipped only because they do not exist). Whether a fenced command can really write there was
   not tested. It also takes its list of protected dot-files from its own working folder (here the Windows worktree
   path), not from the folder it lets the command write.
+
+## S5: commands that skip the checker, and `--tools`
+
+Question, from the milestone plan: is there a setting that makes every command ask the checker (D8-C)? Does
+`--tools` limit the tool list as its help text says? Pass: recorded either way (D8's harmless list is already decided
+as the fallback).
+
+Runs: `spikes/runs/S5a.json` (baseline), `S5b.json` (`permissions.ask: ["Bash"]`), `S5c.json`
+(`permissions.ask: ["Bash(*)"]`), `S5t.json` (`--tools Bash,Write`), all with `"env_mode": "systemroot"` (S2).
+`S5u.json` was not run: S5a did not offer `mcp__gate__decide` to the model (the tools on its first request are the 27
+built-in ones). No `S5d`: none of the names below is a setting.
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+### Names around "readOnly" in Claude Code 2.1.220
+
+Command: `wsl -d steplet-test --exec /bin/bash /mnt/c/dev/runFile/spikes/wsl/strings.sh readOnly`
+
+```
+readOnly
+readOnlyCommand
+readOnlyCommandValidation
+readOnlyDict
+readOnlyHint
+readOnlyValidation
+```
+
+The passages around `readOnlyValidation` and `readOnlyCommandValidation` (`strings.sh <name> context`) name them as
+source files holding Claude Code's built-in lists of read-only commands (`READONLY_COMMANDS`, `READONLY_NOARGS`,
+`READONLY_EXACT`, `COMMAND_ALLOWLIST`, `GIT_READ_ONLY_COMMANDS`, ...), not settings. `readOnlyHint` is a field in a
+tool's description.
+
+### S5a: baseline
+
+```
+=== spike run S5a, started 2026-10-09T11:09:32.2462579+05:30
+--- run description: {"about": "S5: which read-only-looking commands skip the checker (baseline, F34)", "script": "s5_readonly.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S5a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S5a/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S5a/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S5a/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S5a", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S5a.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S5a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S5a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 485 486
+host: pipe \\.\pipe\steplet-spike-S5a created, gate mode allow
+host: wsl.exe started (pid Some(4608), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.7 s
+--- launch finished after 1.7 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 14138, lines: 21, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S5a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "ls -la", "description": "List files"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command ls -la has been denied.
+TOOL_USE Bash: {"command": "cat README.md", "description": "Show the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command cat README.md has been denied.
+TOOL_USE Bash: {"command": "echo ok", "description": "Print ok"}
+TOOL_RESULT is_error=False:
+    | ok
+TOOL_USE Bash: {"command": "pwd", "description": "Print the folder"}
+TOOL_RESULT is_error=False:
+    | /home/tester/steplet-work/S5a/repo
+TOOL_USE Bash: {"command": "git status --short", "description": "Show git status"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | ?? .idea
+    | ?? .mcp.json
+    | ?? .profile
+    | ?? .ripgreprc
+    | ?? .vscode
+    | ?? .zprofile
+    | ?? .zshrc
+TOOL_USE Bash: {"command": "wc -l README.md", "description": "Count lines"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command wc -l README.md has been denied.
+TOOL_USE Bash: {"command": "head -1 README.md", "description": "First line"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command head -1 README.md has been denied.
+TOOL_USE Bash: {"command": "grep -c second README.md", "description": "Search the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command grep -c second README.md has been denied.
+TOOL_USE Bash: {"command": "printf ok > s5_marker.txt", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | (Bash completed with no output)
+AGENT: Spike S5: done.
+RESULT subtype=success is_error=False num_turns=10 duration_ms=760
+       permission_denials=[{"tool_name": "Bash", "tool_use_id": "toolu_spike_bc26dac592e34baab33c", "tool_input": {"command": "ls -la", "description": "List files"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_022b6f59046e464cb41c", "tool_input": {"command": "cat README.md", "description": "Show the readme"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_aa0ced6627ca4e2cac73", "tool_input": {"command": "wc -l README.md", "description": "Count lines"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_561d9dd112b24021b46f", "tool_input": {"command": "head -1 README.md", "description": "First line"}}, {"tool
+       text: Spike S5: done.
+event types: {'system/init': 1, 'assistant': 10, 'user': 9, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S5a.gate.log:
+    1791524374.942 pid=24732 started; 1 environment variables: SystemRoot
+    1791524375.610 pid=24732 tool="Bash" behavior="allow" ms=1 input={"command":"printf ok > s5_marker.txt","description":"Write a file"}
+    1791524375.780
+--- gate log S5a.host-gate.log:
+    1791524375.610 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524375.803 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","24732","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=NO   ls -la
+    Bash       asked=NO   cat README.md
+    Bash       asked=NO   echo ok
+    Bash       asked=NO   pwd
+    Bash       asked=NO   git status --short
+    Bash       asked=NO   wc -l README.md
+    Bash       asked=NO   head -1 README.md
+    Bash       asked=NO   grep -c second README.md
+    Bash       asked=yes  printf ok > s5_marker.txt
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.03s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.36s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.48s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.49s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.50s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.52s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.68s agent loop /v1/messages?beta=true step=9 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.03, 0.02, 0.21, 0.11, 0.12, 0.01, 0.01, 0.02, 0.16]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s5_marker.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S5a-repo/8031c49d-e99e-4c7b-a496-827354e602fb.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S5a-repo/mcp-logs-gate/2026-10-09T05-39-34-761Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S5a finished 2026-10-09T11:09:38.3309266+05:30
+```
+
+### S5b: `permissions.ask: ["Bash"]`
+
+```
+=== spike run S5b, started 2026-10-09T11:09:38.6894049+05:30
+--- run description: {"about": "S5: the same with an ask rule for Bash", "script": "s5_readonly.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "settings_extra": {"permissions": {"ask": ["Bash"]}}}
+--- working copy: /home/tester/steplet-work/S5b/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S5b/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S5b/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S5b/repo/.git/**)"
+    ],
+    "ask": [
+      "Bash"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S5b", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S5b.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S5b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S5b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 726 727
+host: pipe \\.\pipe\steplet-spike-S5b created, gate mode allow
+host: wsl.exe started (pid Some(20436), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.6 s
+--- launch finished after 1.6 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 14138, lines: 21, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S5b/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "ls -la", "description": "List files"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command ls -la has been denied.
+TOOL_USE Bash: {"command": "cat README.md", "description": "Show the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command cat README.md has been denied.
+TOOL_USE Bash: {"command": "echo ok", "description": "Print ok"}
+TOOL_RESULT is_error=False:
+    | ok
+TOOL_USE Bash: {"command": "pwd", "description": "Print the folder"}
+TOOL_RESULT is_error=False:
+    | /home/tester/steplet-work/S5b/repo
+TOOL_USE Bash: {"command": "git status --short", "description": "Show git status"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | ?? .idea
+    | ?? .mcp.json
+    | ?? .profile
+    | ?? .ripgreprc
+    | ?? .vscode
+    | ?? .zprofile
+    | ?? .zshrc
+TOOL_USE Bash: {"command": "wc -l README.md", "description": "Count lines"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command wc -l README.md has been denied.
+TOOL_USE Bash: {"command": "head -1 README.md", "description": "First line"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command head -1 README.md has been denied.
+TOOL_USE Bash: {"command": "grep -c second README.md", "description": "Search the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command grep -c second README.md has been denied.
+TOOL_USE Bash: {"command": "printf ok > s5_marker.txt", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | (Bash completed with no output)
+AGENT: Spike S5: done.
+RESULT subtype=success is_error=False num_turns=10 duration_ms=732
+       permission_denials=[{"tool_name": "Bash", "tool_use_id": "toolu_spike_3e33bf2a27d14d2c8d6c", "tool_input": {"command": "ls -la", "description": "List files"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_db5511a1939c4da68ff4", "tool_input": {"command": "cat README.md", "description": "Show the readme"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_43b01742f3fd46bf87b8", "tool_input": {"command": "wc -l README.md", "description": "Count lines"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_b26afd40551d45c88c05", "tool_input": {"command": "head -1 README.md", "description": "First line"}}, {"tool
+       text: Spike S5: done.
+event types: {'system/init': 1, 'assistant': 10, 'user': 9, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S5b.gate.log:
+    1791524381.211 pid=30084 started; 1 environment variables: SystemRoot
+    1791524381.407 pid=30084 tool="Bash" behavior="allow" ms=0 input={"command":"echo ok","description":"Print ok"}
+    1791524381.612 pid=30084 tool="Bash" behavior="allow" ms=0 input={"command":"pwd","description":"Print the folder"}
+    1791524381.723 pid=30084 tool="Bash" behavior="allow" ms=0 input={"command":"git status --short","description":"Show git status"}
+    1791524381.874 pid=30084 tool="Bash" behavior="allow" ms=0 input={"command":"printf ok > s5_marker.txt","description":"Write a file"}
+    1791524382.020
+--- gate log S5b.host-gate.log:
+    1791524381.407 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524381.590 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","30084","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791524381.612 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524381.723 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524381.874 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=NO   ls -la
+    Bash       asked=NO   cat README.md
+    Bash       asked=yes  echo ok
+    Bash       asked=yes  pwd
+    Bash       asked=yes  git status --short
+    Bash       asked=NO   wc -l README.md
+    Bash       asked=NO   head -1 README.md
+    Bash       asked=NO   grep -c second README.md
+    Bash       asked=yes  printf ok > s5_marker.txt
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.03s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.37s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.47s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.49s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.50s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.52s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.64s agent loop /v1/messages?beta=true step=9 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.03, 0.02, 0.21, 0.11, 0.11, 0.01, 0.01, 0.02, 0.13]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s5_marker.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S5b-repo/a389c656-8e7b-4eed-bebd-ed49147d658a.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S5b-repo/mcp-logs-gate/2026-10-09T05-39-41-037Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S5b finished 2026-10-09T11:09:44.6552175+05:30
+```
+
+### S5c: `permissions.ask: ["Bash(*)"]`
+
+```
+=== spike run S5c, started 2026-10-09T11:09:45.0287410+05:30
+--- run description: {"about": "S5: the same with an ask rule for Bash(*)", "script": "s5_readonly.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "settings_extra": {"permissions": {"ask": ["Bash(*)"]}}}
+--- working copy: /home/tester/steplet-work/S5c/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S5c/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S5c/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S5c/repo/.git/**)"
+    ],
+    "ask": [
+      "Bash(*)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S5c", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S5c.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S5c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S5c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 953 954
+host: pipe \\.\pipe\steplet-spike-S5c created, gate mode allow
+host: wsl.exe started (pid Some(7128), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.7 s
+--- launch finished after 1.7 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 14138, lines: 21, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S5c/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "ls -la", "description": "List files"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command ls -la has been denied.
+TOOL_USE Bash: {"command": "cat README.md", "description": "Show the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command cat README.md has been denied.
+TOOL_USE Bash: {"command": "echo ok", "description": "Print ok"}
+TOOL_RESULT is_error=False:
+    | ok
+TOOL_USE Bash: {"command": "pwd", "description": "Print the folder"}
+TOOL_RESULT is_error=False:
+    | /home/tester/steplet-work/S5c/repo
+TOOL_USE Bash: {"command": "git status --short", "description": "Show git status"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | ?? .idea
+    | ?? .mcp.json
+    | ?? .profile
+    | ?? .ripgreprc
+    | ?? .vscode
+    | ?? .zprofile
+    | ?? .zshrc
+TOOL_USE Bash: {"command": "wc -l README.md", "description": "Count lines"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command wc -l README.md has been denied.
+TOOL_USE Bash: {"command": "head -1 README.md", "description": "First line"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command head -1 README.md has been denied.
+TOOL_USE Bash: {"command": "grep -c second README.md", "description": "Search the readme"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command grep -c second README.md has been denied.
+TOOL_USE Bash: {"command": "printf ok > s5_marker.txt", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | (Bash completed with no output)
+AGENT: Spike S5: done.
+RESULT subtype=success is_error=False num_turns=10 duration_ms=757
+       permission_denials=[{"tool_name": "Bash", "tool_use_id": "toolu_spike_abad92e884bc411fa473", "tool_input": {"command": "ls -la", "description": "List files"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_a13c92e85b804f6692e2", "tool_input": {"command": "cat README.md", "description": "Show the readme"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_1fb230385b5b417baef3", "tool_input": {"command": "wc -l README.md", "description": "Count lines"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_6210b9a654674f3fb417", "tool_input": {"command": "head -1 README.md", "description": "First line"}}, {"tool
+       text: Spike S5: done.
+event types: {'system/init': 1, 'assistant': 10, 'user': 9, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S5c.gate.log:
+    1791524387.649 pid=35640 started; 1 environment variables: SystemRoot
+    1791524387.849 pid=35640 tool="Bash" behavior="allow" ms=0 input={"command":"echo ok","description":"Print ok"}
+    1791524388.050 pid=35640 tool="Bash" behavior="allow" ms=0 input={"command":"pwd","description":"Print the folder"}
+    1791524388.161 pid=35640 tool="Bash" behavior="allow" ms=0 input={"command":"git status --short","description":"Show git status"}
+    1791524388.313 pid=35640 tool="Bash" behavior="allow" ms=0 input={"command":"printf ok > s5_marker.txt","description":"Write a file"}
+--- gate log S5c.host-gate.log:
+    1791524387.849 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524388.035 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","35640","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791524388.050 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524388.161 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524388.313 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=NO   ls -la
+    Bash       asked=NO   cat README.md
+    Bash       asked=yes  echo ok
+    Bash       asked=yes  pwd
+    Bash       asked=yes  git status --short
+    Bash       asked=NO   wc -l README.md
+    Bash       asked=NO   head -1 README.md
+    Bash       asked=NO   grep -c second README.md
+    Bash       asked=yes  printf ok > s5_marker.txt
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.03s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.36s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.47s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.49s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.50s agent loop /v1/messages?beta=true step=7 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.52s agent loop /v1/messages?beta=true step=8 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.67s agent loop /v1/messages?beta=true step=9 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.03, 0.02, 0.21, 0.11, 0.11, 0.01, 0.01, 0.02, 0.16]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s5_marker.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S5c-repo/cbe0140c-edac-46bf-9f73-e5099b224192.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S5c-repo/mcp-logs-gate/2026-10-09T05-39-47-474Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S5c finished 2026-10-09T11:09:51.0471421+05:30
+```
+
+### S5t: `--tools Bash,Write`
+
+```
+=== spike run S5t, started 2026-10-09T11:10:12.2731104+05:30
+--- run description: {"about": "S5: does --tools limit the tools offered to the model?", "script": "s5_tools.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "flags": ["--tools", "Bash,Write"]}
+--- working copy: /home/tester/steplet-work/S5t/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S5t/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S5t/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S5t/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S5t", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S5t.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S5t/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S5t/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--tools
+Bash,Write
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 440 441
+host: pipe \\.\pipe\steplet-spike-S5t created, gate mode allow
+host: wsl.exe started (pid Some(9872), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.2 s
+--- launch finished after 2.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 6444, lines: 9, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S5t/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Bash,Write
+TOOL_USE Bash: {"command": "echo ok > s5t.txt; echo \"EXIT=$?\"", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+TOOL_USE WebFetch: {"url": "https://example.com", "prompt": "What is the page title?"}
+TOOL_RESULT is_error=True:
+    | <tool_use_error>Error: No such tool available: WebFetch. WebFetch exists but is not enabled in this context. Use one of the available tools instead.</tool_use_error>
+TOOL_USE Read: {"file_path": "/home/tester/steplet-work/S5t/repo/README.md"}
+TOOL_RESULT is_error=True:
+    | <tool_use_error>Error: No such tool available: Read. Read exists but is not enabled in this context. Use one of the available tools instead.</tool_use_error>
+AGENT: Spike S5: done.
+RESULT subtype=success is_error=False num_turns=4 duration_ms=309
+       permission_denials=[]
+       text: Spike S5: done.
+event types: {'system/init': 1, 'assistant': 4, 'user': 3, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S5t.gate.log:
+    1791524418.930 pid=10512 started; 1 environment variables: SystemRoot
+    1791524419.120 pid=10512 tool="Bash" behavior="allow" ms=0 input={"command":"echo ok > s5t.txt; echo \"EXIT=$?\"","description":"Write a file"}
+--- gate log S5t.host-gate.log:
+    1791524419.120 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524419.304 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","10512","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  echo ok > s5t.txt; echo "EXIT=$?"
+    WebFetch   asked=NO   https://example.com
+    Read       asked=NO   /home/tester/steplet-work/S5t/repo/README.md
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=2
+    +0.24s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=2
+    +0.25s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=2
+    +0.26s agent loop /v1/messages?beta=true step=3 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=2
+    tools offered to the model on the first agent request: Bash,Write
+    seconds between agent requests: [0.24, 0.01, 0.01]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s5t.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S5t-repo/d9aa1203-bca8-463e-aeb2-d6277ebe226b.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S5t-repo/mcp-logs-gate/2026-10-09T05-40-18-731Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S5t finished 2026-10-09T11:10:21.9716349+05:30
+```
+
+### Which commands asked the checker
+
+| Command | S5a (baseline) | S5b (`ask: Bash`) | S5c (`ask: Bash(*)`) |
+|---|---|---|---|
+| `ls -la` | no | no | no |
+| `cat README.md` | no | no | no |
+| `echo ok` | no | yes | yes |
+| `pwd` | no | yes | yes |
+| `git status --short` | no | yes | yes |
+| `wc -l README.md` | no | no | no |
+| `head -1 README.md` | no | no | no |
+| `grep -c second README.md` | no | no | no |
+| `printf ok > s5_marker.txt` | yes | yes | yes |
+
+**Verdict:** RECORDED.
+- No setting tried makes every command ask the checker. An `ask` rule for `Bash` or `Bash(*)` brings `echo`, `pwd` and
+  `git status` to the checker, but `ls`, `cat`, `wc`, `head` and `grep` on files in the working folder still skip it
+  in all three runs. The one command that writes asked every time.
+- `--tools` works as its help says: the model was offered exactly `Bash,Write` (`tools=2` on every request), and the
+  WebFetch and Read calls failed with `No such tool available: WebFetch. WebFetch exists but is not enabled in this
+  context.` (and the same for Read), without reaching the checker.
+
+**What it means:**
+- D8: the checker cannot be made to see every command, so D8's fallback stands: Steplet keeps its own list of
+  harmless commands and does not promise that every command is checked. The commands that skip the checker are the
+  ones that read files in the working folder; whether they still run inside the fence was not tested here.
+- Steplet can choose the tools a run offers with `--tools`, for example leaving out WebFetch, WebSearch, Agent, the
+  Cron and Task tools, and the plan and worktree tools. The gate's own tool is not offered to the model either way.

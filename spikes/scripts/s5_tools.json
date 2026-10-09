@@ -1,0 +1,9 @@
+{
+  "about": "One allowed tool, then two the --tools list leaves out",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "echo ok > s5t.txt; echo \"EXIT=$?\"", "description": "Write a file"}},
+    {"tool": "WebFetch", "input": {"url": "https://example.com", "prompt": "What is the page title?"}},
+    {"tool": "Read", "input": {"file_path": "{WORK}/README.md"}},
+    {"text": "Spike S5: done."}
+  ]
+}

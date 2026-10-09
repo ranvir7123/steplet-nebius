@@ -1,0 +1,15 @@
+{
+  "about": "Commands that look read-only, then one that writes",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "ls -la", "description": "List files"}},
+    {"tool": "Bash", "input": {"command": "cat README.md", "description": "Show the readme"}},
+    {"tool": "Bash", "input": {"command": "echo ok", "description": "Print ok"}},
+    {"tool": "Bash", "input": {"command": "pwd", "description": "Print the folder"}},
+    {"tool": "Bash", "input": {"command": "git status --short", "description": "Show git status"}},
+    {"tool": "Bash", "input": {"command": "wc -l README.md", "description": "Count lines"}},
+    {"tool": "Bash", "input": {"command": "head -1 README.md", "description": "First line"}},
+    {"tool": "Bash", "input": {"command": "grep -c second README.md", "description": "Search the readme"}},
+    {"tool": "Bash", "input": {"command": "printf ok > s5_marker.txt", "description": "Write a file"}},
+    {"text": "Spike S5: done."}
+  ]
+}
