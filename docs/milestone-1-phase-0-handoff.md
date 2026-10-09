@@ -1,4 +1,4 @@
-# Handoff: milestone 1, phase 0, tasks 1 to 9 done (9 Oct 2026)
+# Handoff: milestone 1, phase 0, tasks 1 to 10 done (9 Oct 2026)
 
 Read `docs/handoff.md` first, then this file, then the plan `docs/plans/2026-10-08-milestone-1-phase-0.md`.
 The user approved the plan on 8 Oct 2026 and chose to run it **inline in one session, not through separate
@@ -18,7 +18,8 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 | 7. S2, launching from Windows | **PASS with `env_mode` `systemroot`** (`d4436ab`). See "Changes to the plan" below. |
 | 8. S1, Windows gate through interop | **PASS** (`f74e0b8`). The runner-up is not needed. |
 | 9. S3, can the fence see the API key | **PASS through route S3c (`apiKeyHelper`)** (`a2b61a8`). S3a fails, S3b inconclusive. S3e ran with yes A5. |
-| 10 onward | Not started. Next: Task 10 (S4). The next yes needed: A6 (Task 14), A7 and A8 (Task 15). |
+| 10. S4, fenced checkout, read-only `.git` | **PASS** (`2829563`), after three fixes to the plan's `srt` scripts (see "Changes"). Two parts inconclusive by the plan's rule: Claude Code's fence protects `.git/hooks` and `.git/config` from commands on its own. |
+| 11 onward | Not started. Next: Task 11. The next yes needed: A6 (Task 14), A7 and A8 (Task 15). |
 
 ## Changes to the plan made while running it
 
@@ -32,6 +33,12 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
   than `+`, so `--env-mode systemroot` arrived as one argument and the host fell back to Empty. Brackets added. Every
   host option (`deadline_ms`, `stop_after_s`, `kill_claude_after_s`, `kill_wsl_after_s`) depended on this.
 - **Product route for the key (Task 15): `apiKeyHelper` only** (S3c). Never put the key in Claude Code's environment.
+- **Every direct `srt` call (Tasks 10 onward):** (1) put `--` between `srt`'s options and the command, or `srt` takes
+  a `-c` meant for the command as its own and runs the next argument as a raw shell line; (2) when the settings deny
+  `~/.local/share/steplet`, add `"allowRead": ["$P/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp"]`,
+  or every fenced command fails with `apply-seccomp: No such file or directory` (exit 127); (3) a script that strips
+  the environment with `env -i` must keep `GIT_CONFIG_PARAMETERS`, or git fails `srt`'s proxy login
+  (`Proxy CONNECT aborted`). The plan's later `srt` scripts do not have these yet: add them when you create the files.
 - New tools: `spikes/tools/s2_env_min.py` (which Windows variables `wsl.exe` needs), `spikes/tools/s3e_session.py`
   (reads one saved session record).
 - `spikes/tools/selftest_gate.ps1` hands the gate a file instead of a PowerShell pipe (8 Oct).
