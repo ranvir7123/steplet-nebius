@@ -5859,3 +5859,455 @@ debug log: /home/tester/.local/share/steplet/claude-config/debug/6a88d472-34ac-4
 ### S6 live
 
 (Task 15.)
+
+## S8: the Windows side, from inside the fence
+
+Question, from the milestone plan: from inside the WSL fence, can a program reach a listener on the Windows side
+(127.0.0.1, the address WSL uses for the host, all addresses), in WSL's default network mode? Pass: all refused.
+
+Runs: `spikes/runs/S8-control.json` (the probe with no fence), `spikes/runs/S8.json` (the probe inside Claude Code's
+fence), both with `"env_mode": "systemroot"` (S2). A Windows listener (`spikes/tools/listener.py`) ran on
+`127.0.0.1:47832` during both; it writes a log line only when something connects.
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+**Change to the plan's probe:** the first fenced run (below) got `407 Proxy Authentication Required` for every target
+through the proxy. The fence's proxy wants the login carried in its own address (S4 found the same), and the plan's
+probe did not send it, so that half tested nothing. `spikes/probes/s8_probe.py` now sends the login from the proxy
+address (it never prints it); the fenced run was repeated. The control used no proxy and was not repeated.
+
+### S8-control: no fence
+
+```
+=== spike run S8-control, started 2026-10-09T11:14:53.0835534+05:30
+--- run description: {"about": "S8 control: the probe with no fence; also the network mode and route", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s8_probe.py"], "argv_override": ["/bin/sh", "-c", "wslinfo --networking-mode; ip route show default; python3 spike_probes/s8_probe.py {HOST_IP}"], "evidence": "raw"}
+--- working copy: /home/tester/steplet-work/S8-control/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S8-control/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S8-control/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S8-control/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S8-control.gate.log"}}
+--- launch command, one argument per line:
+/bin/sh
+-c
+wslinfo --networking-mode; ip route show default; python3 spike_probes/s8_probe.py 172.27.208.1
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 441
+host: wsl.exe started (pid Some(35236), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 20.1 s
+--- launch finished after 20.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- what the command printed:
+    nat
+    default via 172.27.208.1 dev eth0 proto kernel 
+    listener inside WSL -> CONNECTED
+    127.0.0.1:47832 (a Windows-only listener) -> ConnectionRefusedError: [Errno 111] Connection refused
+    Windows host RPC 135 -> TimeoutError: timed out
+    Windows host 5040 -> TimeoutError: timed out
+    Windows host 49664 -> TimeoutError: timed out
+    Windows host 47832 -> TimeoutError: timed out
+    internet 1.1.1.1:443 -> CONNECTED
+    proxy -> no proxy variable in the environment
+--- its error output:
+    (none)
+=== spike run S8-control finished 2026-10-09T11:15:20.3756199+05:30
+```
+
+### S8, first attempt (probe without the proxy login)
+
+```
+=== spike run S8, started 2026-10-09T11:15:20.7462688+05:30
+--- run description: {"about": "S8: the probe inside Claude Code's fence", "script": "s8_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s8_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S8/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S8/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S8/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S8/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S8", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S8.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S8/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S8/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 520 521
+host: pipe \\.\pipe\steplet-spike-S8 created, gate mode allow
+host: wsl.exe started (pid Some(3424), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.3 s
+--- launch finished after 2.3 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 6702, lines: 5, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S8/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s8_probe.py 172.27.208.1; echo \"EXIT=$?\"", "description": "Try to connect to other programs"}
+TOOL_RESULT is_error=False:
+    | listener inside WSL -> ConnectionRefusedError: [Errno 111] Connection refused
+    | 127.0.0.1:47832 (a Windows-only listener) -> ConnectionRefusedError: [Errno 111] Connection refused
+    | Windows host RPC 135 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 5040 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 49664 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 47832 -> OSError: [Errno 101] Network is unreachable
+    | internet 1.1.1.1:443 -> OSError: [Errno 101] Network is unreachable
+    | through the proxy: listener inside WSL -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: 127.0.0.1:47832 (a Windows-only listener) -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: Windows host RPC 135 -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: Windows host 5040 -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: Windows host 49664 -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: Windows host 47832 -> HTTP/1.1 407 Proxy Authentication Required
+    | through the proxy: internet 1.1.1.1:443 -> HTTP/1.1 407 Proxy Authentication Required
+    | EXIT=0
+AGENT: Spike S8: done.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=449
+       permission_denials=[]
+       text: Spike S8: done.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S8.gate.log:
+    1791524724.228 pid=35480 started; 1 environment variables: SystemRoot
+    1791524724.456 pid=35480 tool="Bash" behavior="allow" ms=0 input={"command":"python3 spike_probes/s8_probe.py 172.27.208.1; echo \"EXIT=$?\"","description":"Try to connect to other programs"}
+    1791524724.775
+--- gate log S8.host-gate.log:
+    1791524724.456 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524724.664 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","35480","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s8_probe.py 172.27.208.1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.36s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.36]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s8_results.jsonl
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S8-repo/539db6c1-02f5-471c-a8e2-abe0ea5e15a7.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S8-repo/mcp-logs-gate/2026-10-09T05-45-24-013Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    {"target": "listener inside WSL", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused", "seconds": 0.0}
+    {"target": "127.0.0.1:47832 (a Windows-only listener)", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused", "seconds": 0.0}
+    {"target": "Windows host RPC 135", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 5040", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 49664", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 47832", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "internet 1.1.1.1:443", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "through the proxy: listener inside WSL", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.01}
+    {"target": "through the proxy: 127.0.0.1:47832 (a Windows-only listener)", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+    {"target": "through the proxy: Windows host RPC 135", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 5040", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 49664", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 47832", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+    {"target": "through the proxy: internet 1.1.1.1:443", "ok": false, "detail": "HTTP/1.1 407 Proxy Authentication Required", "seconds": 0.0}
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S8 finished 2026-10-09T11:15:27.2574253+05:30
+```
+
+### S8: inside the fence, proxy login sent
+
+```
+=== spike run S8, started 2026-10-09T11:16:03.9126170+05:30
+--- run description: {"about": "S8: the probe inside Claude Code's fence", "script": "s8_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s8_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S8/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S8/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S8/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S8/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S8", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S8.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S8/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S8/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 440 441
+host: pipe \\.\pipe\steplet-spike-S8 created, gate mode allow
+host: wsl.exe started (pid Some(34668), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.1 s
+--- launch finished after 2.1 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 6472, lines: 5, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S8/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s8_probe.py 172.27.208.1; echo \"EXIT=$?\"", "description": "Try to connect to other programs"}
+TOOL_RESULT is_error=False:
+    | listener inside WSL -> ConnectionRefusedError: [Errno 111] Connection refused
+    | 127.0.0.1:47832 (a Windows-only listener) -> ConnectionRefusedError: [Errno 111] Connection refused
+    | Windows host RPC 135 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 5040 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 49664 -> OSError: [Errno 101] Network is unreachable
+    | Windows host 47832 -> OSError: [Errno 101] Network is unreachable
+    | internet 1.1.1.1:443 -> OSError: [Errno 101] Network is unreachable
+    | proxy login sent -> yes
+    | through the proxy: listener inside WSL -> HTTP/1.1 403 Forbidden
+    | through the proxy: 127.0.0.1:47832 (a Windows-only listener) -> HTTP/1.1 403 Forbidden
+    | through the proxy: Windows host RPC 135 -> HTTP/1.1 403 Forbidden
+    | through the proxy: Windows host 5040 -> HTTP/1.1 403 Forbidden
+    | through the proxy: Windows host 49664 -> HTTP/1.1 403 Forbidden
+    | through the proxy: Windows host 47832 -> HTTP/1.1 403 Forbidden
+    | through the proxy: internet 1.1.1.1:443 -> HTTP/1.1 403 Forbidden
+AGENT: Spike S8: done.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=365
+       permission_denials=[]
+       text: Spike S8: done.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S8.gate.log:
+    1791524770.053 pid=27100 started; 1 environment variables: SystemRoot
+    1791524770.236 pid=27100 tool="Bash" behavior="allow" ms=0 input={"command":"python3 spike_probes/s8_probe.py 172.27.208.1; echo \"EXIT=$?\"","description":"Try to connect to other programs"}
+    1791524770.503
+--- gate log S8.host-gate.log:
+    1791524770.236 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524770.419 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","27100","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s8_probe.py 172.27.208.1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.30s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.3]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s8_results.jsonl
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S8-repo/573aecf3-7aa6-4710-9089-11cb628a18aa.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S8-repo/mcp-logs-gate/2026-10-09T05-46-09-870Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    {"target": "listener inside WSL", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused", "seconds": 0.0}
+    {"target": "127.0.0.1:47832 (a Windows-only listener)", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused", "seconds": 0.0}
+    {"target": "Windows host RPC 135", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 5040", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 49664", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "Windows host 47832", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "internet 1.1.1.1:443", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable", "seconds": 0.0}
+    {"target": "proxy login sent", "ok": null, "detail": "yes"}
+    {"target": "through the proxy: listener inside WSL", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.01}
+    {"target": "through the proxy: 127.0.0.1:47832 (a Windows-only listener)", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+    {"target": "through the proxy: Windows host RPC 135", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 5040", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 49664", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+    {"target": "through the proxy: Windows host 47832", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+    {"target": "through the proxy: internet 1.1.1.1:443", "ok": false, "detail": "HTTP/1.1 403 Forbidden", "seconds": 0.0}
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S8 finished 2026-10-09T11:16:13.2270093+05:30
+```
+
+Windows listener log after each fenced run: the file did not exist (`(no log file)` both times).
+
+### Check that the Windows listener logs a connection
+
+```
+command: python -c (connect from Windows to 127.0.0.1:47832 and send S8-CHECK)
+connected from Windows
+listener log after the connection:
+2026-10-09T11:16:35.755185 from=('127.0.0.1', 50208) bytes=8 first8=b'S8-CHECK'
+```
+
+**Verdict:** PASS, because:
+- every attempt inside the fence failed, directly (`Connection refused` for 127.0.0.1, `Network is unreachable` for the
+  Windows host address and the internet) and through the proxy (`HTTP/1.1 403 Forbidden` for all seven targets, with
+  `proxy login sent -> yes`);
+- the Windows listener logged nothing during the fenced runs, and it does log a connection (check above);
+- targets that failed inside the fence connected in the control: the listener inside WSL and `1.1.1.1:443`.
+
+**Caveat:** the Windows-side targets were already unreachable without the fence: in `nat` mode WSL's `127.0.0.1` is
+not Windows' (`Connection refused`), and the Windows host address timed out on ports 135, 5040, 49664 and 47832 (the
+Windows firewall). So for those targets S8 shows two walls, not which one stopped them. The error inside the fence
+differs (an immediate `Network is unreachable` instead of a 5 s timeout), which shows the fence cuts the network before
+Windows is reached.
+
+**The chooser wording it allows:** "Programs this run starts cannot connect to other programs on this computer, in WSL
+or in Windows, or to the internet." With the condition kept next to it in the design notes: tested in WSL's default
+`nat` network mode only. The `mirrored` mode, where Windows' own `127.0.0.1` is reachable from WSL, was not tested (it
+needs a change to the WSL settings); a computer in that mode needs its own check before the app may say this.

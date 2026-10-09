@@ -1,0 +1,1 @@
+{"about": "S8: the probe inside Claude Code's fence", "script": "s8_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s8_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}

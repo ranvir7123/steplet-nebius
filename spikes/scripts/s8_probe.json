@@ -1,0 +1,7 @@
+{
+  "about": "Try to connect to programs on the Windows side and inside WSL",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "python3 spike_probes/s8_probe.py {HOST_IP}; echo \"EXIT=$?\"", "description": "Try to connect to other programs"}},
+    {"text": "Spike S8: done."}
+  ]
+}
