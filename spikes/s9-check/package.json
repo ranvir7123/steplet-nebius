@@ -1,0 +1,26 @@
+{
+  "name": "s9-check",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "embed": "node scripts/embed.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "build:browser": "vite build --mode browser",
+    "build:tauri": "vite build --mode tauri",
+    "test": "playwright test",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tauri-apps/cli": "2.12.1",
+    "@tsconfig/svelte": "5.0.8",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "6.0.3",
+    "vite": "8.3.1"
+  }
+}
