@@ -1,0 +1,1 @@
+{"about": "S2: a full run launched from Windows; what the fence sees; where F49's git ignore file lands", "script": "s2_env.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}

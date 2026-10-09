@@ -1,0 +1,1 @@
+{"about": "S2: the same with only SystemRoot passed", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}

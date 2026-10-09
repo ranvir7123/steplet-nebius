@@ -1,0 +1,1 @@
+{"about": "S2: the same with the launcher's whole Windows environment, for comparison", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "inherit"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}

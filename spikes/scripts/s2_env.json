@@ -1,0 +1,8 @@
+{
+  "about": "Record what the fence sees, then run git once (F49 appeared on the first command)",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "python3 spike_probes/s3_probe.py; echo \"EXIT=$?\"", "description": "Record what the fence can see"}},
+    {"tool": "Bash", "input": {"command": "git status --short > /dev/null; echo \"EXIT=$?\"", "description": "Run git once"}},
+    {"text": "Spike S2: done."}
+  ]
+}

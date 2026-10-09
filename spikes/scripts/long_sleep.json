@@ -1,0 +1,7 @@
+{
+  "about": "One long fenced command, so the run can be stopped or killed while it works",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"", "description": "Stay busy", "timeout": 600000}},
+    {"text": "Spike: the long command ended."}
+  ]
+}

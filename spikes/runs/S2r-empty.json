@@ -1,0 +1,1 @@
+{"about": "S2: the environment wsl.exe gives a program when the launcher passes no Windows variables", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "empty"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}

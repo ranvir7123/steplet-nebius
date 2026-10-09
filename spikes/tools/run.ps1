@@ -30,7 +30,8 @@ if ($Run.launch -eq "inside") {
         $a += @("--pipe", "steplet-spike-$Id", "--token", (Get-Content "$RunDir\token.txt" -Raw).Trim(), "--gate-mode", $Run.gate_mode)
     }
     if ($Run.host) {
-        foreach ($p in $Run.host.PSObject.Properties) { $a += @("--" + $p.Name.Replace("_", "-"), "$($p.Value)") }
+        # Brackets matter: the comma binds tighter than +, which glued "--name value" into one argument.
+        foreach ($p in $Run.host.PSObject.Properties) { $a += @(("--" + $p.Name.Replace("_", "-")), "$($p.Value)") }
     }
     & "$Spikes\target\release\spike-host.exe" @a 2>&1 | ForEach-Object { Say "$_" }
 }

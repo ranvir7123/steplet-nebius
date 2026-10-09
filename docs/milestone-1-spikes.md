@@ -996,3 +996,629 @@ tests read their own files under `/home/tester/steplet-work/S7b/repo` while `/mn
 denied, so the `product` shape is kept (no `product-noallow`). The product shape does block the checkout inside
 the agent's run, which is what decision D6 intends: Steplet must do the checkout itself, as its own fenced step
 before the agent starts. S4 has to test that step.
+
+## S2: launching Claude Code from Windows
+
+Question, from the milestone plan: What does `wsl.exe --exec` add to the environment? Do Linux processes outlive
+a killed `wsl.exe`? Does Claude Code work with Steplet's private `HOME`, and does F49's git ignore file land there?
+Pass: no Windows variables cross; no process outlives the run once the clean-up runs; F49's file lands in the
+private home.
+
+Runs: `spikes/runs/S2r-empty.json`, `S2r-systemroot.json`, `S2r-inherit.json` (what `wsl.exe` passes on in each
+environment mode), `S2a.json` (a full run launched from Windows), `S2c.json` (kill `wsl.exe` mid-command, then clean
+up). `S2d.json` was not run: S2c left no processes.
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+**First attempt (8 Oct 2026) was not a measurement.** `run.ps1` built the host's options as
+`"--" + $p.Name, "$($p.Value)"`. In PowerShell the comma binds tighter than `+`, so `--env-mode systemroot` reached
+the host as one argument, the host did not recognise it, and fell back to an empty environment in all three runs
+(each printed `environment Empty`). Fixed in `run.ps1` with brackets; the logs below are the second attempt
+(9 Oct 2026), where the host prints the mode it was given.
+
+**Change to the run descriptions, as the plan allows:** `empty` failed and `systemroot` worked, so S2a, S2c and S2d
+use `"env_mode": "systemroot"`. Every later run description with a `host` field must do the same.
+
+### S2r-empty
+
+The five "variables" listed are not variables: they are `wsl.exe`'s own error message (UTF-16, hence the spaces),
+which the harness read as `env` output.
+
+```
+=== spike run S2r-empty, started 2026-10-09T10:38:45.0758479+05:30
+--- run description: {"about": "S2: the environment wsl.exe gives a program when the launcher passes no Windows variables", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "empty"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}
+--- working copy: /home/tester/steplet-work/S2r-empty/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S2r-empty/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S2r-empty/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S2r-empty/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S2r-empty.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/env
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 427
+host: wsl.exe started (pid Some(35252), environment Empty); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(-1)), after 0.1 s
+--- launch finished after 0.1 s
+--- Windows: spike-gate.exe processes still running: 0
+--- the environment the command received (sorted; values shown only for harmless names):
+    \x00=<value not shown>
+    \x00=<value not shown>
+    \x00=<value not shown>
+    \x00E\x00r\x00r\x00o\x00r\x00 \x00c\x00o\x00d\x00e\x00:\x00 \x00W\x00s\x00l\x00/\x00S\x00e\x00r\x00v\x00i\x00c\x00e\x00/\x000\x00x\x008\x000\x000\x007\x000\x007\x002\x00c\x00=<value not shown>
+    T\x00h\x00e\x00 \x00R\x00P\x00C\x00 \x00c\x00a\x00l\x00l\x00 \x00c\x00o\x00n\x00t\x00a\x00i\x00n\x00s\x00 \x00a\x00 \x00h\x00a\x00n\x00d\x00l\x00e\x00 \x00t\x00h\x00a\x00t\x00 \x00d\x00i\x00f\x00f\x00e\x00r\x00s\x00 \x00f\x00r\x00o\x00m\x00 \x00t\x00h\x00e\x00 \x00d\x00e\x00c\x00l\x00a\x00r\x00e\x00d\x00 \x00h\x00a\x00n\x00d\x00l\x00e\x00 \x00t\x00y\x00p\x00e\x00.\x00 \x00=<value not shown>
+    (5 variables)
+--- its error output:
+    (none)
+=== spike run S2r-empty finished 2026-10-09T10:38:52.1030677+05:30
+```
+
+### S2r-systemroot
+
+```
+=== spike run S2r-systemroot, started 2026-10-09T10:38:52.5058890+05:30
+--- run description: {"about": "S2: the same with only SystemRoot passed", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}
+--- working copy: /home/tester/steplet-work/S2r-systemroot/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S2r-systemroot/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S2r-systemroot/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S2r-systemroot/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S2r-systemroot.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/env
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 453
+host: wsl.exe started (pid Some(19124), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 0.1 s
+--- launch finished after 0.1 s
+--- Windows: spike-gate.exe processes still running: 0
+--- the environment the command received (sorted; values shown only for harmless names):
+    DBUS_SESSION_BUS_ADDRESS=<value not shown>
+    DISPLAY=:0
+    HOME=/home/tester
+    HOSTTYPE=x86_64
+    LANG=C.UTF-8
+    LOGNAME=tester
+    NAME=LAPTOP-R1RG22O7
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib
+    PULSE_SERVER=unix:/mnt/wslg/PulseServer
+    SHELL=/bin/bash
+    TERM=xterm-256color
+    USER=tester
+    WAYLAND_DISPLAY=wayland-0
+    WSL2_GUI_APPS_ENABLED=1
+    WSLENV=
+    WSL_DISTRO_NAME=steplet-test
+    WSL_INTEROP=/run/WSL/459_interop
+    XDG_RUNTIME_DIR=/run/user/1000/
+    (18 variables)
+--- its error output:
+    (none)
+=== spike run S2r-systemroot finished 2026-10-09T10:38:57.0316685+05:30
+```
+
+### S2r-inherit
+
+```
+=== spike run S2r-inherit, started 2026-10-09T10:38:57.4086975+05:30
+--- run description: {"about": "S2: the same with the launcher's whole Windows environment, for comparison", "script": "none", "gate": "node", "shape": "product", "launch": "host", "host": {"env_mode": "inherit"}, "argv_override": ["/usr/bin/env"], "evidence": "env"}
+--- working copy: /home/tester/steplet-work/S2r-inherit/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S2r-inherit/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S2r-inherit/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S2r-inherit/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S2r-inherit.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/env
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 480
+host: wsl.exe started (pid Some(26632), environment Inherit); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 0.1 s
+--- launch finished after 0.1 s
+--- Windows: spike-gate.exe processes still running: 0
+--- the environment the command received (sorted; values shown only for harmless names):
+    DBUS_SESSION_BUS_ADDRESS=<value not shown>
+    DISPLAY=:0
+    HOME=/home/tester
+    HOSTTYPE=x86_64
+    LANG=C.UTF-8
+    LOGNAME=tester
+    NAME=LAPTOP-R1RG22O7
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Program Files/dotnet/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/PuTTY/:/mnt/c/mingw64/bin:/mnt/c/msys64/ucrt64/bin:/mnt/c/Program Files/nodejs/:/mnt/c/Program Files/Cloudflare/Cloudflare WARP/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Users/RANVIR/AppData/Local/Programs/Python/Python312/Scripts/:/mnt/c/Users/RANVIR/AppData/Local/Programs/Python/Python312/:/mnt/c/Users/RANVIR/AppData/Local/Programs/Python/Launcher/:/mnt/c/Users/RANVIR/.local/bin:/mnt/c/Users/RANVIR/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/RANVIR/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/RANVIR/AppData/Local/Programs/Antigravity/bin:/mnt/c/Users/RANVIR/AppData/Local/Programs/Ollama:/mnt/c/Users/RANVIR/AppData/Roaming/npm:/mnt/c/Users/RANVIR/AppData/Local/Microsoft/WinGet/Packages/Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe:/mnt/c/Users/RANVIR/AppData/Local/Programs/cursor/resources/app/bin:/mnt/c/Program Files/Blender Foundation/Blender 4.5:/mnt/c/Users/RANVIR/.cargo/bin:/mnt/c/Users/RANVIR/AppData/Local/Programs/Python/Python312:/mnt/c/Program Files/nodejs:/mnt/c/Program Files/Git/mingw64/bin:/mnt/c/Program Files/GitHub CLI
+    PULSE_SERVER=unix:/mnt/wslg/PulseServer
+    SHELL=/bin/bash
+    TERM=xterm-256color
+    USER=tester
+    WAYLAND_DISPLAY=wayland-0
+    WSL2_GUI_APPS_ENABLED=1
+    WSLENV=
+    WSL_DISTRO_NAME=steplet-test
+    WSL_INTEROP=/run/WSL/485_interop
+    XDG_RUNTIME_DIR=/run/user/1000/
+    (18 variables)
+--- its error output:
+    (none)
+=== spike run S2r-inherit finished 2026-10-09T10:39:01.8925131+05:30
+```
+
+### Why the empty environment fails, and what it does to the distro
+
+`spikes/tools/s2_env_min.py` starts `wsl.exe --distribution-id <id> --exec /bin/echo STARTED` with a chosen Windows
+environment, 15 s limit, and prints variable names only. Sections 4 and 5 stop the distro first, so the tested call
+is the one that has to start it.
+
+```
+=== 1. each case on a healthy distro (the distro is restarted after any failure)
+command: python -I spikes\tools\s2_env_min.py full none SystemRoot SystemRoot SystemRoot
+OK   vars= 94 hung=False exit=0 first_line='STARTED'
+     names: (full environment)
+FAIL vars=  0 hung=False exit=4294967295 first_line='The RPC call contains a handle that differs from the declared handle type. '
+     names: (none)
+     distro reset: ok
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+=== 2. empty, then SystemRoot, then full, with no restart in between and no other session open
+command: python -I spikes\tools\s2_env_min.py --no-reset none SystemRoot full
+FAIL vars=  0 hung=False exit=4294967295 first_line='The RPC call contains a handle that differs from the declared handle type. '
+     names: (none)
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+OK   vars= 94 hung=False exit=0 first_line='STARTED'
+     names: (full environment)
+final distro reset: ok
+=== 3. the same order while another session of the distro is open (wsl.exe -d steplet-test --exec /bin/sleep 60)
+command: python -I spikes\tools\s2_env_min.py --no-reset none full SystemRoot
+FAIL vars=  0 hung=False exit=4294967295 first_line='The RPC call contains a handle that differs from the declared handle type. '
+     names: (none)
+OK   vars= 94 hung=False exit=0 first_line='STARTED'
+     names: (full environment)
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+final distro reset: ok
+=== 4.1 the distro is stopped first, so the empty call is the one that has to start it
+command: wsl.exe --terminate steplet-test; python -I spikes\tools\s2_env_min.py --no-reset none full
+terminate: T\x00h\x00e\x00 \x00o\x00p\x00e\x00r\x00a\x00t\x00i\x00o\x00n\x00 \x00c\x00o\x00m\x00p\x00l\x00e\x00t\x00e\x00d\x00 \x00s\x00u\x00c\x00c\x00e\x00s\x00s\x00f\x00u\x00l\x00l\x00y\x00.\x00 \x00
+terminate: \x00
+terminate: \x00
+state before: steplet-test    Stopped         2
+FAIL vars=  0 hung=False exit=4294967295 first_line='The RPC call contains a handle that differs from the declared handle type. '
+     names: (none)
+FAIL vars= 95 hung=True exit=None first_line=''
+     names: (full environment)
+final distro reset: ok
+=== 4.2 the distro is stopped first, so the empty call is the one that has to start it
+command: wsl.exe --terminate steplet-test; python -I spikes\tools\s2_env_min.py --no-reset none full
+terminate: The operation completed successfully. 
+state before: steplet-test    Stopped         2
+FAIL vars=  0 hung=False exit=4294967295 first_line='The RPC call contains a handle that differs from the declared handle type. '
+     names: (none)
+FAIL vars= 95 hung=True exit=None first_line=''
+     names: (full environment)
+final distro reset: ok
+=== 5.1 the distro is stopped first, and the SystemRoot-only call is the one that has to start it
+command: wsl.exe --terminate steplet-test; python -I spikes\tools\s2_env_min.py --no-reset SystemRoot full
+terminate: T\x00h\x00e\x00 \x00o\x00p\x00e\x00r\x00a\x00t\x00i\x00o\x00n\x00 \x00c\x00o\x00m\x00p\x00l\x00e\x00t\x00e\x00d\x00 \x00s\x00u\x00c\x00c\x00e\x00s\x00s\x00f\x00u\x00l\x00l\x00y\x00.\x00 \x00
+terminate: \x00
+terminate: \x00
+state before: steplet-test    Stopped         2
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+OK   vars= 95 hung=False exit=0 first_line='STARTED'
+     names: (full environment)
+final distro reset: ok
+=== 5.2 the distro is stopped first, and the SystemRoot-only call is the one that has to start it
+command: wsl.exe --terminate steplet-test; python -I spikes\tools\s2_env_min.py --no-reset SystemRoot full
+terminate: The operation completed successfully. 
+state before: steplet-test    Stopped         2
+OK   vars=  1 hung=False exit=0 first_line='STARTED'
+     names: SYSTEMROOT
+OK   vars= 95 hung=False exit=0 first_line='STARTED'
+     names: (full environment)
+final distro reset: ok
+```
+
+### S2a
+
+```
+=== spike run S2a, started 2026-10-09T10:39:14.0910561+05:30
+--- run description: {"about": "S2: a full run launched from Windows; what the fence sees; where F49's git ignore file lands", "script": "s2_env.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S2a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S2a/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S2a/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S2a/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S2a.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S2a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S2a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 512 513
+host: wsl.exe started (pid Some(35604), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.8 s
+--- launch finished after 2.8 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5577, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S2a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s3_probe.py; echo \"EXIT=$?\"", "description": "Record what the fence can see"}
+TOOL_RESULT is_error=False:
+    | probe: 53 environment variables, 5 /proc files copied, 0 reads tried
+    | 
+    | EXIT=0
+TOOL_USE Bash: {"command": "git status --short > /dev/null; echo \"EXIT=$?\"", "description": "Run git once"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+AGENT: Spike S2: done.
+RESULT subtype=success is_error=False num_turns=3 duration_ms=437
+       permission_denials=[]
+       text: Spike S2: done.
+event types: {'system/init': 1, 'assistant': 3, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S2a.gate.log:
+    2026-10-09T05:09:18.272Z allow {"tool_name":"Bash","input":{"command":"python3 spike_probes/s3_probe.py; echo \"EXIT=$?\"","description":"Record what the fence can see"},"tool_use_id":"toolu_spike_ec851c13f50b4a1eb998"}
+    2026-10-09T05:09:18.482Z allow {"tool_name":"Bash","input":{"command":"git status --short > /dev/null; echo \"EXIT=$?\"","description":"Run git once"},"tool_use_id":"toolu_spike_f1ccdbe4e05e4b369de9"}
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s3_probe.py; echo "EXIT=$?"
+    Bash       asked=yes  git status --short > /dev/null; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.23s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.36s agent loop /v1/messages?beta=true step=2 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.23, 0.13]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s3_seen/
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S2a-repo/93409842-552b-46be-9db1-32d53f56dff5.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S2a-repo/mcp-logs-gate/2026-10-09T05-09-17-307Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- environment variable names inside the fence: AI_AGENT,ALL_PROXY,ANTHROPIC_API_KEY,ANTHROPIC_BASE_URL,CLAUDECODE,CLAUDE_CODE_CHILD_SESSION,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,CLAUDE_CODE_ENTRYPOINT,CLAUDE_CODE_EXECPATH,CLAUDE_CODE_HOST_HTTP_PROXY_PORT,CLAUDE_CODE_HOST_SOCKS_PROXY_PORT,CLAUDE_CODE_SESSION_ID,CLAUDE_CODE_TMPDIR,CLAUDE_CONFIG_DIR,CLAUDE_EFFORT,CLAUDE_PID,CLAUDE_TMPDIR,CLOUDSDK_PROXY_ADDRESS,CLOUDSDK_PROXY_PASSWORD,CLOUDSDK_PROXY_PORT,CLOUDSDK_PROXY_TYPE,CLOUDSDK_PROXY_USERNAME,COREPACK_ENABLE_AUTO_PIN,DISABLE_AUTOUPDATER,DOCKER_HTTPS_PROXY,DOCKER_HTTP_PROXY,FTP_PROXY,GIT_CONFIG_PARAMETERS,GIT_EDITOR,GIT_SSH_COMMAND,GRPC_PROXY,HOME,HTTPS_PROXY,HTTP_PROXY,LANG,MIMALLOC_SCAVENGER,NO_PROXY,NoDefaultCurrentDirectoryInExePath,PATH,PWD,RSYNC_PROXY,SANDBOX_RUNTIME,SHELL,SHLVL,TMPDIR,TMPPREFIX,_,all_proxy,ftp_proxy,grpc_proxy,http_proxy,https_proxy,no_proxy
+--- Windows or WSL variables inside the fence: none
+--- /proc: command lines readable from the fence: 3; of processes carrying Claude Code's flags: 0; their environment readable: 0
+--- files the probe tried to read:
+    
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 3 {'env.txt': 1, 'proc_2_environ.txt': 1, 'proc_3_environ.txt': 1}
+    fake API key, last 20 characters: 3 {'env.txt': 1, 'proc_2_environ.txt': 1, 'proc_3_environ.txt': 1}
+--- processes still running for this run: 0
+=== spike run S2a finished 2026-10-09T10:39:21.0735863+05:30
+```
+
+### S2c
+
+```
+=== spike run S2c, started 2026-10-09T10:39:35.7137991+05:30
+--- run description: {"about": "S2: kill wsl.exe while a fenced command runs; list what keeps running; then clean up by the run marker", "script": "long_sleep.json", "gate": "node", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot", "kill_wsl_after_s": 20}, "cleanup": true, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S2c/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S2c/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S2c/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S2c/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/usr/bin/node", "args": ["/home/tester/m1/tools/gate/gate.mjs"], "env": {"GATE_MODE": "allow", "GATE_LOG": "/home/tester/m1/logs/S2c.gate.log"}}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S2c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S2c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 688 689
+host: wsl.exe started (pid Some(32528), environment SystemRoot); task sent on its input, 24 bytes
+host: killing wsl.exe at 20.2 s
+host: wsl.exe ended: Ok(Some(1)), after 20.2 s
+--- launch finished after 20.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 2683, lines: 3, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S2c/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"", "description": "Stay busy", "timeout": 600000}
+SYSTEM task_started: {"task_id": "bat3e3p7d", "tool_use_id": "toolu_spike_41fe12e0b9014aefa8a7", "description": "Stay busy", "task_type": "local_bash"}
+event types: {'system/init': 1, 'assistant': 1, 'system/task_started': 1}
+top-level events of type 'result': 0
+--- error output:
+    (none)
+--- gate log S2c.gate.log:
+    2026-10-09T05:09:38.812Z allow {"tool_name":"Bash","input":{"command":"python3 -c \"import time; open('spike_alive.txt','w').write('x'); time.sleep(600)\"","timeout":600000,"description":"Stay busy"},"tool_use_id":"toolu_spike_41fe12e0b9014aefa8a7"}
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 -c "import time; open('spike_alive.txt','w').write('x'); time.sleep(600)"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +19.07s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [19.07]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? spike_alive.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['.last-cleanup', 'projects/-home-tester-steplet-work-S2c-repo/6a167101-6b2b-470a-b011-c8aca8f76e72.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S2c-repo/mcp-logs-gate/2026-10-09T05-09-38-190Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+--- clean-up: 0 processes carry the run marker; sessions to stop: none
+--- processes still running for this run: 0
+=== spike run S2c finished 2026-10-09T10:40:06.5127543+05:30
+```
+
+A plain `ps -eo pid,etime,args` in the distro straight after S2c showed no `python3` sleep, `bwrap`, `socat` or
+`claude` process. The distro was not restarted by the kill: its `/sbin/init` started about 45 s before S2c began,
+and the helper process numbers kept rising across runs in the same boot (S2a 512, S2c 688).
+
+**Verdict:** PASS, with `env_mode` `systemroot` instead of `empty`, because:
+- no Windows variables cross: S2r-systemroot gives 18 Linux variables, `WSLENV=` empty, and `PATH` without any
+  `/mnt/c` folder; inside the fence, S2a reports `Windows or WSL variables inside the fence: none`;
+- no process outlives the run: S2c killed `wsl.exe` at 20.2 s, `processes still running for this run: 0` before
+  the clean-up and after it, confirmed by a plain process list;
+- Claude Code works with the private `HOME` (S2a: `RESULT subtype=success`), the private home's
+  `.config/git/ignore` holds `**/.claude/.cc-writes/` and the real `~/.config/git/ignore` is `None` before and
+  after. The file was first written there by S7a (also private `HOME`, launched inside WSL); S2a found it already
+  there, so S2a shows it stays in the private home rather than when it is first written.
+
+**What it means:**
+- **The app must never start `wsl.exe` with an empty Windows environment.** On WSL 2.6.3 that call fails with
+  `The RPC call contains a handle that differs from the declared handle type` (`Wsl/Service/0x8007072c`), and when
+  that call is the one starting a stopped distro, the next normal call hangs until `wsl --terminate` (sections 4.1
+  and 4.2; the same happened in the first host test this morning, which then answered `Catastrophic failure`,
+  `Wsl/Service/E_UNEXPECTED`). With the distro already running, the failure leaves it usable (sections 2 and 3).
+- **`SystemRoot` alone is enough**, including as the call that starts a stopped distro (sections 1, 5.1, 5.2), and
+  passes nothing Windows-specific into Linux. The milestone plan's "Empty" choice becomes "SystemRoot only".
+- Passing the whole Windows environment (`inherit`) adds every Windows program folder to `PATH` inside WSL; the app
+  should not do it.
+- Killing `wsl.exe` ended the fenced command too, so phase 3 does not need the runner-up launcher for this; the
+  clean-up by run marker still runs as a safety net.
+- Through `/proc` the fence can read 3 command lines, none of them Claude Code's, and no environments of Claude
+  Code's processes (S3 depends on this).
+- **Noted for S3, not judged here:** in S2a the fake API key, passed as `ANTHROPIC_API_KEY`, was readable inside the
+  fence: in the probe's own environment copy and in two `/proc/<pid>/environ` files of fenced processes.
