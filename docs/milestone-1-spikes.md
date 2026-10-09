@@ -5323,3 +5323,539 @@ top-level events of type 'result': 1
   ones that read files in the working folder; whether they still run inside the fence was not tested here.
 - Steplet can choose the tools a run offers with `--tools`, for example leaving out WebFetch, WebSearch, Agent, the
   Cron and Task tools, and the plan and worktree tools. The gate's own tool is not offered to the model either way.
+
+## S6: the model switch after a refusal, and reporting of blocked attempts (scripted part)
+
+Question, from the milestone plan: can the refusal model switch be turned off (D7-C)? Does Claude Code report blocked
+fence attempts anywhere the app can read (stream, error output, a log)? Pass: recorded either way.
+
+Runs: `spikes/runs/S6a.json` (scripted refusal), `S6b.json` (the same with `switchModelsOnFlag: false` in the run's
+settings file), `S6c.json` (the fixture with `--debug`), all with `"env_mode": "systemroot"` (S2).
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`
+
+### Where Claude Code 2.1.220 reads a refusal from
+
+Command: `strings.sh api_refusal_category context`, then `strings.sh switchModelsOnFlag context`:
+
+```
+\x00\x00\x00chainEntry\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x0b\x00\x00\x00chain_entry\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x14\x00\x00\x00api_refusal_category\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00P\x00\x00\x01\x0f\x01\x00\x00\x00\x00\x00\x00
+mapped"&&{chain_length:o.chainLength},...o.reason==="chain_entry_unresolvable"&&{chain_entry_index:o.chainEntryIndex,chain_entry:Bu(o.chainEntry)},...r!=null&&{api_refusal_category:fe(fit(r))}})}function IJn({stages:e,chainLength:t,firstStageIndex:r,model:n,armedFallbackModel:o,apiRefusalCategory:i,requestId:s}){e.forEach((a,l)=>GWi({mode
+odel_scope:fe(Je.telemetry.originalModelScope),queryChainId:he,queryDepth:ve.depth,querySource:EZ(a),final_stop_reason:Xo(Je.telemetry.finalStopReason??void 0),api_refusal_category:Xo(Je.telemetry.apiRefusalCategory)}),Je.userVisible){be("refusal_fallback");let St=mt,Jt=pu?.model,bn=Jt!==void 0&&Wu(Jt)===Wu(mr.toModel)?Jt:mr.toModel,Kn=mt
+model:mr.originalModel,fallback_model:mr.fallbackModel,trigger:fe(mr.trigger),request_id:wr(mr.requestId),queryChainId:he,queryDepth:ve.depth,querySource:HS(a),api_refusal_category:mr.apiRefusalCategory?fe(fit(mr.apiRefusalCategory)):void 0,route_matched:mr.routeMatched!=null?fe(mr.routeMatched):void 0,...mr.cascadeHopIndex!==void 0&&{cha
+efusal_fallback",uuid:tr.uuid,trigger:tr.trigger,direction:tr.direction,original_model:tr.originalModel,fallback_model:tr.fallbackModel,request_id:tr.requestId,api_refusal_category:tr.apiRefusalCategory??null,api_refusal_explanation:tr.apiRefusalExplanation??null,...tr.retractedMessageUuids!==void 0&&{retracted_message_uuids:tr.retractedM
+\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x15\x00\x00\x00preferredNotifChannel\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00autoCompactEnabled\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x1b\x00\x00\x00precomputeCompactionEnabled\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00switchModelsOnFlag\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x11\x00\x00\x00autoScrollEnabled\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x1e\x00\x00\x00wheelScrollAccelerationEnabled\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x18\x00\x00\x00fileCheckpointingEnabled\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00
+\x00\x00\x00\x00\x00\x00\x00\x00\x00 \x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00switchModelsOnFlag\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+\x00\x00\x00 \x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00switchModelsOnFlag\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x0e\x00\x00\x00no_dialog_host\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00switchModelsOnFlag\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x07\x00\x00\x00setting\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x16\x00\x00\x00no_consumer_capability\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x12\x00\x00\x00switchModelsOnFlag\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00	\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+```
+
+That passage shows where the category is reported, not where it is read. Two more searches (`strings.sh
+apiRefusalExplanation: context`, `strings.sh 'stop_details\?\.' context`) show it is read from the answer's
+`stop_details`: `apiRefusalCategory:Pn.stop_details?.category`, `apiRefusalExplanation:Pn.stop_details?.explanation`,
+and in the stream `pi.delta.stop_details?.category`; the stream copies `stop_details` from the `message_delta` event.
+The switch only happens when a fallback model is armed (`armedFallbackModel`). **Field names used** in
+`spikes/scripts/s6_refusal.json`: `stop_details: {type: "refusal", category: "cyber", explanation: "..."}`, under both
+`message` and `delta`. (`cyber` is one of the categories Claude Code's own documentation strings list.)
+
+### S6a: a scripted refusal
+
+```
+=== spike run S6a, started 2026-10-09T11:12:37.3529718+05:30
+--- run description: {"about": "S6: a scripted refusal; does Claude Code switch model, and what shows it?", "script": "s6_refusal.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S6a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S6a/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S6a/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S6a/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S6a", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S6a.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S6a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S6a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 441 442
+host: pipe \\.\pipe\steplet-spike-S6a created, gate mode allow
+host: wsl.exe started (pid Some(33760), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.2 s
+--- launch finished after 2.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5520, lines: 6, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S6a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "echo before > s6_before.txt; echo \"EXIT=$?\"", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+SYSTEM model_refusal_fallback: {"trigger": "refusal", "direction": "retry", "original_model": "claude-opus-5[1m]", "fallback_model": "claude-opus-4-8[1m]", "request_id": null, "api_refusal_category": "cyber", "api_refusal_explanation": "Spike S6: scripted refusal.", "retracted_message_uuids": [], "refused_user_message_uuid": "ad75e490-2fc6-4454-8305-2cdcfb9e1e89", "content": "Opus 5 (1M context)'s safeguards flagged this messag
+AGENT: Spike S6: answer after the refusal.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=364
+       permission_denials=[]
+       text: Spike S6: answer after the refusal.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'system/model_refusal_fallback': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S6a.gate.log:
+    1791524563.815 pid=1748 started; 1 environment variables: SystemRoot
+    1791524564.036 pid=1748 tool="Bash" behavior="allow" ms=0 input={"command":"echo before > s6_before.txt; echo \"EXIT=$?\"","description":"Write a file"}
+    1791524564.267
+--- gate log S6a.host-gate.log:
+    1791524564.036 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524564.250 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","1748","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  echo before > s6_before.txt; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=1 answer=refusal model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.27s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-4-8 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.26, 0.01]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s6_before.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S6a-repo/5c7cb2a1-0df4-47c6-b80a-5a6e8e110421.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S6a-repo/mcp-logs-gate/2026-10-09T05-42-43-626Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S6a finished 2026-10-09T11:12:46.8906932+05:30
+```
+
+### S6b: the same with `switchModelsOnFlag: false`
+
+```
+=== spike run S6b, started 2026-10-09T11:12:47.2667970+05:30
+--- run description: {"about": "S6: the same with switchModelsOnFlag false", "script": "s6_refusal.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "settings_extra": {"switchModelsOnFlag": false}}
+--- working copy: /home/tester/steplet-work/S6b/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S6b/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S6b/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S6b/repo/.git/**)"
+    ]
+  },
+  "switchModelsOnFlag": false
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S6b", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S6b.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S6b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S6b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 594 595
+host: pipe \\.\pipe\steplet-spike-S6b created, gate mode allow
+host: wsl.exe started (pid Some(32952), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(1)), after 1.2 s
+--- launch finished after 1.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 6046, lines: 6, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S6b/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "echo before > s6_before.txt; echo \"EXIT=$?\"", "description": "Write a file"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+SYSTEM model_refusal_no_fallback: {"original_model": "claude-opus-5[1m]", "request_id": null, "api_refusal_category": "cyber", "api_refusal_explanation": "Spike S6: scripted refusal.", "refused_user_message_uuid": "7d000ac0-f734-47f2-9564-eaff33745163", "content": ""}
+AGENT: API Error: Opus 5 (1M context)'s safeguards flagged this message (https://www.anthropic.com/legal/aup). Our intentionally broad safeguards allow us to deliver more capabilities faster, but can sometimes flag legitimate coding, cybersecurity, and biology tasks. Claude Code can't respond to this message with Opus 5 (1M context).
+
+Try rephrasing the request in a new session or change your model.
+
+Learn more: https://support.claude.com/en/articles/16049681
+RESULT subtype=success is_error=True num_turns=2 duration_ms=316
+       permission_denials=[]
+       text: API Error: Opus 5 (1M context)'s safeguards flagged this message (https://www.anthropic.com/legal/aup). Our intentionally broad safeguards allow us to deliver more capabilities faster, but can sometimes flag legitimate coding, cybersecurity, and biology tasks. Claude Code can't respond to this message with Opus 5 (1M context).
+
+Try rephrasing the request in a new session or change your model.
+
+Learn more: https://support.claude.com/en/articles/16049681
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'system/model_refusal_no_fallback': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S6b.gate.log:
+    1791524569.823 pid=34860 started; 1 environment variables: SystemRoot
+    1791524570.008 pid=34860 tool="Bash" behavior="allow" ms=0 input={"command":"echo before > s6_before.txt; echo \"EXIT=$?\"","description":"Write a file"}
+    1791524570.220
+--- gate log S6b.host-gate.log:
+    1791524570.008 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524570.199 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","34860","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  echo before > s6_before.txt; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.25s agent loop /v1/messages?beta=true step=1 answer=refusal model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.25]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s6_before.txt
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S6b-repo/07179b65-cfcd-4fa1-bda9-284f943a411e.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S6b-repo/mcp-logs-gate/2026-10-09T05-42-49-638Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S6b finished 2026-10-09T11:12:52.7561673+05:30
+```
+
+### S6c: the fixture with `--debug`
+
+The one line the harness lists is a tool result in the session record: git's own `Read-only file system` message
+from the blocked checkout, printed by git, not a report from the fence.
+
+```
+=== spike run S6c, started 2026-10-09T11:13:04.8860455+05:30
+--- run description: {"about": "S6: the fixture with --debug; does anything Steplet can read report the blocked attempts?", "script": "s7_t1c.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"], "flags": ["--debug"], "grep_debug": true}
+--- working copy: /home/tester/steplet-work/S6c/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S6c/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S6c/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S6c/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S6c", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S6c.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S6c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S6c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--debug
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 753 754
+host: pipe \\.\pipe\steplet-spike-S6c created, gate mode allow
+host: wsl.exe started (pid Some(7472), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.6 s
+--- launch finished after 1.6 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5911, lines: 7, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S6c/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | fatal: Unable to create '/home/tester/steplet-work/S6c/repo/.git/index.lock': Read-only file system
+    | EXIT=128
+TOOL_USE Bash: {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}
+TOOL_RESULT is_error=False:
+    | .
+    | ----------------------------------------------------------------------
+    | Ran 1 test in 0.067s
+    | 
+    | OK
+    | EXIT=0
+AGENT: Spike: the tests ran.
+RESULT subtype=success is_error=False num_turns=3 duration_ms=619
+       permission_denials=[]
+       text: Spike: the tests ran.
+event types: {'system/init': 1, 'assistant': 3, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S6c.gate.log:
+    1791524587.582 pid=8112 started; 1 environment variables: SystemRoot
+    1791524587.766 pid=8112 tool="Bash" behavior="allow" ms=0 input={"command":"git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"","description":"Check out the specified commit"}
+    1791524588.009 pid=8112 tool="Bash" behavior="allow" ms=0 input={"command":"python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"","description":"Run the unittest suite"}
+--- gate log S6c.host-gate.log:
+    1791524587.766 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791524587.977 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","8112","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791524588.009 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash       asked=yes  python3 -m unittest discover -s tests -t . 2>&1; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.26s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.55s agent loop /v1/messages?beta=true step=2 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.26, 0.29]
+--- m0_results.jsonl (the fixture's own record):
+    {"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+    {"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "H_read_system_file", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/win.ini'"}
+    {"attempt": "C_write_outside_workspace", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/outside/written_by_probe.txt'"}
+    {"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+    {"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/home/tester/m1/canary/fake_key'"}
+    {"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    {"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+    {"attempt": "G_launch_windows_program", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/System32/cmd.exe'"}
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    !! calc/__pycache__/
+    !! m0_inside.txt
+    !! m0_results.jsonl
+    !! tests/__pycache__/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['debug/6a88d472-34ac-479a-bd02-c2d0fc06b610.txt', 'debug/latest', 'projects/-home-tester-steplet-work-S6c-repo/6a88d472-34ac-479a-bd02-c2d0fc06b610.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S6c-repo/mcp-logs-gate/2026-10-09T05-43-07-391Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- lines about blocked actions in error output and in new files of the settings folder (first 40):
+    6a88d472-34ac-479a-bd02-c2d0fc06b610.jsonl: {"parentUuid":"231e1e92-95b2-49fb-8f06-df6542f050ae","isSidechain":false,"promptId":"d0740e7e-ab26-4726-8a84-63b67fe42101","type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_spike_3573e4d515ca42f5b8a4","type":"tool_resu
+    (1 shown)
+--- processes still running for this run: 0
+=== spike run S6c finished 2026-10-09T11:13:10.9238740+05:30
+```
+
+An independent, broader scan of the `--debug` log (`spikes/wsl/s6_debug_scan.sh`). Its one match is a false hit:
+`verifyAutoModeGateAccess` contains the letters `eAcces`, which the case-insensitive pattern `EACCES` matches.
+
+```
+debug log: /home/tester/.local/share/steplet/claude-config/debug/6a88d472-34ac-479a-bd02-c2d0fc06b610.txt (164 lines, 17358 bytes)
+--- lines mentioning sandbox, bwrap, seccomp, violation, denied, blocked, EPERM, EACCES, read-only (first 30):
+76:2026-10-09T05:43:07.469Z [DEBUG] [auto-mode] verifyAutoModeGateAccess: enabledState=enabled disabledBySettings=false model=claude-opus-5[1m] modelSupported=true disableFastModeBreakerFires=false carouselAvailable=true canEnterAuto=true
+--- count of those lines: 1
+--- mentions of the fixture's targets (canary, outside, 47831, 1.1.1.1, cmd.exe, win.ini):
+--- count: 0
+```
+
+**Verdict:** RECORDED.
+- **The switch can be turned off.** In S6a, after the refusal at step 1, a second request arrived at the same step
+  under a different model (`model=claude-opus-5` refused, then `model=claude-opus-4-8` answered), the stream carried
+  `system/model_refusal_fallback` (`original_model: claude-opus-5[1m]`, `fallback_model: claude-opus-4-8[1m]`,
+  `api_refusal_category: cyber`), and the run ended `success` with the second model's text. In S6b no second request
+  arrived, the stream carried `system/model_refusal_no_fallback`, and the run ended `is_error=True` with
+  `API Error: Opus 5 (1M context)'s safeguards flagged this message`.
+- **Blocked attempts are not visible to Steplet.** No line in the stream, the error output, the `--debug` log or the
+  other new files reports the fixture's blocked attempts (B, C, D, E, G) as blocked by the fence. The only trace is
+  each program's own error text inside tool results (`FileNotFoundError`, `Connection refused`,
+  `Network is unreachable`, git's `Read-only file system`).
+
+**What it means:**
+- D7: the app can set `switchModelsOnFlag: false` in the run's settings file to keep a run on the model the receiver
+  approved; a refusal then ends the run with an error the app can show. Either way the stream says which happened
+  (`model_refusal_fallback` or `model_refusal_no_fallback`), with the category and explanation.
+- Report screen: it must say "blocked attempts are not visible to Steplet". It may show the agent's tool results, but
+  it cannot claim the fence stopped something; the fixture's own record (`m0_results.jsonl`) is what showed it here.
+- Whether a real refusal by the live model behaves the same is for the live runs (Task 15, "S6 live" below).
+
+### S6 live
+
+(Task 15.)

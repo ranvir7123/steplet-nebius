@@ -1,0 +1,10 @@
+{
+  "about": "One normal tool call, then a refusal; a repeat request at that step gets an answer. stop_details names from Claude Code 2.1.220 (Pn.stop_details?.category, pi.delta.stop_details?.explanation)",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "echo before > s6_before.txt; echo \"EXIT=$?\"", "description": "Write a file"}},
+    {"refusal": {"message": {"stop_details": {"type": "refusal", "category": "cyber", "explanation": "Spike S6: scripted refusal."}},
+                 "delta": {"stop_details": {"type": "refusal", "category": "cyber", "explanation": "Spike S6: scripted refusal."}}},
+     "text_after_refusal": "Spike S6: answer after the refusal."},
+    {"text": "Spike S6: done."}
+  ]
+}
