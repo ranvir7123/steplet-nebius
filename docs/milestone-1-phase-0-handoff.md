@@ -1,57 +1,76 @@
-# Handoff: milestone 1, phase 0, tasks 1 to 3 done (8 Oct 2026, evening)
+# Handoff: milestone 1, phase 0, tasks 1 to 9 done (9 Oct 2026)
 
 Read `docs/handoff.md` first, then this file, then the plan `docs/plans/2026-10-08-milestone-1-phase-0.md`.
 The user approved the plan on 8 Oct 2026 and chose to run it **inline in one session, not through separate
 agents**, because almost every task needs a yes or a step from them. Each install still gets its own yes.
-The user asked to continue in a new session after Task 3.
+Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 
 ## Where things stand
 
 | Task | Status |
 |---|---|
-| 1. git repository (P6) | **Done.** First commit `18bc9b0`. At the user's request I moved `keys.txt` and `sk.json` to `C:\Users\RANVIR\runfile-secrets\` without opening them; both are also in `.gitignore`. |
-| 2. Rust tools on Windows | **Done.** `wasm-bindgen 0.2.129`, `cargo-fuzz 0.13.2`, nightly `rustc 1.101.0-nightly (1d81eb4ad 2026-10-07)`, targets `wasm32-unknown-unknown` and `wasm32v1-none`. Log: `C:\dev\m1\logs\setup-windows.txt`. Fuzzing works only with the AddressSanitizer folder on `PATH` (trap below). |
-| 3. Test distribution (P5) | **Done.** `steplet-test`, user `tester`, Ubuntu 26.04.1 LTS, Node 22.22.1, bubblewrap 0.11.1, socat, ripgrep, git 2.53.0, python 3.14.3. `BWRAP_OK`, networking `nat`, interop sockets `1_interop` and others. GUID `{7d77bf1b-4ab3-40e7-aa63-4241953a1a25}` in `C:\dev\m1\distro-id.txt`. Log: `C:\dev\m1\logs\setup-distro.txt`. |
-| 4. Steplet's folders, Claude Code, srt, spike data | **Not run. The user said yes to A4 on 8 Oct 2026** and asked for it to run in the new session. |
-| 5. Spike harness | **Code written and committed; self-tests pass** (scripted model 8 of 8 on Windows and in `steplet-test`; gate and pipe 6 of 6). Logs: `C:\dev\m1\logs\selftest-fake-model.txt`, `selftest-gate.txt`. **Left:** Step 9 (append `spikes/results/setup.md` to `docs/milestone-1-spikes.md`; it needs Task 4's fake keys) and Step 10's commit. |
-| 6 to 16 | Not started. |
-
-Never run yet: `spikes/wsl/spike.py`, `services.sh`, `launch_inside.sh`, `spikes/tools/run.ps1`, `append_results.py`,
-and the `launch` path of `spike-host.exe`. Their first run is Task 5 Step 9 and S7a.
-
-## Next, in order
-
-1. **Task 4** (A4 already approved):
-   ```powershell
-   $env:WSL_UTF8 = "1"
-   & wsl.exe -d steplet-test --exec /bin/bash /mnt/c/dev/runFile/spikes/wsl/setup_steplet.sh 2>&1 | ForEach-Object { "$_" } | Out-File -Encoding utf8 C:\dev\m1\logs\setup-steplet.txt
-   Get-Content C:\dev\m1\logs\setup-steplet.txt
-   ```
-   Check the expected lines in the plan (Task 4, Step 3).
-2. **Task 5, Step 9 and 10:** `python -I C:\dev\runFile\spikes\tools\append_results.py C:\dev\runFile\spikes\results\setup.md C:\dev\runFile\docs\milestone-1-spikes.md`, then commit.
-3. **Task 6 (S7):** create `spikes/scripts/s7_t1c.json`, `spikes/runs/S7a.json`, `spikes/runs/S7b.json` from the plan; run `run.ps1 -Id S7a`, then `S7b`.
-4. Then Tasks 7 onward as the plan orders them. The next yes needed: A5 (S3e, Task 9), A6 (Task 14), A7 and A8 (Task 15).
-
-## Traps hit in this session (do not rediscover them)
-
-- **PowerShell 5.1 puts a byte-order mark (`EF BB BF`) in front of text it pipes into a program**, even when
-  `$OutputEncoding` says US-ASCII with no preamble. Never feed data into the gate or any program through a
-  PowerShell pipe; write a file and use `Start-Process -RedirectStandardInput` (as `selftest_gate.ps1` does).
-- **`cd` in the Bash tool or `Set-Location` in the PowerShell tool moves the session's working directory.** Use absolute paths.
-- **Set `$env:WSL_UTF8 = "1"` before calling `wsl.exe`**, or its own output comes back as UTF-16 with spaces between letters.
-- **Fuzzing on Windows:** add `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64`
-  to `PATH` for the fuzz command only. Without it: `0xc0000135, STATUS_DLL_NOT_FOUND`; with `--sanitizer none`
-  it does not link (`__start___sancov_cntrs`).
-- **The gate logs the names of the environment variables it inherited.** Started from this Claude session, that
-  list holds this session's names (for example a GitHub token's name). The self-test now prints the count only.
-  In spike runs, under interop, the names are the measurement; never log values.
-- Git warns "LF will be replaced by CRLF" for documents (global `core.autocrlf`). Harmless; `.gitattributes`
-  keeps `.sh`, `.py` and `.mjs` files on Linux line endings, and every spike script was checked (0 CR bytes).
-- `claude` on the test distribution's `PATH` is the Windows wrapper (`/mnt/c/Users/RANVIR/AppData/Roaming/npm/claude`).
-  The scripts only ever call Steplet's pinned copy by full path.
+| 1. git repository (P6) | **Done.** First commit `18bc9b0`. `keys.txt` and `sk.json` live in `C:\Users\RANVIR\runfile-secrets\`, never opened; both in `.gitignore`. |
+| 2. Rust tools on Windows | **Done.** Log: `C:\dev\m1\logs\setup-windows.txt`. Fuzzing needs the AddressSanitizer folder on `PATH` (trap below). |
+| 3. Test distribution (P5) | **Done.** `steplet-test`, user `tester`. GUID in `C:\dev\m1\distro-id.txt`. |
+| 4. Steplet's folders, Claude Code, srt, spike data | **Done** (yes A4). Claude Code 2.1.220 (a Linux program, `177 E L F`), srt 0.0.77, fixture with COMMIT1, both fake keys, Node gate packages load. Log: `C:\dev\m1\logs\setup-steplet.txt`. |
+| 5. Spike harness | **Done.** Self-tests 8 of 8 and 6 of 6. Setup logs appended to `docs/milestone-1-spikes.md` (`c505631`). |
+| 6. S7, scripted model | **PASS** (`1e90e60`). `allowRead` works in 2.1.220, so the `product` shape stays. |
+| 7. S2, launching from Windows | **PASS with `env_mode` `systemroot`** (`d4436ab`). See "Changes to the plan" below. |
+| 8. S1, Windows gate through interop | **PASS** (`f74e0b8`). The runner-up is not needed. |
+| 9. S3, can the fence see the API key | **PASS through route S3c (`apiKeyHelper`)** (`a2b61a8`). S3a fails, S3b inconclusive. S3e ran with yes A5. |
+| 10 onward | Not started. Next: Task 10 (S4). The next yes needed: A6 (Task 14), A7 and A8 (Task 15). |
 
 ## Changes to the plan made while running it
 
-- `spikes/tools/selftest_gate.ps1` hands the gate a file instead of a PowerShell pipe, and hides inherited
-  variable names. The plan's copy was updated to match.
-- The plan's status line records the approval and the inline choice.
+- **Every run description with a `host` field uses `"env_mode": "systemroot"`, not `"empty"`** (the plan's own
+  fallback in Task 7, Step 1). `wsl.exe` started with an empty Windows environment fails with
+  `The RPC call contains a handle that differs from the declared handle type` (`Wsl/Service/0x8007072c`); if that
+  call is the one starting a stopped distro, the next call hangs until `wsl --terminate steplet-test`. `SystemRoot`
+  alone works, also as the starting call. Only `S2r-empty.json` keeps `empty`, as the measurement. The plan's later
+  run descriptions (Tasks 10 onward) still say `empty`: change them to `systemroot` when you create the files.
+- **`spikes/tools/run.ps1` fixed:** it built host options as `"--" + $p.Name, "$($p.Value)"`; the comma binds tighter
+  than `+`, so `--env-mode systemroot` arrived as one argument and the host fell back to Empty. Brackets added. Every
+  host option (`deadline_ms`, `stop_after_s`, `kill_claude_after_s`, `kill_wsl_after_s`) depended on this.
+- **Product route for the key (Task 15): `apiKeyHelper` only** (S3c). Never put the key in Claude Code's environment.
+- New tools: `spikes/tools/s2_env_min.py` (which Windows variables `wsl.exe` needs), `spikes/tools/s3e_session.py`
+  (reads one saved session record).
+- `spikes/tools/selftest_gate.ps1` hands the gate a file instead of a PowerShell pipe (8 Oct).
+
+## Where the files live: this worktree and the main checkout
+
+This session worked in the worktree `C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872`, branch
+`claude/phase-0-plan-continuation-775872`; every commit above is on that branch, not on `main`. But `run.ps1`,
+`spike.py` and the WSL scripts read from `C:\dev\runFile\spikes` (`/mnt/c/dev/runFile/spikes`), which is the main
+checkout. So new run files, scripts and the fixed `run.ps1` were **copied** into `C:\dev\runFile\spikes` for the
+runs. There they are untracked files plus one modified tracked file (`spikes/tools/run.ps1`), identical to the
+branch. Before merging the branch into `main`, remove those copies (`git -C C:\dev\runFile status` lists them), or
+git may refuse to overwrite them.
+
+## Traps hit (do not rediscover them)
+
+- **Never start `wsl.exe` with an empty environment** (above). If WSL answers `Catastrophic failure` or
+  `E_UNEXPECTED`, run `wsl --terminate steplet-test` (only the test distro; check `wsl -l -v` first).
+- **PowerShell 5.1 puts a byte-order mark in front of text it pipes into a program.** Write a file and use
+  `Start-Process -RedirectStandardInput` instead.
+- **In PowerShell, `"a" + $x, "b"` is `"a" + ($x, "b")`.** Bracket each element of an array literal.
+- **`cd` in the Bash tool or `Set-Location` in the PowerShell tool moves the session's working directory.** Use absolute paths.
+- **Set `$env:WSL_UTF8 = "1"` before calling `wsl.exe`**, or its output comes back as UTF-16.
+- **The harness cuts long lines** (for example `permission_denials`). Count from the raw stream
+  `C:\dev\m1\logs\<run>.jsonl` with a JSON parser.
+- **Fuzzing on Windows:** add `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64`
+  to `PATH` for the fuzz command only.
+- **The gate logs the names of the environment variables it inherited.** Never log values.
+- `wsl: Failed to start the systemd user session for 'tester'` appears on most calls into `steplet-test`. Not
+  investigated; no run has failed because of it.
+- `python -m py_compile` leaves `__pycache__`; it is now in `.gitignore`.
+- `claude` on the test distribution's `PATH` is the Windows wrapper; the scripts only call Steplet's pinned copy by full path.
+
+## Findings to carry into later tasks
+
+- S3a: anything in Claude Code's environment is readable by every fenced program (`/proc/<pid>/environ` inside the
+  fence). Keep secrets out of that environment.
+- S3b: `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` breaks every fenced command in the `product` shape
+  (`bwrap: Can't mkdir /mnt/c/Program Files/ClaudeCode`). Do not use it.
+- S1: the gate inherits `wsl.exe`'s Windows environment. The fence's process list does not show the gate or the run token.
+- S3e: `claude auth status` does not show which sign-in a run uses. An API key beats a stored subscription sign-in
+  in `-p` mode. S3e left one session record in `/home/ranvir/m0/claude-home/projects/` (harmless, left in place).

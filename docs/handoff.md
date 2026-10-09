@@ -2,6 +2,8 @@
 
 Written 7 Oct 2026 at the end of the design sessions. Read this first in a new session, then the two files it points to. Nothing in the repository is code yet.
 
+**Update, 9 Oct 2026: phase 0 tasks 4 to 9 are done** (S7, S2, S1, S3 pass; the app must give `wsl.exe` `SystemRoot`, never an empty environment; the key goes through `apiKeyHelper` only). Where to pick up: `docs/milestone-1-phase-0-handoff.md`.
+
 **Update, 8 Oct 2026, evening: milestone 1, phase 0 has started.** Tasks 1 to 3 of `docs/plans/2026-10-08-milestone-1-phase-0.md` are done (git repository, Rust tools, the test distribution `steplet-test`). Where to pick up, and traps already hit: `docs/milestone-1-phase-0-handoff.md`.
 
 **Update, 8 Oct 2026: milestone 0 is finished.** Read `docs/milestone-0-wrap-up.md` (what each runner may promise, the measured numbers, what is still unverified) and the "After milestone 0" section of `docs/decisions.md` (D1 to D8, corrections C1 to C7). Facts 1 and 3 below were corrected by measurement. Next: the milestone 1 plan.
