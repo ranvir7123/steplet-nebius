@@ -6311,3 +6311,871 @@ Windows is reached.
 or in Windows, or to the internet." With the condition kept next to it in the design notes: tested in WSL's default
 `nat` network mode only. The `mirrored` mode, where Windows' own `127.0.0.1` is reachable from WSL, was not tested (it
 needs a change to the WSL settings); a computer in that mode needs its own check before the app may say this.
+
+## S9: signatures in WASM, Svelte in WebView2, and the check page's lock
+
+Question, from the milestone plan: does `ssh-key` build `no_std` for `wasm32`? Does Svelte run in WebView2? Does a
+check page with embedded WASM still work under `connect-src 'none'`? Pass: all yes.
+
+Code: `spikes/s9-core` (the signature check, `#![no_std]`), `spikes/s9-wasm` (its browser wrapper),
+`spikes/s9-check` (the Svelte page, its browser test, and a Tauri shell in `src-tauri`). Built in the worktree, so
+paths below start with `C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes`. The throwaway SSH
+key stays in `C:\dev\m1\s9`; only its public half is in `spikes/s9-core/tests/vectors/`. Yes A6 (9 Oct 2026) covered
+Step 6's installs.
+
+### Step 1: test vectors from Windows' own `ssh-keygen`
+
+```
+ssh-keygen: C:\Windows\System32\OpenSSH\ssh-keygen.exe
+Generating public/private ed25519 key pair.
+Your identification has been saved in C:\dev\m1\s9\key
+Your public key has been saved in C:\dev\m1\s9\key.pub
+The key fingerprint is:
+SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4 s9-spike
+The key's randomart image is:
++--[ED25519 256]--+
+|      o o o   .. |
+|       * .o+ o  .|
+|      + o+o== . .|
+|     . oEo=++o  .|
+|       .S.o+.. ..|
+|        .o..* .o |
+|        +.o..=o  |
+|         +.* o.. |
+|          =+=oo  |
++----[SHA256]-----+
+Signing file C:\dev\m1\s9\msg.txt
+Write signature to C:\dev\m1\s9\msg.txt.sig
+Good "steplet-v1" signature with ED25519 key SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4
+fingerprint: SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4
+files in vectors: fingerprint.txt key.pub msg.txt msg.txt.sig
+```
+
+### Step 2: the tests fail against an empty `verify`
+
+```
+    Updating crates.io index
+     Locking 28 packages to latest compatible versions
+      Adding base64ct v1.8.3
+      Adding block-buffer v0.10.4
+      Adding cfg-if v1.0.5
+      Adding cipher v0.4.4
+      Adding cpufeatures v0.2.17
+      Adding crypto-common v0.1.7
+      Adding curve25519-dalek v4.1.3
+      Adding curve25519-dalek-derive v0.1.1
+      Adding digest v0.10.7
+      Adding ed25519 v2.2.3
+      Adding ed25519-dalek v2.2.0
+      Adding fiat-crypto v0.2.9
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding inout v0.1.4
+      Adding pem-rfc7468 v0.7.0
+      Adding rand_core v0.6.4
+      Adding rustc_version v0.4.1
+      Adding semver v1.0.28
+      Adding sha2 v0.10.9
+      Adding signature v2.2.0
+      Adding ssh-cipher v0.2.0
+      Adding ssh-encoding v0.2.0
+      Adding ssh-key v0.6.7
+      Adding subtle v2.6.1
+      Adding syn v2.0.119
+      Adding typenum v1.20.1
+      Adding version_check v0.9.5
+      Adding zeroize v1.9.1
+ Downloading crates ...
+  Downloaded ed25519-dalek v2.2.0
+  Downloaded inout v0.1.4
+  Downloaded ssh-encoding v0.2.0
+  Downloaded ssh-cipher v0.2.0
+  Downloaded base64ct v1.8.3
+  Downloaded signature v2.2.0
+  Downloaded curve25519-dalek-derive v0.1.1
+  Downloaded cipher v0.4.4
+  Downloaded ed25519 v2.2.3
+  Downloaded pem-rfc7468 v0.7.0
+  Downloaded zeroize v1.9.1
+  Downloaded ssh-key v0.6.7
+  Downloaded curve25519-dalek v4.1.3
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling cfg-if v1.0.5
+   Compiling cpufeatures v0.2.17
+   Compiling semver v1.0.28
+   Compiling base64ct v1.8.3
+   Compiling subtle v2.6.1
+   Compiling signature v2.2.0
+   Compiling rand_core v0.6.4
+   Compiling zeroize v1.9.1
+   Compiling ed25519 v2.2.3
+   Compiling rustc_version v0.4.1
+   Compiling pem-rfc7468 v0.7.0
+   Compiling generic-array v0.14.7
+   Compiling curve25519-dalek v4.1.3
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling syn v2.0.119
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling s9-core v0.0.0 (C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.27s
+     Running unittests src\lib.rs (target\debug\deps\s9_core-b2d990b6f721dc20.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\vectors.rs (target\debug\deps\vectors-2796e6285c70ace0.exe)
+
+running 3 tests
+test changed_message_fails ... ok
+test wrong_namespace_fails ... ok
+test ssh_keygen_signature_verifies_with_the_same_fingerprint ... FAILED
+
+failures:
+
+---- ssh_keygen_signature_verifies_with_the_same_fingerprint stdout ----
+
+thread 'ssh_keygen_signature_verifies_with_the_same_fingerprint' (8084) panicked at s9-core\tests\vectors.rs:7:5:
+assertion `left == right` failed
+  left: Err("not written yet")
+ right: Ok("SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    ssh_keygen_signature_verifies_with_the_same_fingerprint
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p s9-core --test vectors`
+```
+
+### Step 3: the real `verify`, then a build for a target with no operating system
+
+Every `ssh-key` 0.6.7 name the plan used (`SshSig::from_pem`, `version`, `hash_alg`, `algorithm`, `public_key`,
+`PublicKey::verify`, `fingerprint`) compiled as written; nothing changed.
+
+```
+command: cargo test -p s9-core
+   Compiling s9-core v0.0.0 (C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running unittests src\lib.rs (target\debug\deps\s9_core-b2d990b6f721dc20.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\vectors.rs (target\debug\deps\vectors-2796e6285c70ace0.exe)
+
+running 3 tests
+test wrong_namespace_fails ... ok
+test changed_message_fails ... ok
+test ssh_keygen_signature_verifies_with_the_same_fingerprint ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests s9_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit: 0
+command: cargo build -p s9-core --target wasm32v1-none --release
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling cfg-if v1.0.5
+   Compiling semver v1.0.28
+   Compiling base64ct v1.8.3
+   Compiling signature v2.2.0
+   Compiling subtle v2.6.1
+   Compiling zeroize v1.9.1
+   Compiling rand_core v0.6.4
+   Compiling generic-array v0.14.7
+   Compiling ed25519 v2.2.3
+   Compiling rustc_version v0.4.1
+   Compiling pem-rfc7468 v0.7.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling s9-core v0.0.0 (C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-core)
+    Finished `release` profile [optimized] target(s) in 4.04s
+exit: 0
+```
+
+### Step 4: the WASM wrapper
+
+```
+command: cargo build -p s9-wasm --target wasm32-unknown-unknown --release
+    Updating crates.io index
+     Locking 7 packages to latest compatible versions
+      Adding bumpalo v3.20.3
+      Adding once_cell v1.21.4
+      Adding rustversion v1.0.23
+      Adding wasm-bindgen v0.2.129
+      Adding wasm-bindgen-macro v0.2.129
+      Adding wasm-bindgen-macro-support v0.2.129
+      Adding wasm-bindgen-shared v0.2.129
+ Downloading crates ...
+  Downloaded bumpalo v3.20.3
+  Downloaded wasm-bindgen-macro v0.2.129
+  Downloaded wasm-bindgen v0.2.129
+  Downloaded rustversion v1.0.23
+  Downloaded wasm-bindgen-macro-support v0.2.129
+   Compiling typenum v1.20.1
+   Compiling wasm-bindgen-shared v0.2.129
+   Compiling cfg-if v1.0.5
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling generic-array v0.14.7
+   Compiling rustversion v1.0.23
+   Compiling base64ct v1.8.3
+   Compiling subtle v2.6.1
+   Compiling signature v2.2.0
+   Compiling bumpalo v3.20.3
+   Compiling zeroize v1.9.1
+   Compiling rand_core v0.6.4
+   Compiling curve25519-dalek v4.1.3
+   Compiling once_cell v1.21.4
+   Compiling ed25519 v2.2.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling wasm-bindgen v0.2.129
+   Compiling syn v3.0.6
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling s9-core v0.0.0 (C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-core)
+   Compiling wasm-bindgen-macro-support v0.2.129
+   Compiling wasm-bindgen-macro v0.2.129
+   Compiling s9-wasm v0.0.0 (C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-wasm)
+    Finished `release` profile [optimized] target(s) in 16.67s
+exit: 0
+command: wasm-bindgen --target web --out-dir s9-check\src\wasm target\wasm32-unknown-unknown\release\s9_wasm.wasm
+wasm-bindgen 0.2.129
+exit: 0
+files: s9_wasm.d.ts (1589 bytes), s9_wasm.js (7223 bytes), s9_wasm_bg.wasm (152322 bytes), s9_wasm_bg.wasm.d.ts (518 bytes)
+```
+
+### Step 6: installs, type check, build, and the browser test in three browsers
+
+```
+command: npm install --no-fund --no-audit
+
+added 53 packages in 49s
+exit: 0
+command: npx playwright install chromium firefox webkit
+Downloading Chrome for Testing 153.0.8010.12 (playwright chromium v1243)\x1b[2m from https://cdn.playwright.dev/builds/cft/153.0.8010.12/win64/chrome-win64.zip\x1b[22m
+Chrome for Testing 153.0.8010.12 (playwright chromium v1243) downloaded to C:\Users\RANVIR\AppData\Local\ms-playwright\chromium-1243
+Downloading Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243)\x1b[2m from https://cdn.playwright.dev/builds/cft/153.0.8010.12/win64/chrome-headless-shell-win64.zip\x1b[22m
+Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243) downloaded to C:\Users\RANVIR\AppData\Local\ms-playwright\chromium_headless_shell-1243
+Downloading Firefox 155.0 (playwright firefox v1543)\x1b[2m from https://cdn.playwright.dev/dbazure/download/playwright/builds/firefox/1543/firefox-win64.zip\x1b[22m
+Firefox 155.0 (playwright firefox v1543) downloaded to C:\Users\RANVIR\AppData\Local\ms-playwright\firefox-1543
+Downloading WebKit 26.6 (playwright webkit v2359)\x1b[2m from https://cdn.playwright.dev/dbazure/download/playwright/builds/webkit/2359/webkit-win64.zip\x1b[22m
+WebKit 26.6 (playwright webkit v2359) downloaded to C:\Users\RANVIR\AppData\Local\ms-playwright\webkit-2359
+exit: 0
+installed versions:
+s9-check@ C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\s9-check
++-- @playwright/test@1.63.0
++-- @sveltejs/vite-plugin-svelte@7.3.1
++-- @tauri-apps/api@2.12.1
++-- @tauri-apps/cli@2.12.1
++-- @tsconfig/svelte@5.0.8
++-- svelte-check@4.7.6
++-- svelte@5.57.1
++-- typescript@6.0.3
+`-- vite@8.3.1
+```
+
+```
+command: npm run embed
+
+> embed
+> node scripts/embed.mjs
+
+embedded 152322 bytes of WASM and the test vector
+exit: 0
+command: npm run check
+
+> check
+> svelte-check --tsconfig ./tsconfig.json
+
+1791536460948 START "c:\\dev\\runFile\\.claude\\worktrees\\phase-0-plan-continuation-775872\\spikes\\s9-check"
+1791536460949 COMPLETED 88 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+exit: 0
+command: npm run build:browser
+
+> build:browser
+> vite build --mode browser
+
+vite v8.3.1 building client environment for browser...
+transforming...
+✓ 115 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                         0.60 kB │ gzip:  0.34 kB
+dist/assets/s9_wasm_bg-BlvNj6YK.wasm  152.32 kB │ gzip: 51.40 kB
+dist/assets/core-CwxXejkd.js            0.09 kB │ gzip:  0.10 kB
+dist/assets/index-DuZxyxbP.js         237.00 kB │ gzip: 86.47 kB
+
+✓ built in 102ms
+exit: 0
+command: npx playwright test
+[WebServer] (node:10332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:28064) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 3 workers
+
+(node:30528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:34940) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+requests: ["GET http://127.0.0.1:4179/","GET http://127.0.0.1:4179/assets/index-DuZxyxbP.js"]
+console: ["error: Refused to connect to http://127.0.0.1:4179/s9-probe because it does not appear in the connect-src directive of the Content Security Policy."]
+  ok 1 [webkit] › tests\check-page.spec.ts:3:1 › the check page verifies a signature in the browser and cannot send anything (410ms)
+requests: ["GET http://127.0.0.1:4179/","GET http://127.0.0.1:4179/assets/index-DuZxyxbP.js"]
+console: ["error: [JavaScript Error: \"Content-Security-Policy: The page’s settings blocked the loading of a resource (connect-src) at http://127.0.0.1:4179/s9-probe because it violates the following directive: “connect-src 'none'”\" {file: \"http://127.0.0.1:4179/assets/index-DuZxyxbP.js\" line: 7}]"]
+  ok 3 [firefox] › tests\check-page.spec.ts:3:1 › the check page verifies a signature in the browser and cannot send anything (1.1s)
+requests: ["GET http://127.0.0.1:4179/","GET http://127.0.0.1:4179/assets/index-DuZxyxbP.js"]
+console: ["error: Connecting to 'http://127.0.0.1:4179/s9-probe' violates the following Content Security Policy directive: \"connect-src 'none'\". The action has been blocked.","error: Fetch API cannot load http://127.0.0.1:4179/s9-probe. Refused to connect because it violates the document's Content Security Policy."]
+  ok 2 [chromium] › tests\check-page.spec.ts:3:1 › the check page verifies a signature in the browser and cannot send anything (340ms)
+
+  3 passed (4.9s)
+exit: 0
+```
+
+### Step 7: the same page inside a Tauri window (WebView2)
+
+```
+command: python -I scripts\make_icon.py C:\dev\m1\s9\icon.png
+exit: 0; icon bytes: 5705
+command: npx tauri icon C:\dev\m1\s9\icon.png
+     Android Creating mipmap-xhdpi/ic_launcher.png
+     Android Creating mipmap-xxhdpi/ic_launcher_round.png
+     Android Creating mipmap-xxhdpi/ic_launcher.png
+     Android Creating mipmap-xxxhdpi/ic_launcher_round.png
+     Android Creating mipmap-xxxhdpi/ic_launcher.png
+exit: 0
+command: npx tauri build --debug --no-bundle
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build:tauri`
+
+> build:tauri
+> vite build --mode tauri
+
+vite v8.3.1 building client environment for tauri...
+transforming...
+✓ 115 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-tauri/index.html                         0.32 kB │ gzip:  0.23 kB
+dist-tauri/assets/s9_wasm_bg-BlvNj6YK.wasm  152.32 kB │ gzip: 51.40 kB
+dist-tauri/assets/core-CwxXejkd.js            0.09 kB │ gzip:  0.10 kB
+dist-tauri/assets/index-DuZxyxbP.js         237.00 kB │ gzip: 86.47 kB
+
+✓ built in 101ms
+    Updating crates.io index
+     Locking 367 packages to latest compatible versions
+      Adding adler2 v2.0.1
+      Adding aho-corasick v1.1.5
+      Adding alloc-no-stdlib v3.0.0
+      Adding alloc-stdlib v0.3.0
+      Adding android_system_properties v0.1.6
+      Adding anyhow v1.0.104
+      Adding atk v0.18.2
+      Adding atk-sys v0.18.2
+      Adding atomic-waker v1.1.2
+      Adding autocfg v1.5.1
+      Adding base64 v0.21.7
+      Adding base64 v0.22.1
+      Adding base64 v0.23.1
+      Adding bit-set v0.8.0
+      Adding bit-vec v0.8.0
+      Adding bitflags v1.3.2
+      Adding bitflags v2.13.2
+      Adding block2 v0.6.2
+      Adding brotli v9.0.0
+      Adding brotli-decompressor v6.0.1
+      Adding bs58 v0.5.1
+      Adding bytemuck v1.25.2
+      Adding byteorder v1.5.0
+      Adding cairo-rs v0.18.5
+      Adding cairo-sys-rs v0.18.2
+      Adding camino v1.2.6
+      Adding cargo-platform v0.1.9
+      Adding cargo_metadata v0.19.2
+      Adding cargo_toml v1.0.1
+      Adding cc v1.6.0
+      Adding cesu8 v1.1.0
+      Adding cfb v0.14.0
+      Adding cfg-expr v0.15.8
+      Adding chrono v0.4.45
+      Adding combine v4.6.8
+      Adding cookie v0.18.2
+      Adding core-foundation v0.10.1
+      Adding core-foundation-sys v0.8.7
+      Adding core-graphics v0.25.0
+      Adding core-graphics-types v0.2.0
+      Adding crc32fast v1.5.2
+      Adding crossbeam-channel v0.5.17
+      Adding crossbeam-utils v0.8.23
+      Adding cssparser v0.37.0
+      Adding cssparser-macros v0.7.1
+      Adding ctor v1.0.13
+      Adding darling v0.24.1
+      Adding darling_core v0.24.1
+      Adding darling_macro v0.24.1
+      Adding dbus v0.9.12
+      Adding defmt v1.1.1
+      Adding defmt-macros v1.1.1
+      Adding defmt-parser v1.0.0
+      Adding deranged v0.5.8
+      Adding derive_more v2.1.1
+      Adding derive_more-impl v2.1.1
+      Adding dirs v7.0.0
+      Adding dirs-sys v0.5.0
+      Adding dispatch2 v0.3.1
+      Adding displaydoc v0.2.7
+      Adding dlopen2 v0.8.2
+      Adding dlopen2_derive v0.4.3
+      Adding dom_query v0.28.0
+      Adding dpi v0.1.2
+      Adding dtoa v1.0.11
+      Adding dtoa-short v0.3.5
+      Adding dunce v1.0.5
+      Adding dyn-clone v1.0.20
+      Adding embed-resource v3.0.12
+      Adding embed_plist v1.2.2
+      Adding equivalent v1.0.2
+      Adding erased-serde v0.4.10
+      Adding fastrand v2.5.0
+      Adding fdeflate v0.3.7
+      Adding field-offset v0.3.6
+      Adding find-msvc-tools v0.1.14
+      Adding flate2 v1.1.10
+      Adding fnv v1.0.7
+      Adding foldhash v0.2.0
+      Adding foreign-types v0.5.0
+      Adding foreign-types-macros v0.2.4
+      Adding foreign-types-shared v0.3.1
+      Adding form_urlencoded v1.2.2
+      Adding futures-channel v0.3.34
+      Adding futures-core v0.3.34
+      Adding futures-executor v0.3.34
+      Adding futures-io v0.3.34
+      Adding futures-macro v0.3.34
+      Adding futures-sink v0.3.34
+      Adding futures-task v0.3.34
+      Adding futures-util v0.3.34
+      Adding gdk v0.18.2
+      Adding gdk-pixbuf v0.18.5
+      Adding gdk-pixbuf-sys v0.18.0
+      Adding gdk-sys v0.18.2
+      Adding gdkwayland-sys v0.18.2
+      Adding gdkx11 v0.18.2
+      Adding gdkx11-sys v0.18.2
+      Adding getrandom v0.3.4
+      Adding getrandom v0.4.3
+      Adding gio v0.18.4
+      Adding gio-sys v0.18.1
+      Adding glib v0.18.5
+      Adding glib-macros v0.18.5
+      Adding glib-sys v0.18.1
+      Adding glob v0.3.4
+      Adding gobject-sys v0.18.0
+      Adding gtk v0.18.2
+      Adding gtk-sys v0.18.2
+      Adding gtk3-macros v0.18.2
+      Adding hashbrown v0.12.3
+      Adding hashbrown v0.17.1
+      Adding heck v0.4.1
+      Adding heck v0.5.0
+      Adding hex v0.4.3
+      Adding html5ever v0.39.0
+      Adding http v1.5.0
+      Adding http-body v1.1.0
+      Adding http-body-util v0.1.5
+      Adding httparse v1.10.1
+      Adding hyper v1.12.0
+      Adding hyper-util v0.1.21
+      Adding iana-time-zone v0.1.65
+      Adding iana-time-zone-haiku v0.1.2
+      Adding ico v0.5.0
+      Adding icu_collections v2.3.0
+      Adding icu_locale_core v2.3.0
+      Adding icu_normalizer v2.3.0
+      Adding icu_normalizer_data v2.3.0
+      Adding icu_properties v2.3.0
+      Adding icu_properties_data v2.3.0
+      Adding icu_provider v2.3.1
+      Adding ident_case v1.0.1
+      Adding idna v1.1.0
+      Adding idna_adapter v1.2.2
+      Adding indexmap v1.9.3
+      Adding indexmap v2.14.2
+      Adding infer v0.22.0
+      Adding ipnet v2.12.2
+      Adding javascriptcore-rs v1.1.2
+      Adding javascriptcore-rs-sys v1.1.1
+      Adding jiff v0.2.38
+      Adding jiff-core v0.1.1
+      Adding jiff-static v0.2.38
+      Adding jiff-tzdb v0.1.9
+      Adding jiff-tzdb-platform v0.1.3
+      Adding jni v0.21.1
+      Adding jni-sys v0.3.1
+      Adding jni-sys v0.4.1
+      Adding jni-sys-macros v0.4.1
+      Adding js-sys v0.3.106
+      Adding json-patch v4.2.0
+      Adding jsonptr v0.7.1
+      Adding keyboard-types v0.8.3
+      Adding libappindicator v0.9.0
+      Adding libappindicator-sys v0.9.0
+      Adding libdbus-sys v0.2.7
+      Adding libloading v0.7.4
+      Adding libredox v0.1.25
+      Adding litemap v0.8.3
+      Adding lock_api v0.4.14
+      Adding log v0.4.34
+      Adding markup5ever v0.39.0
+      Adding memoffset v0.9.1
+      Adding mime v0.3.17
+      Adding miniz_oxide v0.8.9
+      Adding miniz_oxide v0.9.1
+      Adding muda v0.20.0
+      Adding ndk v0.9.0
+      Adding ndk-context v0.1.1
+      Adding ndk-sys v0.6.0+11769913
+      Adding new_debug_unreachable v1.0.6
+      Adding num-conv v0.2.2
+      Adding num-traits v0.2.19
+      Adding num_enum v0.7.6
+      Adding num_enum_derive v0.7.6
+      Adding objc2 v0.6.5
+      Adding objc2-app-kit v0.3.2
+      Adding objc2-cloud-kit v0.3.2
+      Adding objc2-core-data v0.3.2
+      Adding objc2-core-foundation v0.3.2
+      Adding objc2-core-graphics v0.3.2
+      Adding objc2-core-image v0.3.2
+      Adding objc2-core-location v0.3.2
+      Adding objc2-core-text v0.3.2
+      Adding objc2-encode v4.1.0
+      Adding objc2-exception-helper v0.1.1
+      Adding objc2-foundation v0.3.2
+      Adding objc2-io-surface v0.3.2
+      Adding objc2-quartz-core v0.3.2
+      Adding objc2-ui-kit v0.3.2
+      Adding objc2-user-notifications v0.3.2
+      Adding objc2-web-kit v0.3.2
+      Adding option-ext v0.2.0
+      Adding pango v0.18.3
+      Adding pango-sys v0.18.0
+      Adding parking_lot v0.12.5
+      Adding parking_lot_core v0.9.12
+      Adding percent-encoding v2.3.2
+      Adding phf v0.13.1
+      Adding phf_codegen v0.13.1
+      Adding phf_generator v0.13.1
+      Adding phf_macros v0.13.1
+      Adding phf_shared v0.13.1
+      Adding pkg-config v0.3.34
+      Adding plist v1.10.1
+      Adding png v0.17.16
+      Adding png v0.18.1
+      Adding portable-atomic v1.15.0
+      Adding portable-atomic-util v0.2.8
+      Adding potential_utf v0.1.6
+      Adding powerfmt v0.2.1
+      Adding precomputed-hash v0.1.1
+      Adding proc-macro-crate v1.3.1
+      Adding proc-macro-crate v2.0.2
+      Adding proc-macro-crate v3.5.0
+      Adding proc-macro-error v1.0.4
+      Adding proc-macro-error-attr v1.0.4
+      Adding quick-xml v0.42.0
+      Adding r-efi v5.3.0
+      Adding r-efi v6.0.0
+      Adding raw-window-handle v0.6.2
+      Adding redox_syscall v0.5.18
+      Adding redox_users v0.5.3
+      Adding ref-cast v1.0.27
+      Adding ref-cast-impl v1.0.27
+      Adding regex v1.13.1
+      Adding regex-automata v0.4.18
+      Adding regex-syntax v0.8.11
+      Adding reqwest v0.13.5
+      Adding rustc-hash v2.1.3
+      Adding same-file v1.0.6
+      Adding schemars v0.8.22
+      Adding schemars v0.9.0
+      Adding schemars v1.2.2
+      Adding schemars_derive v0.8.22
+      Adding scopeguard v1.2.0
+      Adding selectors v0.38.0
+      Adding serde-untagged v0.1.9
+      Adding serde_derive_internals v0.29.1
+      Adding serde_repr v0.1.21
+      Adding serde_spanned v0.6.9
+      Adding serde_spanned v1.1.2
+      Adding serde_with v3.24.0
+      Adding serde_with_macros v3.24.0
+      Adding serialize-to-javascript v0.1.2
+      Adding serialize-to-javascript-impl v0.1.2
+      Adding servo_arc v0.4.3
+      Adding shlex v2.0.1
+      Adding simd-adler32 v0.3.10
+      Adding siphasher v1.0.4
+      Adding slab v0.4.12
+      Adding smallvec v1.16.2
+      Adding softbuffer v0.4.8
+      Adding soup3 v0.5.0
+      Adding soup3-sys v0.5.0
+      Adding stable_deref_trait v1.2.1
+      Adding string_cache v0.9.0
+      Adding string_cache_codegen v0.6.1
+      Adding strsim v0.11.1
+      Adding swift-rs v1.0.8
+      Adding syn v1.0.109
+      Adding sync_wrapper v1.0.2
+      Adding synstructure v0.14.0
+      Adding system-deps v6.2.2
+      Adding tao v0.37.1
+      Adding tao-macros v0.1.4
+      Adding target-lexicon v0.12.16
+      Adding tauri v2.12.1 (available: v2.12.2)
+      Adding tauri-build v2.7.1
+      Adding tauri-codegen v2.7.1
+      Adding tauri-macros v2.7.1
+      Adding tauri-runtime v2.12.1
+      Adding tauri-runtime-wry v2.12.1
+      Adding tauri-utils v2.10.1
+      Adding tauri-winres v0.3.6
+      Adding tendril v0.5.1
+      Adding thiserror v1.0.69
+      Adding thiserror v2.0.21
+      Adding thiserror-impl v1.0.69
+      Adding thiserror-impl v2.0.21
+      Adding time v0.3.55
+      Adding time-core v0.1.9
+      Adding time-macros v0.2.32
+      Adding tinystr v0.8.4
+      Adding tinyvec v1.13.3
+      Adding tokio-util v0.7.19
+      Adding toml v0.8.2 (available: v0.8.23)
+      Adding toml v1.1.8+spec-1.1.0
+      Adding toml_datetime v0.6.3 (available: v0.6.11)
+      Adding toml_datetime v1.1.2+spec-1.1.0
+      Adding toml_edit v0.19.15
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+      Adding toml_edit v0.25.17+spec-1.1.0
+      Adding toml_parser v1.1.5+spec-1.1.0
+      Adding toml_writer v1.1.3+spec-1.1.0
+      Adding tower v0.5.3
+      Adding tower-http v0.6.11
+      Adding tower-layer v0.3.3
+      Adding tower-service v0.3.3
+      Adding tracing v0.1.44
+      Adding tracing-core v0.1.36
+      Adding tray-icon v0.25.1
+      Adding try-lock v0.2.5
+      Adding typeid v1.0.3
+      Adding unicode-segmentation v1.13.3
+      Adding url v2.5.8
+      Adding urlpattern v0.6.0
+      Adding utf8_iter v1.0.4
+      Adding uuid v1.27.0
+      Adding version-compare v0.2.1
+      Adding vswhom v0.1.0
+      Adding vswhom-sys v0.1.3
+      Adding walkdir v2.5.0
+      Adding want v0.3.2
+      Adding wasip2 v1.0.4+wasi-0.2.12
+      Adding wasm-bindgen-futures v0.4.79
+      Adding wasm-streams v0.5.0
+      Adding web-sys v0.3.106
+      Adding web-time v1.1.0
+      Adding web_atoms v0.2.6
+      Adding webkit2gtk v2.0.2
+      Adding webkit2gtk-sys v2.0.2
+      Adding webview2-com v0.39.1
+      Adding webview2-com-macros v0.8.1
+      Adding webview2-com-sys v0.39.1
+      Adding winapi v0.3.9
+      Adding winapi-i686-pc-windows-gnu v0.4.0
+      Adding winapi-util v0.1.11
+      Adding winapi-x86_64-pc-windows-gnu v0.4.0
+      Adding window-vibrancy v0.8.1
+      Adding windows v0.62.2
+      Adding windows-collections v0.3.2
+      Adding windows-core v0.62.2
+      Adding windows-future v0.3.2
+      Adding windows-implement v0.60.2
+      Adding windows-interface v0.59.3
+      Adding windows-numerics v0.3.1
+      Adding windows-result v0.4.1
+      Adding windows-strings v0.5.1
+      Adding windows-sys v0.45.0
+      Adding windows-targets v0.42.2
+      Adding windows-threading v0.2.1
+      Adding windows-version v0.1.7
+      Adding windows_aarch64_gnullvm v0.42.2
+      Adding windows_aarch64_msvc v0.42.2
+      Adding windows_i686_gnu v0.42.2
+      Adding windows_i686_msvc v0.42.2
+      Adding windows_x86_64_gnu v0.42.2
+      Adding windows_x86_64_gnullvm v0.42.2
+      Adding windows_x86_64_msvc v0.42.2
+      Adding winnow v0.5.40
+      Adding winnow v1.0.4
+      Adding winreg v0.56.0
+      Adding wit-bindgen v0.57.1
+      Adding writeable v0.6.4
+      Adding wry v0.57.0
+      Adding x11 v2.21.0
+      Adding x11-dl v2.21.0
+      Adding yoke v0.8.3
+      Adding yoke-derive v0.8.4
+      Adding zerofrom v0.1.8
+      Adding zerofrom-derive v0.1.8
+      Adding zerotrie v0.2.5
+      Adding zerovec v0.11.8
+      Adding zerovec-derive v0.11.6
+      Adding zlib-rs v0.6.8
+ Downloading crates ...
+  Downloaded alloc-no-stdlib v3.0.0
+  Downloaded powerfmt v0.2.1
+  Downloaded darling_macro v0.24.1
+  Downloaded alloc-stdlib v0.3.0
+  Downloaded dirs v7.0.0
+  Downloaded cssparser-macros v0.7.1
+  Downloaded markup5ever v0.39.0
+  Downloaded infer v0.22.0
+  Downloaded json-patch v4.2.0
+  Downloaded embed-resource v3.0.12
+  Downloaded ctor v1.0.13
+  Downloaded camino v1.2.6
+  Downloaded cargo_toml v1.0.1
+  Downloaded jsonptr v0.7.1
+  Downloaded plist v1.10.1
+  Downloaded darling v0.24.1
+  Downloaded cssparser v0.37.0
+  Downloaded html5ever v0.39.0
+  Downloaded jiff-tzdb v0.1.9
+  Downloaded cfb v0.14.0
+  Downloaded crossbeam-channel v0.5.17
+  Downloaded darling_core v0.24.1
+  Downloaded dom_query v0.28.0
+  Downloaded keyboard-types v0.8.3
+  Downloaded muda v0.20.0
+  Downloaded png v0.18.1
+  Downloaded quick-xml v0.42.0
+  Downloaded selectors v0.38.0
+  Downloaded brotli-decompressor v6.0.1
+  Downloaded serde_spanned v1.1.2
+  Downloaded serde_with_macros v3.24.0
+  Downloaded siphasher v1.0.4
+  Downloaded tauri-codegen v2.7.1
+  Downloaded tauri-build v2.7.1
+  Downloaded tauri-runtime v2.12.1
+  Downloaded windows-collections v0.3.2
+  Downloaded windows-numerics v0.3.1
+  Downloaded windows-threading v0.2.1
+  Downloaded windows-result v0.4.1
+  Downloaded windows-strings v0.5.1
+  Downloaded yoke-derive v0.8.4
+  Downloaded tauri-macros v2.7.1
+  Downloaded toml_datetime v1.1.2+spec-1.1.0
+  Downloaded toml_writer v1.1.3+spec-1.1.0
+  Downloaded webview2-com v0.39.1
+  Downloaded web-time v1.1.0
+  Downloaded windows-future v0.3.2
+  Downloaded toml_parser v1.1.5+spec-1.1.0
+  Downloaded tauri-runtime-wry v2.12.1
+  Downloaded urlpattern v0.6.0
+  Downloaded winreg v0.56.0
+  Downloaded tray-icon v0.25.1
+  Downloaded tinyvec v1.13.3
+  Downloaded windows-core v0.62.2
+  Downloaded serde_with v3.24.0
+  Downloaded toml v1.1.8+spec-1.1.0
+  Downloaded uuid v1.27.0
+  Downloaded jiff v0.2.38
+  Downloaded tauri-utils v2.10.1
+  Downloaded brotli v9.0.0
+  Downloaded wry v0.57.0
+  Downloaded libc v0.2.190
+  Downloaded tao v0.37.1
+  Downloaded tauri v2.12.1
+  Downloaded window-vibrancy v0.8.1
+  Downloaded webview2-com-sys v0.39.1
+  Downloaded windows v0.62.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 39s
+       Built application at: C:\dev\runFile\.claude\worktrees\phase-0-plan-continuation-775872\spikes\target\debug\s9-shell.exe
+exit: 0
+```
+
+```
+command: Start-Process spikes\target\debug\s9-shell.exe (S9_REPORT=C:\dev\m1\logs\S9-webview.txt)
+exited by itself within 60 s: True
+exit code: 0
+report:
+{"sample":"valid (SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4)","tampered":"invalid: does not verify: cryptographic error","fetchBlocked":true,"renderedBySvelte":true,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"}
+```
+
+**Verdict:** PASS, because:
+- `ssh-key` builds without the operating system: `cargo test -p s9-core` passes 3 of 3 against a signature made by
+  Windows' `ssh-keygen` (same fingerprint, `SHA256:IVYuMfe3qPPxCv0fpQ5Adwjz1a/yypoD1Nk7Y1gGHi4`), and
+  `cargo build -p s9-core --target wasm32v1-none --release` finishes; that target has no standard library at all;
+- the check page works under `connect-src 'none'`: `svelte-check` reports 0 errors, and the Playwright test passes in
+  Chromium, Firefox and WebKit (`3 passed`): the sample signature is `valid (SHA256:...)`, the changed message is
+  `invalid: does not verify`, the page's deliberate `POST` is blocked, the only requests are two `GET`s to the local
+  preview server (the page and its script; the WASM is embedded, so it is never fetched), and each browser's console
+  shows its own refusal (`violates the following Content Security Policy directive: "connect-src 'none'"`);
+- Svelte runs in WebView2: the Tauri window exited by itself (`exited by itself within 60 s: True`, exit code 0) and
+  its report says `"renderedBySvelte":true`, `"sample":"valid (SHA256:IVYu...)"`, `"tampered":"invalid: does not
+  verify: cryptographic error"`, with a user agent containing `Edg/154.0.0.0`. The report file exists, so the page
+  reached the Rust code through Tauri's own channel under the app's content-security rule.
+
+**What it means:**
+- The core: signature checking can live in a `no_std` Rust crate with `ssh-key` 0.6.7 (`alloc`, `ed25519`), shared by
+  the app and the public check page; phase 1 can start from `s9-core`'s shape.
+- The check page: a static page with the WASM embedded in its script, locked with `connect-src 'none'`, verifies a
+  signature and cannot send anything, in all three browser engines tested.
+- The pinned versions in this spike (Svelte 5.57.1, Vite 8.3.1, Tauri 2.12.1, `@tauri-apps/cli` 2.12.1,
+  `@playwright/test` 1.63.0, TypeScript 6.0.3, `svelte-check` 4.7.6) work together; the product's `web/` folder can use
+  them.
+- Not tested: an installed (bundled) app, a WebView2 other than the one on this machine, or the page served from a real
+  web host.

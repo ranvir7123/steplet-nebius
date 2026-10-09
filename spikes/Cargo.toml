@@ -1,7 +1,7 @@
 # Throwaway spike code for milestone 1, phase 0. Not part of the product.
 [workspace]
 resolver = "2"
-members = ["host", "gate", "s9-core", "s9-wasm"]
+members = ["host", "gate", "s9-core", "s9-wasm", "s9-check/src-tauri"]
 
 [workspace.package]
 edition = "2024"

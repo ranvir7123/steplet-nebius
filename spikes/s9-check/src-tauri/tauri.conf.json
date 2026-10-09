@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "s9-shell",
+  "version": "0.0.0",
+  "identifier": "dev.steplet.spike.s9",
+  "build": {
+    "frontendDist": "../dist-tauri",
+    "beforeBuildCommand": "npm run build:tauri"
+  },
+  "app": {
+    "windows": [{ "title": "Steplet spike S9", "width": 800, "height": 600 }],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": { "active": false }
+}
