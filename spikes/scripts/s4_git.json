@@ -1,0 +1,13 @@
+{
+  "about": "Try to change .git by shell commands and by the Write tool; then two controls",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo \"EXIT=$?\"", "description": "Try to plant a git hook"}},
+    {"tool": "Bash", "input": {"command": "echo planted > .git/spike_planted_by_bash; echo \"EXIT=$?\"", "description": "Try to write into .git"}},
+    {"tool": "Bash", "input": {"command": "git config core.hooksPath /tmp/spike-hooks; echo \"EXIT=$?\"", "description": "Try to change git settings"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/.git/hooks/pre-commit", "content": "#!/bin/sh\necho planted\n"}},
+    {"tool": "Write", "input": {"file_path": "{WORK}/.git/spike_planted_by_write", "content": "planted\n"}},
+    {"tool": "Bash", "input": {"command": "echo ok > spike_inside.txt; echo \"EXIT=$?\"", "description": "Control: write inside the working copy"}},
+    {"tool": "Bash", "input": {"command": "git status --short; echo \"EXIT=$?\"", "description": "Control: read the repository"}},
+    {"text": "Spike S4: done."}
+  ]
+}

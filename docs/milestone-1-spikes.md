@@ -3884,3 +3884,638 @@ that passed, and the plan's recommendation: the key never sits in any process's 
 - Side effect: S3e left one new session record in milestone 0's Claude folder,
   `/home/ranvir/m0/claude-home/projects/-mnt-c-dev-runFile--claude-worktrees-phase-0-plan-continuation-775872/`.
   It holds only the prompt and the error; it was left in place.
+
+## S4: checkout in the fence with no agent, and a read-only `.git`
+
+Question, from the milestone plan: checkout under `srt` with no agent. Does `denyWrite` on `.git` refuse writes from
+commands **and** from the Write tool? Optional: the clone itself under `srt`, allowing only the git host. Pass:
+checkout works; both `.git` writes are refused.
+
+Scripts: `spikes/wsl/s4_clone.sh` (hardened clone, fence controls, fenced checkout), `spikes/runs/S4b.json` (agent
+attempts, product settings), `spikes/runs/S4c.json` (the same attempts, milestone 0 settings, as the control),
+`spikes/wsl/s4_check_git.sh` (what landed in `.git`, checked outside the fence), `spikes/wsl/s4_fenced_clone_run.sh`
+(optional part). Both run descriptions use `"env_mode": "systemroot"` (S2).
+
+### Two fixes to the plan's `s4_clone.sh` before it could measure anything
+
+**1. The fence hid `srt` from itself.** The plan installs `srt` inside Steplet's private folder
+(`~/.local/share/steplet/srt`) and the fence denies reading that whole folder, so `srt`'s own seccomp helper is
+invisible inside the fence and every fenced command fails before it starts (first attempt below:
+`apply-seccomp: No such file or directory`, exit 127). The helper exists outside the fence
+(`vendor/seccomp/x64/apply-seccomp`). Test with a harmless command, `spikes/wsl/s4_probe_seccomp.sh`:
+
+```
+=== 1-deny-private
+/usr/bin/bash: line 4: /home/tester/.local/share/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/x64/apply-seccomp: No such file or directory
+exit: 127
+=== 2-private-not-denied
+RAN_INSIDE
+claude-cli
+claude-config
+home
+exit: 0
+=== 3-deny-private-allow-helper
+RAN_INSIDE
+srt
+exit: 0
+```
+
+Fix: re-allow reading only `.../sandbox-runtime/vendor/seccomp` (`allowRead`), as in case 3; the fence then sees
+`srt` (the path down to the helper) and nothing else of the private folder.
+
+**2. `srt` takes a `-c` meant for the command as its own option.** `srt` has its own `-c <command>` ("run command
+string directly, no escaping applied"), and it picks up a `-c` anywhere in its arguments. So
+`srt --settings S python3 -c "..."` runs the Python code as a shell line, and `git -c a=b -c c=d checkout` ran
+`c=d` as a command (second attempt below: `core.fsmonitor=false: command not found`). `--` stops it,
+`spikes/wsl/s4_probe_args.sh`:
+
+```
+=== A. no separator: srt --settings S /usr/bin/python3 -c "print('A ran', 1+1)"
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `'A ran','
+/usr/bin/bash: -c: line 1: `print('A ran', 1+1)'
+exit: 2
+=== B. with --: srt --settings S -- /usr/bin/python3 -c "print('B ran', 1+1)"
+B ran 2
+exit: 0
+=== C. with --, an argument with spaces, quotes and a semicolon: printf '[%s]\n' "a b" "it's; echo INJECTED"
+[a b]
+[it's; echo INJECTED]
+exit: 0
+=== D. with --, git with two -c options
+git version 2.53.0
+exit: 0
+```
+
+Fix: every `srt` call puts `--` before the command.
+
+### Step 1, first attempt (plan's script as written)
+
+```
+git: git version 2.53.0
+--- 1. hardened clone, no checkout, no fence
+Cloning into '/home/tester/steplet-work/S4/repo'...
+clone exit code: 0
+commit present: commit
+.git/hooks after clone: ls: cannot access '/home/tester/steplet-work/S4/repo/.git/hooks': No such file or directory 
+files outside .git before checkout: 
+--- 2. control: the srt fence holds (write outside, read the private folder, internet)
+/usr/bin/bash: line 4: /home/tester/.local/share/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/x64/apply-seccomp: No such file or directory
+outside marker: absent
+/usr/bin/bash: line 4: /home/tester/.local/share/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/x64/apply-seccomp: No such file or directory
+/usr/bin/bash: line 4: /home/tester/.local/share/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/x64/apply-seccomp: No such file or directory
+--- 3. checkout inside srt, no agent
+/usr/bin/bash: line 4: /home/tester/.local/share/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/x64/apply-seccomp: No such file or directory
+checkout exit code: 127
+HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+status: D  README
+files: .git 
+```
+
+### Step 1, second attempt (helper re-allowed, no `--` yet)
+
+```
+git: git version 2.53.0
+--- 1. hardened clone, no checkout, no fence
+Cloning into '/home/tester/steplet-work/S4/repo'...
+clone exit code: 0
+commit present: commit
+.git/hooks after clone: ls: cannot access '/home/tester/steplet-work/S4/repo/.git/hooks': No such file or directory 
+files outside .git before checkout: 
+--- 2. control: the srt fence holds (write outside, read the private folder, internet)
+/usr/bin/bash: line 1: /home/tester/steplet-work/S4/outside_marker: Read-only file system
+outside marker: absent
+srt
+/usr/bin/bash: -c: line 1: `import socket; socket.create_connection(('1.1.1.1', 443), timeout=5); print('CONNECTED')'
+--- 3. checkout inside srt, no agent
+/usr/bin/bash: line 1: core.fsmonitor=false: command not found
+checkout exit code: 127
+HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+status: D  README
+files: .git 
+```
+
+### Step 1: hardened clone, fence controls, fenced checkout (both fixes)
+
+```
+git: git version 2.53.0
+--- 1. hardened clone, no checkout, no fence
+Cloning into '/home/tester/steplet-work/S4/repo'...
+clone exit code: 0
+commit present: commit
+.git/hooks after clone: ls: cannot access '/home/tester/steplet-work/S4/repo/.git/hooks': No such file or directory 
+files outside .git before checkout: 
+--- 2. control: the srt fence holds (write outside, read the private folder, internet)
+/bin/sh: 1: cannot create /home/tester/steplet-work/S4/outside_marker: Read-only file system
+outside marker: absent
+srt
+OSError: [Errno 101] Network is unreachable
+--- 3. checkout inside srt, no agent
+checkout exit code: 0
+HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+status: 
+files: .git README 
+```
+
+### S4b: agent attempts on `.git`, product settings
+
+The 12 dot-files `git status` lists inside the fence (`.bashrc`, `.gitconfig`, `.mcp.json`, `.claude/`, `.vscode`,
+...) are not in the working copy afterwards (check below); they exist only in the fence's view.
+
+```
+=== spike run S4b, started 2026-10-09T11:01:57.0760056+05:30
+--- run description: {"about": "S4: agent step on the fenced checkout; product settings (denyWrite and Edit deny on .git)", "script": "s4_git.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "workcopy": "keep:S4", "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S4/repo HEAD 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S4/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S4/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S4/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S4b", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S4b.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S4b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S4b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 639 640
+host: pipe \\.\pipe\steplet-spike-S4b created, gate mode allow
+host: wsl.exe started (pid Some(21188), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.6 s
+--- launch finished after 2.6 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 12261, lines: 17, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S4/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo \"EXIT=$?\"", "description": "Try to plant a git hook"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo "EXIT=$?" has been denied.
+TOOL_USE Bash: {"command": "echo planted > .git/spike_planted_by_bash; echo \"EXIT=$?\"", "description": "Try to write into .git"}
+TOOL_RESULT is_error=True:
+    | Permission to use Bash with command echo planted > .git/spike_planted_by_bash; echo "EXIT=$?" has been denied.
+TOOL_USE Bash: {"command": "git config core.hooksPath /tmp/spike-hooks; echo \"EXIT=$?\"", "description": "Try to change git settings"}
+TOOL_RESULT is_error=False:
+    | error: could not lock config file .git/config: File exists
+    | EXIT=255
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S4/repo/.git/hooks/pre-commit", "content": "#!/bin/sh\necho planted\n"}
+TOOL_RESULT is_error=True:
+    | <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S4/repo/.git/spike_planted_by_write", "content": "planted\n"}
+TOOL_RESULT is_error=True:
+    | <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+TOOL_USE Bash: {"command": "echo ok > spike_inside.txt; echo \"EXIT=$?\"", "description": "Control: write inside the working copy"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+TOOL_USE Bash: {"command": "git status --short; echo \"EXIT=$?\"", "description": "Control: read the repository"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | ?? .idea
+    | ?? .mcp.json
+    | ?? .profile
+    | ?? .ripgreprc
+    | ?? .vscode
+    | ?? .zprofile
+    | ?? .zshrc
+    | ?? spike_inside.txt
+    | EXIT=0
+AGENT: Spike S4: done.
+RESULT subtype=success is_error=False num_turns=8 duration_ms=719
+       permission_denials=[{"tool_name": "Bash", "tool_use_id": "toolu_spike_795611e973ae4c838fbf", "tool_input": {"command": "mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo \"EXIT=$?\"", "description": "Try to plant a git hook"}}, {"tool_name": "Bash", "tool_use_id": "toolu_spike_22a84c9e41b44511ac0e", "tool_input": {"command": "echo planted > .git/spike_planted_by_bash; echo \"EXIT=$?\"", "description": "Try to write into .git"}}]
+       text: Spike S4: done.
+event types: {'system/init': 1, 'assistant': 8, 'user': 7, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S4b.gate.log:
+    1791523920.665 pid=4232 started; 1 environment variables: SystemRoot
+    1791523920.922 pid=4232 tool="Bash" behavior="allow" ms=1 input={"command":"git config core.hooksPath /tmp/spike-hooks; echo \"EXIT=$?\"","description":"Try to change git settings"}
+    1791523921.183 pid=4232 tool="Bash" behavior="allow" ms=0 input={"command":"echo ok > spike_inside.txt; echo \"EXIT=$?\"","description":"Control: write inside the working copy"}
+    1791523921.312 pid=4232 tool="Bash" behavior="allow" ms=0 input={"command":"git status --short; echo \"EXIT=$?\"","description":"Control: read the repository"}
+--- gate log S4b.host-gate.log:
+    1791523920.923 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523921.136 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","4232","Console","1","3,916 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791523921.183 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523921.312 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=NO   mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo "EXIT=$?"
+    Bash       asked=NO   echo planted > .git/spike_planted_by_bash; echo "EXIT=$?"
+    Bash       asked=yes  git config core.hooksPath /tmp/spike-hooks; echo "EXIT=$?"
+    Write      asked=NO   /home/tester/steplet-work/S4/repo/.git/hooks/pre-commit
+    Write      asked=NO   /home/tester/steplet-work/S4/repo/.git/spike_planted_by_write
+    Bash       asked=yes  echo ok > spike_inside.txt; echo "EXIT=$?"
+    Bash       asked=yes  git status --short; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.05s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.07s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.31s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.32s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.33s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.46s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.60s agent loop /v1/messages?beta=true step=7 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.05, 0.02, 0.23, 0.01, 0.01, 0.13, 0.14]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+--- git status --short --ignored:
+    ?? spike_inside.txt
+--- files in .git/hooks: no such folder
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S4-repo/d9f07577-2e66-41f2-a144-6f3f5d35f37f.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S4-repo/mcp-logs-gate/2026-10-09T05-32-00-442Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S4b finished 2026-10-09T11:02:04.1698921+05:30
+```
+
+After the run, outside the fence (`spikes/wsl/s4_check_git.sh`):
+
+```
+repo: /home/tester/steplet-work/S4/repo
+.git/hooks: ls: cannot access '/home/tester/steplet-work/S4/repo/.git/hooks': No such file or directory 
+planted files in .git: 0 ()
+core.hooksPath: (not set)
+config lock left behind: no
+files in the working copy: .claude .git README spike_inside.txt 
+git status --short --ignored:
+?? spike_inside.txt
+```
+
+### Step 3: a fresh clone, then S4c (milestone 0 settings, the control)
+
+```
+git: git version 2.53.0
+--- 1. hardened clone, no checkout, no fence
+Cloning into '/home/tester/steplet-work/S4/repo'...
+clone exit code: 0
+commit present: commit
+.git/hooks after clone: ls: cannot access '/home/tester/steplet-work/S4/repo/.git/hooks': No such file or directory 
+files outside .git before checkout: 
+--- 2. control: the srt fence holds (write outside, read the private folder, internet)
+/bin/sh: 1: cannot create /home/tester/steplet-work/S4/outside_marker: Read-only file system
+outside marker: absent
+srt
+OSError: [Errno 101] Network is unreachable
+--- 3. checkout inside srt, no agent
+checkout exit code: 0
+HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+status: 
+files: .git README 
+```
+
+```
+=== spike run S4c, started 2026-10-09T11:02:59.2686966+05:30
+--- run description: {"about": "S4 control: same attempts, milestone 0 settings (no .git protection)", "script": "s4_git.json", "gate": "exe", "gate_mode": "allow", "shape": "m0", "launch": "host", "host": {"env_mode": "systemroot"}, "workcopy": "keep:S4", "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S4/repo HEAD 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/home/tester/m1/canary",
+        "/mnt/c/dev/m1/canary"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//home/tester/m1/canary/**)",
+      "Read(//mnt/c/dev/m1/canary/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S4c", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S4c.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S4c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S4c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 654 655
+host: pipe \\.\pipe\steplet-spike-S4c created, gate mode allow
+host: wsl.exe started (pid Some(6180), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.9 s
+--- launch finished after 2.9 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 11675, lines: 17, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S4/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo \"EXIT=$?\"", "description": "Try to plant a git hook"}
+TOOL_RESULT is_error=False:
+    | mkdir: Already exists
+    | EXIT=1
+TOOL_USE Bash: {"command": "echo planted > .git/spike_planted_by_bash; echo \"EXIT=$?\"", "description": "Try to write into .git"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+TOOL_USE Bash: {"command": "git config core.hooksPath /tmp/spike-hooks; echo \"EXIT=$?\"", "description": "Try to change git settings"}
+TOOL_RESULT is_error=False:
+    | error: could not lock config file .git/config: File exists
+    | EXIT=255
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S4/repo/.git/hooks/pre-commit", "content": "#!/bin/sh\necho planted\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S4/repo/.git/hooks/pre-commit (file state is current in your context — no need to Read it back)
+TOOL_USE Write: {"file_path": "/home/tester/steplet-work/S4/repo/.git/spike_planted_by_write", "content": "planted\n"}
+TOOL_RESULT is_error=None:
+    | File created successfully at: /home/tester/steplet-work/S4/repo/.git/spike_planted_by_write (file state is current in your context — no need to Read it back)
+TOOL_USE Bash: {"command": "echo ok > spike_inside.txt; echo \"EXIT=$?\"", "description": "Control: write inside the working copy"}
+TOOL_RESULT is_error=False:
+    | EXIT=0
+TOOL_USE Bash: {"command": "git status --short; echo \"EXIT=$?\"", "description": "Control: read the repository"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | ?? .idea
+    | ?? .mcp.json
+    | ?? .profile
+    | ?? .ripgreprc
+    | ?? .vscode
+    | ?? .zprofile
+    | ?? .zshrc
+    | ?? spike_inside.txt
+    | EXIT=0
+AGENT: Spike S4: done.
+RESULT subtype=success is_error=False num_turns=8 duration_ms=1138
+       permission_denials=[]
+       text: Spike S4: done.
+event types: {'system/init': 1, 'assistant': 8, 'user': 7, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S4c.gate.log:
+    1791523982.749 pid=35200 started; 1 environment variables: SystemRoot
+    1791523982.964 pid=35200 tool="Bash" behavior="allow" ms=1 input={"command":"mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo \"EXIT=$?\"","description":"Try to plant a git hook"}
+    1791523983.240 pid=35200 tool="Bash" behavior="allow" ms=0 input={"command":"echo planted > .git/spike_planted_by_bash; echo \"EXIT=$?\"","description":"Try to write into .git"}
+    1791523983.413 pid=35200 tool="Bash" behavior="allow" ms=0 input={"command":"git config core.hooksPath /tmp/spike-hooks; echo \"EXIT=$?\"","description":"Try to change git settings"}
+    1791523983.566 pid=35200 tool="Write" behavior="allow" ms=0 input={"content":"#!/bin/sh\necho planted\n","file_path":"/home/tester/steplet-work/S4/repo/.git/hooks/pre-commit"}
+    1791523983.593 pid=35200 tool="Write" behavior="allow" ms=0 input={"content":"planted\n","file_path":"/home/tester/steplet-work/S4/repo/.git/spike_planted_by_write"}
+    1791523983.623 pid=35200 tool="Bash" behavior="allow" ms=0 input={"command":"echo ok > spike_inside.txt; echo \"EXIT=$?\"","description":"Control: write inside the working copy"}
+    1791523983.819 pid=35200 tool="Bash" behavior="allow" ms=0 input={"command":"git status --short; echo \"EXIT=$?\"","description":"Control: read the repository"}
+    1791523983.973 pid=
+--- gate log S4c.host-gate.log:
+    1791523982.965 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.185 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","35200","Console","1","3,928 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+    1791523983.240 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.413 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.566 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.592 tool="Write" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.623 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523983.819 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  mkdir -p .git/hooks && echo planted > .git/hooks/post-checkout; echo "EXIT=$?"
+    Bash       asked=yes  echo planted > .git/spike_planted_by_bash; echo "EXIT=$?"
+    Bash       asked=yes  git config core.hooksPath /tmp/spike-hooks; echo "EXIT=$?"
+    Write      asked=yes  /home/tester/steplet-work/S4/repo/.git/hooks/pre-commit
+    Write      asked=yes  /home/tester/steplet-work/S4/repo/.git/spike_planted_by_write
+    Bash       asked=yes  echo ok > spike_inside.txt; echo "EXIT=$?"
+    Bash       asked=yes  git status --short; echo "EXIT=$?"
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.31s agent loop /v1/messages?beta=true step=1 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.49s agent loop /v1/messages?beta=true step=2 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.65s agent loop /v1/messages?beta=true step=3 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.68s agent loop /v1/messages?beta=true step=4 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.70s agent loop /v1/messages?beta=true step=5 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.90s agent loop /v1/messages?beta=true step=6 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +1.06s agent loop /v1/messages?beta=true step=7 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.31, 0.17, 0.17, 0.02, 0.02, 0.2, 0.16]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+--- git status --short --ignored:
+    ?? spike_inside.txt
+--- files in .git/hooks: ['pre-commit']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S4-repo/c9cf7286-4e32-467f-b5a3-4fbcd09fd221.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S4-repo/mcp-logs-gate/2026-10-09T05-33-02-547Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S4c finished 2026-10-09T11:03:06.8048852+05:30
+```
+
+After the run, outside the fence:
+
+```
+repo: /home/tester/steplet-work/S4/repo
+.git/hooks: pre-commit 
+planted files in .git: 2 (spike_planted_by_bash spike_planted_by_write )
+core.hooksPath: (not set)
+config lock left behind: no
+files in the working copy: .claude .git README spike_inside.txt 
+git status --short --ignored:
+?? spike_inside.txt
+```
+
+### Step 4 (optional): the clone itself inside `srt`, network to `github.com` only
+
+First attempt, the plan's script: `Proxy CONNECT aborted`.
+
+```
+Cloning into '/home/tester/steplet-work/S4-fenced-clone/repo'...
+fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Proxy CONNECT aborted
+clone exit code: 128
+commit present: fatal: cannot change to '/home/tester/steplet-work/S4-fenced-clone/repo': No such file or directory
+```
+
+Why (`spikes/wsl/s4_probe_curl.sh`, `s4_probe_git_proxy.sh`, `s4_probe_git_params.sh`, same fence settings): the
+proxy and the allowed list work, and git works with the fence's full environment; the script's `env -i` dropped
+`srt`'s `GIT_CONFIG_PARAMETERS`, which git needs to pass `srt`'s proxy login (`407 Proxy Authentication Required`,
+`Basic realm="srt"`, user `srt.<the command, base64>`). The hardening options play no part.
+
+```
+=== https://github.com through the fence
+http_code=200
+=== https://example.com through the fence
+curl: (7) CONNECT tunnel failed, response 403
+http_code=000
+=== 1. git with the full fence environment
+exit: 0
+=== 2. stripped environment, no hardening options
+exit: 128
+<= Recv header: HTTP/1.1 407 Proxy Authentication Required
+== Info: Proxy CONNECT aborted
+=== 3. stripped environment plus the script's hardening options (the script's exact git command)
+exit: 128
+=== 4. only -c protocol.allow=never -c protocol.https.allow=always: exit 128
+=== 4. only -c credential.helper=: exit 128
+=== 4. only -c transfer.bundleURI=false: exit 128
+=== 4. only -c transfer.fsckObjects=true: exit 128
+=== 5. stripped environment plus GIT_CONFIG_PARAMETERS: exit 0
+```
+
+With `GIT_CONFIG_PARAMETERS` kept (one line in `s4_fenced_clone.sh`; the allowed list is unchanged):
+
+```
+Cloning into '/home/tester/steplet-work/S4-fenced-clone/repo'...
+clone exit code: 0
+commit present: commit
+```
+
+**Verdict:** PASS, because:
+- the checkout works inside `srt` with no agent: `checkout exit code: 0`, `HEAD: 7fd1a60b...`, status clean, `README`
+  present; the controls hold (outside write `Read-only file system`, `Network is unreachable`, the private folder
+  shows only `srt`); the hardened clone leaves no `.git/hooks`;
+- `.git` writes from commands are refused: in S4b the two shell writes into `.git` were refused by Claude Code's own
+  permission rules before running (`Permission to use Bash ... has been denied`, `asked=NO`), and `git config
+  core.hooksPath` failed in the fence (`could not lock config file .git/config`, `EXIT=255`);
+- `.git` writes from the Write tool are refused: both `File is in a directory that is denied by your permission
+  settings`, never reaching the gate (`asked=NO`);
+- afterwards: no `.git/hooks`, 0 planted files, `core.hooksPath (not set)`; the control write `spike_inside.txt`
+  exists and `git status` worked;
+- the control shows the refusals come from our rules for the plain write into `.git` and for both Write-tool writes:
+  with milestone 0's settings (S4c) all three succeeded (`spike_planted_by_bash`, `spike_planted_by_write`,
+  `.git/hooks/pre-commit` exist).
+
+**Inconclusive parts, by the plan's own rule (the control also failed):** planting a hook with a shell command
+(`mkdir: Already exists` in S4c) and `git config` (`could not lock config file` in both). Claude Code's fence protects
+`.git/hooks` and `.git/config` from commands by itself, with or without our rules. In S4b our permission rule also
+refused the hook command before it ran.
+
+**What it means for D6:**
+- Steplet's own checkout step works as D6 intends: hardened clone outside the fence, checkout inside `srt` with no
+  agent, then the agent runs with `.git` read-only.
+- For commands, the real wall is the fence: Claude Code's permission rules caught only the commands with a visible
+  redirect into `.git`; `git config` passed them and was stopped by the fence. For the Write tool, which runs outside
+  the fence, the permission rule is the only wall, and it held.
+- **Rule for the app: every `srt` call puts `--` before the command.** Without it, any argument that contains `-c` is
+  run by `srt` as a raw shell line.
+- **If `srt` stays inside Steplet's private folder, the fence must re-allow its seccomp helper folder** (or `srt` lives
+  somewhere the fence may read). Which one is a design choice for phase 3, not made here.
+- A fenced clone limited to `github.com` works, as long as `srt`'s `GIT_CONFIG_PARAMETERS` is passed on.
+- Observed in `srt`'s debug log (`srt -d`, same settings) and not judged: `srt` adds default write paths the
+  settings did not ask for (`/home/tester/.npm/_logs`, which exists, was processed as a write path; `/tmp/claude` and
+  `~/.claude/debug` were skipped only because they do not exist). Whether a fenced command can really write there was
+  not tested. It also takes its list of protected dot-files from its own working folder (here the Windows worktree
+  path), not from the folder it lets the command write.
