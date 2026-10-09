@@ -1,0 +1,1 @@
+{"about": "S3: key in Claude Code's environment, from the launch line; can the fence see it?", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}

@@ -1,0 +1,1 @@
+{"about": "S3: as S3a, plus CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"]}

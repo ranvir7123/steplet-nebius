@@ -1,0 +1,7 @@
+{
+  "about": "Copy what the fence can see, and try to read Steplet's private files",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "python3 spike_probes/s3_probe.py {P}/secrets/fake-api-key {P}/claude-config/.claude.json {P}/claude-config/settings.json {P}/runs/{ID}/settings.json {P}/home/.config/git/ignore; echo \"EXIT=$?\"", "description": "Record what the fence can see"}},
+    {"text": "Spike S3: done."}
+  ]
+}

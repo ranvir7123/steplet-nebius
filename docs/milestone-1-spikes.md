@@ -3209,3 +3209,678 @@ top-level events of type 'result': 1
   token that way.
 - The gate did not log its own exit in S1t and S1k: it was ended from outside rather than on its input closing. It
   was gone within the 2 s the harness waits; how quickly, and by whom, is not measured.
+
+## S3: can a fenced program see the API key?
+
+Question, from the milestone plan: with API-key sign-in (P1-A), can a fenced program see the key, either in its
+environment or through an `apiKeyHelper` file? Does a key stop Claude Code using any stored sign-in? Pass: the key is
+invisible to fenced programs. The fake API key stands in for a real one; nothing here uses a real key.
+
+Runs: `spikes/runs/S3a.json` (key in Claude Code's environment), `S3b.json` (the same, plus
+`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`), `S3c.json` (key only through `apiKeyHelper`), `S3d.json` (no key at all), all
+with `"env_mode": "systemroot"` (S2); S3e: `spikes/wsl/s3e_precedence.sh` in the main Ubuntu (yes A5, 9 Oct 2026).
+Command: `powershell -NoProfile -ExecutionPolicy Bypass -File spikes\tools\run.ps1 -Id <run>`; for S3e the plan's
+`wsl -d Ubuntu --exec /bin/bash /mnt/c/dev/runFile/spikes/wsl/s3e_precedence.sh`.
+
+### S3a: key in Claude Code's environment
+
+```
+=== spike run S3a, started 2026-10-09T10:51:09.4434767+05:30
+--- run description: {"about": "S3: key in Claude Code's environment, from the launch line; can the fence see it?", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key"]}
+--- working copy: /home/tester/steplet-work/S3a/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S3a/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S3a/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S3a/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S3a", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S3a.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S3a/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S3a/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 442 443
+host: pipe \\.\pipe\steplet-spike-S3a created, gate mode allow
+host: wsl.exe started (pid Some(12616), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 2.2 s
+--- launch finished after 2.2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5997, lines: 5, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S3a/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3a/settings.json /home/tester/.local/share/steplet/home/.config/git/ignore; echo \"EXIT=$?\"", "description": "Record what the fence can
+TOOL_RESULT is_error=False:
+    | probe: 53 environment variables, 5 /proc files copied, 5 reads tried
+    | /home/tester/.local/share/steplet/secrets/fake-api-key: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/claude-config/.claude.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/claude-config/settings.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/runs/S3a/settings.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/home/.config/git/ignore: refused (FileNotFoundError: No such file or directory)
+    | EXIT=0
+AGENT: Spike S3: done.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=319
+       permission_denials=[]
+       text: Spike S3: done.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S3a.gate.log:
+    1791523276.331 pid=13096 started; 1 environment variables: SystemRoot
+    1791523276.535 pid=13096 tool="Bash" behavior="allow" ms=1 input={"command":"python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3a/settings.json /home/tester/.local/share/steplet/home/.config/git/igno
+--- gate log S3a.host-gate.log:
+    1791523276.536 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523276.750 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","13096","Console","1","3,936 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/teste
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.24s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.24]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s3_seen/
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S3a-repo/e884b402-1559-47d2-b971-45c4d13f6207.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S3a-repo/mcp-logs-gate/2026-10-09T05-21-16-129Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- environment variable names inside the fence: AI_AGENT,ALL_PROXY,ANTHROPIC_API_KEY,ANTHROPIC_BASE_URL,CLAUDECODE,CLAUDE_CODE_CHILD_SESSION,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,CLAUDE_CODE_ENTRYPOINT,CLAUDE_CODE_EXECPATH,CLAUDE_CODE_HOST_HTTP_PROXY_PORT,CLAUDE_CODE_HOST_SOCKS_PROXY_PORT,CLAUDE_CODE_SESSION_ID,CLAUDE_CODE_TMPDIR,CLAUDE_CONFIG_DIR,CLAUDE_EFFORT,CLAUDE_PID,CLAUDE_TMPDIR,CLOUDSDK_PROXY_ADDRESS,CLOUDSDK_PROXY_PASSWORD,CLOUDSDK_PROXY_PORT,CLOUDSDK_PROXY_TYPE,CLOUDSDK_PROXY_USERNAME,COREPACK_ENABLE_AUTO_PIN,DISABLE_AUTOUPDATER,DOCKER_HTTPS_PROXY,DOCKER_HTTP_PROXY,FTP_PROXY,GIT_CONFIG_PARAMETERS,GIT_EDITOR,GIT_SSH_COMMAND,GRPC_PROXY,HOME,HTTPS_PROXY,HTTP_PROXY,LANG,MIMALLOC_SCAVENGER,NO_PROXY,NoDefaultCurrentDirectoryInExePath,PATH,PWD,RSYNC_PROXY,SANDBOX_RUNTIME,SHELL,SHLVL,TMPDIR,TMPPREFIX,_,all_proxy,ftp_proxy,grpc_proxy,http_proxy,https_proxy,no_proxy
+--- Windows or WSL variables inside the fence: none
+--- /proc: command lines readable from the fence: 3; of processes carrying Claude Code's flags: 0; their environment readable: 0
+--- files the probe tried to read:
+    /home/tester/.local/share/steplet/secrets/fake-api-key: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/claude-config/.claude.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/claude-config/settings.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/runs/S3a/settings.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/home/.config/git/ignore: refused (FileNotFoundError: No such file or directory)
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 3 {'env.txt': 1, 'proc_2_environ.txt': 1, 'proc_3_environ.txt': 1}
+    fake API key, last 20 characters: 3 {'env.txt': 1, 'proc_2_environ.txt': 1, 'proc_3_environ.txt': 1}
+--- processes still running for this run: 0
+=== spike run S3a finished 2026-10-09T10:51:19.2759112+05:30
+```
+
+### S3b: the same, plus `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`
+
+The fenced command did not run: `bwrap: Can't mkdir /mnt/c/Program Files/ClaudeCode: Permission denied`.
+`C:\Program Files\ClaudeCode` does not exist on this Windows machine (`Test-Path` printed `False`). The "0" key
+counts below therefore show nothing: the probe never ran.
+
+```
+=== spike run S3b, started 2026-10-09T10:51:19.6783607+05:30
+--- run description: {"about": "S3: as S3a, plus CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": ["ANTHROPIC_API_KEY=@fake-api-key", "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1"]}
+--- working copy: /home/tester/steplet-work/S3b/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S3b/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S3b/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S3b/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S3b", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S3b.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+ANTHROPIC_API_KEY=<fake API key>
+CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S3b/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S3b/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 563 564
+host: pipe \\.\pipe\steplet-spike-S3b created, gate mode allow
+host: wsl.exe started (pid Some(28564), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.3 s
+--- launch finished after 1.3 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 4775, lines: 5, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S3b/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3b/settings.json /home/tester/.local/share/steplet/home/.config/git/ignore; echo \"EXIT=$?\"", "description": "Record what the fence can
+TOOL_RESULT is_error=True:
+    | Exit code 1
+    | bwrap: Can't mkdir /mnt/c/Program Files/ClaudeCode: Permission denied
+AGENT: Spike S3: done.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=340
+       permission_denials=[]
+       text: Spike S3: done.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S3b.gate.log:
+    1791523282.309 pid=34312 started; 1 environment variables: SystemRoot
+    1791523282.510 pid=34312 tool="Bash" behavior="allow" ms=0 input={"command":"python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3b/settings.json /home/tester/.local/share/steplet/home/.config/git/igno
+--- gate log S3b.host-gate.log:
+    1791523282.510 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523282.732 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","34312","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/teste
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    +0.27s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=False tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.27]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? spike_probes/
+    !! .env
+    !! .env.development
+    !! .env.development.local
+    !! .env.local
+    !! .env.production
+    !! .env.production.local
+    !! .env.test
+    !! .env.test.local
+    !! .gitmodules
+    !! .npmrc
+    !! .yarnrc
+    !! .yarnrc.yml
+    !! bunfig.toml
+    !! package-lock.json
+    !! package.json
+    !! pnpm-lock.yaml
+    !! tests/m0_config.json
+    !! yarn.lock
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S3b-repo/1e6a6b94-d4e4-4ee2-91f7-1c25bb78a6da.jsonl']
+--- new files in Steplet's private home: ['.bash_aliases', '.bash_profile', '.bashrc', '.bunfig.toml', '.cache/claude-cli-nodejs/-home-tester-steplet-work-S3b-repo/mcp-logs-gate/2026-10-09T05-21-22-114Z.jsonl', '.gitconfig', '.netrc', '.npmrc', '.profile', '.yarnrc', '.yarnrc.yml', '.zshrc']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S3b finished 2026-10-09T10:51:25.6809703+05:30
+```
+
+### S3c: key only through `apiKeyHelper`
+
+```
+=== spike run S3c, started 2026-10-09T10:51:26.0982506+05:30
+--- run description: {"about": "S3: key through apiKeyHelper only; can the fence see it?", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": [], "settings_extra": {"apiKeyHelper": "/bin/cat {P}/secrets/fake-api-key"}}
+--- working copy: /home/tester/steplet-work/S3c/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S3c/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S3c/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S3c/repo/.git/**)"
+    ]
+  },
+  "apiKeyHelper": "/bin/cat /home/tester/.local/share/steplet/secrets/fake-api-key"
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S3c", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S3c.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S3c/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S3c/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 706 707
+host: pipe \\.\pipe\steplet-spike-S3c created, gate mode allow
+host: wsl.exe started (pid Some(4092), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.3 s
+--- launch finished after 1.3 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 5992, lines: 5, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S3c/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+TOOL_USE Bash: {"command": "python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3c/settings.json /home/tester/.local/share/steplet/home/.config/git/ignore; echo \"EXIT=$?\"", "description": "Record what the fence can
+TOOL_RESULT is_error=False:
+    | probe: 52 environment variables, 5 /proc files copied, 5 reads tried
+    | /home/tester/.local/share/steplet/secrets/fake-api-key: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/claude-config/.claude.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/claude-config/settings.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/runs/S3c/settings.json: refused (FileNotFoundError: No such file or directory)
+    | /home/tester/.local/share/steplet/home/.config/git/ignore: refused (FileNotFoundError: No such file or directory)
+    | EXIT=0
+AGENT: Spike S3: done.
+RESULT subtype=success is_error=False num_turns=2 duration_ms=385
+       permission_denials=[]
+       text: Spike S3: done.
+event types: {'system/init': 1, 'assistant': 2, 'user': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S3c.gate.log:
+    1791523288.689 pid=8064 started; 1 environment variables: SystemRoot
+    1791523288.910 pid=8064 tool="Bash" behavior="allow" ms=1 input={"command":"python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/tester/.local/share/steplet/claude-config/settings.json /home/tester/.local/share/steplet/runs/S3c/settings.json /home/tester/.local/share/steplet/home/.config/git/ignor
+--- gate log S3c.host-gate.log:
+    1791523288.910 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+    1791523289.149 tasklist:
+    "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
+    "spike-gate.exe","8064","Console","1","3,932 K","Unknown","LAPTOP-R1RG22O7\RANVIR","0:00:00","N/A"
+    
+--- every tool call the agent made, and whether it asked the checker first:
+    Bash       asked=yes  python3 spike_probes/s3_probe.py /home/tester/.local/share/steplet/secrets/fake-api-key /home/tester/.local/share/steplet/claude-config/.claude.json /home/teste
+--- scripted model: every request it received:
+    +0.00s agent loop /v1/messages?beta=true step=0 answer=tool model=claude-opus-5 key_sent=True key_is_test_key=True bearer=True tools=27
+    +0.31s agent loop /v1/messages?beta=true step=1 answer=text model=claude-opus-5 key_sent=True key_is_test_key=True bearer=True tools=27
+    tools offered to the model on the first agent request: Agent,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+    seconds between agent requests: [0.31]
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? s3_seen/
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S3c-repo/da37b4bc-105d-4ee7-98f7-01c116bfb013.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S3c-repo/mcp-logs-gate/2026-10-09T05-21-28-497Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- environment variable names inside the fence: AI_AGENT,ALL_PROXY,ANTHROPIC_BASE_URL,CLAUDECODE,CLAUDE_CODE_CHILD_SESSION,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC,CLAUDE_CODE_ENTRYPOINT,CLAUDE_CODE_EXECPATH,CLAUDE_CODE_HOST_HTTP_PROXY_PORT,CLAUDE_CODE_HOST_SOCKS_PROXY_PORT,CLAUDE_CODE_SESSION_ID,CLAUDE_CODE_TMPDIR,CLAUDE_CONFIG_DIR,CLAUDE_EFFORT,CLAUDE_PID,CLAUDE_TMPDIR,CLOUDSDK_PROXY_ADDRESS,CLOUDSDK_PROXY_PASSWORD,CLOUDSDK_PROXY_PORT,CLOUDSDK_PROXY_TYPE,CLOUDSDK_PROXY_USERNAME,COREPACK_ENABLE_AUTO_PIN,DISABLE_AUTOUPDATER,DOCKER_HTTPS_PROXY,DOCKER_HTTP_PROXY,FTP_PROXY,GIT_CONFIG_PARAMETERS,GIT_EDITOR,GIT_SSH_COMMAND,GRPC_PROXY,HOME,HTTPS_PROXY,HTTP_PROXY,LANG,MIMALLOC_SCAVENGER,NO_PROXY,NoDefaultCurrentDirectoryInExePath,PATH,PWD,RSYNC_PROXY,SANDBOX_RUNTIME,SHELL,SHLVL,TMPDIR,TMPPREFIX,_,all_proxy,ftp_proxy,grpc_proxy,http_proxy,https_proxy,no_proxy
+--- Windows or WSL variables inside the fence: none
+--- /proc: command lines readable from the fence: 3; of processes carrying Claude Code's flags: 0; their environment readable: 0
+--- files the probe tried to read:
+    /home/tester/.local/share/steplet/secrets/fake-api-key: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/claude-config/.claude.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/claude-config/settings.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/runs/S3c/settings.json: refused (FileNotFoundError: No such file or directory)
+    /home/tester/.local/share/steplet/home/.config/git/ignore: refused (FileNotFoundError: No such file or directory)
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S3c finished 2026-10-09T10:51:32.0994463+05:30
+```
+
+### S3d: no key at all
+
+The scripted model wrote no request log for this run (`ls: cannot access '/home/tester/m1/logs/S3d.model.log'`),
+so no request reached it, with or without a key.
+
+```
+=== spike run S3d, started 2026-10-09T10:51:51.9020447+05:30
+--- run description: {"about": "S3: no key at all; is there any sign-in to fall back on?", "script": "s3_probe.json", "gate": "exe", "gate_mode": "allow", "shape": "product", "launch": "host", "host": {"env_mode": "systemroot"}, "probes": ["s3_probe.py"], "env_extra": []}
+--- working copy: /home/tester/steplet-work/S3d/repo HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- settings.json:
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "/mnt",
+        "/home/tester/.local/share/steplet",
+        "/home/tester/steplet-work",
+        "/home/tester/m1"
+      ],
+      "allowRead": [
+        "/home/tester/steplet-work/S3d/repo"
+      ],
+      "denyWrite": [
+        "/home/tester/steplet-work/S3d/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//home/tester/.local/share/steplet/**)",
+      "Read(//home/tester/steplet-work/**)",
+      "Read(//home/tester/m1/**)",
+      "Edit(//home/tester/steplet-work/S3d/repo/.git/**)"
+    ]
+  }
+}
+--- MCP server: {"type": "stdio", "command": "/mnt/c/dev/runFile/spikes/target/release/spike-gate.exe", "args": ["--pipe", "steplet-spike-S3d", "--token", "<run token>", "--log", "C:\\dev\\m1\\logs\\S3d.gate.log"]}
+--- launch command, one argument per line:
+/usr/bin/timeout
+-k
+10
+600
+/usr/bin/env
+-i
+HOME=/home/tester/.local/share/steplet/home
+PATH=/usr/local/bin:/usr/bin:/bin
+LANG=C.UTF-8
+CLAUDE_CONFIG_DIR=/home/tester/.local/share/steplet/claude-config
+DISABLE_AUTOUPDATER=1
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+ANTHROPIC_BASE_URL=http://127.0.0.1:47900
+/home/tester/.local/share/steplet/claude-cli/bin/claude
+-p
+--output-format
+stream-json
+--verbose
+--include-hook-events
+--max-turns
+12
+--setting-sources
+user
+--strict-mcp-config
+--settings
+/home/tester/.local/share/steplet/runs/S3d/settings.json
+--mcp-config
+/home/tester/.local/share/steplet/runs/S3d/mcp.json
+--permission-prompt-tool
+mcp__gate__decide
+--- task text: Follow the spike script.
+--- helpers (scripted model, listener): running, pids 431 432
+host: pipe \\.\pipe\steplet-spike-S3d created, gate mode allow
+host: wsl.exe started (pid Some(8320), environment SystemRoot); task sent on its input, 24 bytes
+host: wsl.exe ended: Ok(Some(1)), after 2.0 s
+--- launch finished after 2 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 3430, lines: 3, raw 0x1B bytes: 0
+fake key text occurrences in raw stream: 0
+FORGED-FINAL-RESULT occurrences in raw stream: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/home/tester/steplet-work/S3d/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Task,AskUserQuestion,Bash,CronCreate,CronDelete,CronList,Edit,EnterPlanMode,EnterWorktree,ExitPlanMode,ExitWorktree,NotebookEdit,Read,ReportFindings,ScheduleWakeup,SendMessage,Skill,TaskCreate,TaskGet,TaskList,TaskOutput,TaskStop,TaskUpdate,WebFetch,WebSearch,Workflow,Write
+AGENT: Not logged in · Please run /login
+RESULT subtype=success is_error=True num_turns=1 duration_ms=120
+       permission_denials=[]
+       text: Not logged in · Please run /login
+event types: {'system/init': 1, 'assistant': 1, 'result/success': 1}
+top-level events of type 'result': 1
+--- error output:
+    (none)
+--- gate log S3d.gate.log:
+    1791523318.588 pid=1264 started; 1 environment variables: SystemRoot
+    1791523318.809
+--- gate log S3d.host-gate.log:
+    (none)
+--- every tool call the agent made, and whether it asked the checker first:
+--- m0_results.jsonl (the fixture's own record):
+    (none)
+--- listener inside WSL (127.0.0.1:47831):
+    (none)
+--- marker files: WSL none | Windows none
+--- working copy HEAD: 7f4b72d7981454558a3631310426dcff4d4ebd50
+--- git status --short --ignored:
+    ?? spike_probes/
+    !! tests/m0_config.json
+--- files in .git/hooks: ['applypatch-msg.sample', 'commit-msg.sample', 'fsmonitor-watchman.sample', 'post-update.sample', 'pre-applypatch.sample', 'pre-commit.sample', 'pre-merge-commit.sample', 'pre-push.sample', 'pre-rebase.sample', 'pre-receive.sample', 'prepare-commit-msg.sample', 'push-to-checkout.sample', 'sendemail-validate.sample', 'update.sample']
+--- new files in Claude Code's private settings folder: ['projects/-home-tester-steplet-work-S3d-repo/ae60345b-9f0a-44f1-b9ac-134ce5845f4b.jsonl']
+--- new files in Steplet's private home: ['.cache/claude-cli-nodejs/-home-tester-steplet-work-S3d-repo/mcp-logs-gate/2026-10-09T05-21-58-375Z.jsonl']
+--- private home .config/git/ignore: '**/.claude/.cc-writes/\n'
+--- real ~/.config/git/ignore: before None | after None
+--- Claude Code's record for this folder: before null | after null
+--- S8 connection attempts:
+    (none)
+--- API key text found (counts only; the text is never printed):
+    fake API key: 0 
+    fake API key, last 20 characters: 0 
+--- processes still running for this run: 0
+=== spike run S3d finished 2026-10-09T10:52:01.5950978+05:30
+```
+
+### S3e: in the main Ubuntu, does a key win over the stored sign-in?
+
+The script's prompt check printed `not JSON` because Claude Code wrote a warning line before the JSON, and the
+script shows only the first 200 characters. The script is left as it ran. The outcome of that one prompt was read
+from the session record Claude Code saved in milestone 0's folder (`spikes/tools/s3e_session.py`, read only):
+
+```
+claude: 2.1.220 (Claude Code)
+--- without a key:
+authMethod: claude.ai
+--- with a made-up key:
+authMethod: claude.ai
+--- one tiny prompt with the made-up key:
+not JSON: ⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set and takes precedence over your claude.ai login · Unset it to load your organization's connectors
+{"is_error"
+```
+
+```
+command: wsl -d Ubuntu --exec /usr/bin/python3 -I spikes/tools/s3e_session.py <the session file below>
+session file (the only file changed in the last 15 minutes under /home/ranvir/m0/claude-home): /home/ranvir/m0/claude-home/projects/-mnt-c-dev-runFile--claude-worktrees-phase-0-plan-continuation-775872/3a69049f-de59-42a8-ae45-6df09e9734d3.jsonl
+1 queue-operation   
+2 queue-operation   
+3 user   'Reply with the single word ok'
+4 attachment   
+5 attachment   
+6 attachment   
+7 assistant model=<synthetic> {'isApiErrorMessage': True, 'error': 'authentication_failed'} 'Invalid API key · Fix external API key'
+8 last-prompt   
+```
+
+**Verdict:** PASS, because route S3c passes all three parts: the scripted model shows
+`key_sent=True key_is_test_key=True` (Claude Code used the helper's key), `fake API key: 0` and
+`fake API key, last 20 characters: 0`, and all five files the probe tried to read say `refused`.
+- S3a fails as a route: Claude Code used the key, but the fence could read it in three places: the probe's own
+  environment (`env.txt`) and `/proc/2/environ` and `/proc/3/environ`, the fenced processes' own environments.
+- S3b is inconclusive: with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, Claude Code 2.1.220 asks `bwrap` to create
+  `/mnt/c/Program Files/ClaudeCode`, which fails, so no fenced command can run at all in this layout.
+- S3d: with no key, Claude Code stops with `Not logged in · Please run /login` and sends no request: Steplet's private
+  folder has no hidden sign-in to fall back on.
+- S3e: with a made-up key and milestone 0's signed-in folder, Claude Code says the key "takes precedence over your
+  claude.ai login", and the one prompt failed with `Invalid API key · Fix external API key`
+  (`authentication_failed`, from a `<synthetic>` model, so no model answered). Nothing went through the subscription.
+
+**The route Task 15 uses:** S3c, `apiKeyHelper` reading the key file in Steplet's private folder. It is the only route
+that passed, and the plan's recommendation: the key never sits in any process's environment or command line.
+
+**What it means:**
+- P1-A can ship with the key handed over through `apiKeyHelper` only. The app must never put the key in Claude Code's
+  environment or on a command line: every fenced program inherits that environment (S3a).
+- With `apiKeyHelper`, Claude Code also sends the key as `Authorization: Bearer` (`bearer=True` in S3c, `False` in
+  S3a). The real service has to accept that; Task 15's live run will show it.
+- `claude auth status` reports `authMethod: claude.ai` with and without a key, so it cannot tell the app which sign-in a
+  run will use. The run's own result (or the scripted model) is the evidence, not `auth status`.
+- An API key beats a stored subscription sign-in in `-p` mode, so a stray sign-in file cannot silently replace the
+  receiver's key.
+- Side effect: S3e left one new session record in milestone 0's Claude folder,
+  `/home/ranvir/m0/claude-home/projects/-mnt-c-dev-runFile--claude-worktrees-phase-0-plan-continuation-775872/`.
+  It holds only the prompt and the error; it was left in place.
