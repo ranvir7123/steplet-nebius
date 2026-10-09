@@ -1,4 +1,4 @@
-# Handoff: milestone 1, phase 0, tasks 1 to 10 done (9 Oct 2026)
+# Handoff: milestone 1, phase 0, tasks 1 to 14 done, Task 15 waiting for the test key (9 Oct 2026)
 
 Read `docs/handoff.md` first, then this file, then the plan `docs/plans/2026-10-08-milestone-1-phase-0.md`.
 The user approved the plan on 8 Oct 2026 and chose to run it **inline in one session, not through separate
@@ -19,7 +19,12 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 | 8. S1, Windows gate through interop | **PASS** (`f74e0b8`). The runner-up is not needed. |
 | 9. S3, can the fence see the API key | **PASS through route S3c (`apiKeyHelper`)** (`a2b61a8`). S3a fails, S3b inconclusive. S3e ran with yes A5. |
 | 10. S4, fenced checkout, read-only `.git` | **PASS** (`2829563`), after three fixes to the plan's `srt` scripts (see "Changes"). Two parts inconclusive by the plan's rule: Claude Code's fence protects `.git/hooks` and `.git/config` from commands on its own. |
-| 11 onward | Not started. Next: Task 11. The next yes needed: A6 (Task 14), A7 and A8 (Task 15). |
+| 11. S5, commands that skip the checker | **RECORDED** (`1c853a5`). No setting makes every command ask; `ls`, `cat`, `wc`, `head`, `grep` on working-folder files always skip it. `--tools` limits the tools as documented. |
+| 12. S6, refusal switch (scripted) | **RECORDED** (`3f15f99`). `switchModelsOnFlag: false` in the run's settings file stops the switch; blocked fence attempts are not visible to Steplet. Field names: `stop_details.category`, `stop_details.explanation`. |
+| 13. S8, Windows side from the fence | **PASS** (`7f9770f`), `nat` mode only. The plan's probe had to send the proxy's login (it is in the proxy address). |
+| 14. S9, WASM, WebView2, check page | **PASS** (`8d770b6`, `7015c67`), yes A6 used. Built in the worktree's `spikes/target`. |
+| 15. Live checks | **Run files ready** (`spikes/runs/L1.json`, `S6L.json`, `S6L-off.json`, all `systemroot`, key through `apiKeyHelper`). **Waiting for the user** to save the test key (A7); A8 (the runs) is already agreed. Check the key by size only: `wsl -d steplet-test --exec /usr/bin/stat -c "%s bytes, mode %a" /home/tester/.local/share/steplet/secrets/anthropic-api-key`. |
+| 16. Wrap-up | Not started; needs Task 15. |
 
 ## Changes to the plan made while running it
 
@@ -70,6 +75,9 @@ git may refuse to overwrite them.
 - `wsl: Failed to start the systemd user session for 'tester'` appears on most calls into `steplet-test`. Not
   investigated; no run has failed because of it.
 - `python -m py_compile` leaves `__pycache__`; it is now in `.gitignore`.
+- **Windows Python cannot open `/c/...` paths** from the Bash tool; pass Windows paths (`C:\...`) to it.
+- **Clean-up options for the wrap-up:** `C:\dev\m1\s9` holds the throwaway SSH private key (delete when done);
+  Playwright's browsers are in `C:\Users\RANVIR\AppData\Local\ms-playwright` (`npx playwright uninstall`).
 - `claude` on the test distribution's `PATH` is the Windows wrapper; the scripts only call Steplet's pinned copy by full path.
 
 ## Findings to carry into later tasks
