@@ -1,4 +1,4 @@
-# Handoff: milestone 1, phase 0, tasks 1 to 14 done, Task 15 waiting for the test key (9 Oct 2026)
+# Handoff: milestone 1, phase 0, finished (10 Oct 2026)
 
 Read `docs/handoff.md` first, then this file, then the plan `docs/plans/2026-10-08-milestone-1-phase-0.md`.
 The user approved the plan on 8 Oct 2026 and chose to run it **inline in one session, not through separate
@@ -19,12 +19,12 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 | 8. S1, Windows gate through interop | **PASS** (`f74e0b8`). The runner-up is not needed. |
 | 9. S3, can the fence see the API key | **PASS through route S3c (`apiKeyHelper`)** (`a2b61a8`). S3a fails, S3b inconclusive. S3e ran with yes A5. |
 | 10. S4, fenced checkout, read-only `.git` | **PASS** (`2829563`), after three fixes to the plan's `srt` scripts (see "Changes"). Two parts inconclusive by the plan's rule: Claude Code's fence protects `.git/hooks` and `.git/config` from commands on its own. |
-| 11. S5, commands that skip the checker | **RECORDED** (`1c853a5`). No setting makes every command ask; `ls`, `cat`, `wc`, `head`, `grep` on working-folder files always skip it. `--tools` limits the tools as documented. |
+| 11. S5, commands that skip the checker | **RECORDED** (`1c853a5`). No setting makes every command ask; `ls`, `cat`, `wc`, `head`, `grep` on working-folder files always skip it. `--tools` limits the tools as documented. **Re-read on 10 Oct:** in S5a–c `ls`/`cat` were refused by the `product` shape's work-folder Read rule, not run; S5r (`product-readable`) shows they do run without asking. |
 | 12. S6, refusal switch (scripted) | **RECORDED** (`3f15f99`). `switchModelsOnFlag: false` in the run's settings file stops the switch; blocked fence attempts are not visible to Steplet. Field names: `stop_details.category`, `stop_details.explanation`. |
 | 13. S8, Windows side from the fence | **PASS** (`7f9770f`), `nat` mode only. The plan's probe had to send the proxy's login (it is in the proxy address). |
 | 14. S9, WASM, WebView2, check page | **PASS** (`8d770b6`, `7015c67`), yes A6 used. Built in the worktree's `spikes/target`. |
-| 15. Live checks | **Run files ready** (`spikes/runs/L1.json`, `S6L.json`, `S6L-off.json`, all `systemroot`, key through `apiKeyHelper`). **Waiting for the user** to save the test key (A7); A8 (the runs) is already agreed. Check the key by size only: `wsl -d steplet-test --exec /usr/bin/stat -c "%s bytes, mode %a" /home/tester/.local/share/steplet/secrets/anthropic-api-key`. |
-| 16. Wrap-up | Not started; needs Task 15. |
+| 15. Live checks | **Done** (`90c7ead`), yes A7, A8 used; about 0.94 USD. L1 **PASS**. S6L could not read its own working copy (the `product` shape's work-folder Read rule); the user chose a stand-in shape `product-readable` (checked by scripted S5r, S5x); on it S6R showed the live switch (`claude-opus-5[1m]` to `claude-opus-4-8`, `cyber`) and S6R-off showed `switchModelsOnFlag: false` stops it. A refused run reports `subtype=success`, `is_error=True`. Results: `spikes/results/live.md`. |
+| 16. Wrap-up | **Done** (10 Oct): summary at the end of `docs/milestone-1-spikes.md` (`spikes/results/summary.md`), status lines in the milestone plan and `docs/handoff.md`. **Waiting for the user:** which `docs/decisions.md` rows change, and the clean-up choices. |
 
 ## Changes to the plan made while running it
 
@@ -47,6 +47,7 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 - New tools: `spikes/tools/s2_env_min.py` (which Windows variables `wsl.exe` needs), `spikes/tools/s3e_session.py`
   (reads one saved session record).
 - `spikes/tools/selftest_gate.ps1` hands the gate a file instead of a PowerShell pipe (8 Oct).
+- **New shape `product-readable`** in `spikes/wsl/spike.py` (10 Oct, user's choice): the `product` fence without the `Read(...)` deny rule on the work folder, which refused the agent's own Read tool and `ls`/`cat` on its own copy. A stand-in for the checks, not the product layout: on it only the checker stops the Read tool from opening other runs' copies (S5x). New runs `S5r`, `S5x`, `S6R`, `S6R-off`; script `s5_reads.json`.
 
 ## Where the files live: this worktree and the main checkout
 
@@ -57,6 +58,8 @@ checkout. So new run files, scripts and the fixed `run.ps1` were **copied** into
 runs. There they are untracked files plus one modified tracked file (`spikes/tools/run.ps1`), identical to the
 branch. Before merging the branch into `main`, remove those copies (`git -C C:\dev\runFile status` lists them), or
 git may refuse to overwrite them.
+
+On 10 Oct a new session ran in the worktree `steplet-phase0-live-checks-15666e` (branch `claude/steplet-phase0-live-checks-15666e`), which a hook allows to write only its own files. Its branch was fast-forwarded to `82901a6` and Tasks 15 and 16 were committed there, so **that branch holds all of phase 0**; merge it, not `claude/phase-0-plan-continuation-775872`. Six more copies went into `C:\dev\runFile\spikes` (`wsl/spike.py` modified; `scripts/s5_reads.json`, `runs/S5r.json`, `runs/S5x.json`, `runs/S6R.json`, `runs/S6R-off.json` new).
 
 ## Traps hit (do not rediscover them)
 

@@ -2,6 +2,8 @@
 
 Written 7 Oct 2026 at the end of the design sessions. Read this first in a new session, then the two files it points to. Nothing in the repository is code yet.
 
+**Update, 10 Oct 2026: phase 0 finished on 10 Oct 2026; results in `docs/milestone-1-spikes.md`** (summary at its end: S1, S2, S3, S4, S7, S8, S9 and L1 pass; S5, S6 recorded; the work-folder Read rule in the planned folder layout blocks the agent's own working copy, so the layout is open for phase 3; changes to `docs/decisions.md` wait for the user's yes).
+
 **Update, 9 Oct 2026: phase 0 tasks 4 to 14 are done** (S7, S2, S1, S3, S4, S8, S9 pass; S5, S6 recorded; Task 15 waits for the test key; the app must give `wsl.exe` `SystemRoot`, never an empty environment; the key goes through `apiKeyHelper` only). Where to pick up: `docs/milestone-1-phase-0-handoff.md`.
 
 **Update, 8 Oct 2026, evening: milestone 1, phase 0 has started.** Tasks 1 to 3 of `docs/plans/2026-10-08-milestone-1-phase-0.md` are done (git repository, Rust tools, the test distribution `steplet-test`). Where to pick up, and traps already hit: `docs/milestone-1-phase-0-handoff.md`.
