@@ -7,6 +7,8 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::Help;
+use crate::canon::Canonical;
+use crate::date::Date;
 
 /// One value and the line it is on.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +54,18 @@ pub enum ParseErrorKind {
     UnclosedQuote,
     BadEscape { found: char },
     TextAfterQuote,
+    UnknownKey { key: String, allowed: &'static [&'static str] },
+    MissingKey { key: &'static str },
+    FirstKeyNotSteplet,
+    UnsupportedVersion { found: String },
+    ExpectedText { key: String },
+    ExpectedList { key: String },
+    ExpectedMap { key: String },
+    BadDate,
+    BadUrl,
+    BadCommit,
+    BadDomain,
+    BadFolder,
 }
 
 use ParseErrorKind as K;
@@ -241,6 +255,24 @@ impl fmt::Display for ParseError {
             K::UnclosedQuote => write!(f, "a quote that is not closed on the same line"),
             K::BadEscape { found } => write!(f, "`\\{found}` inside double quotes"),
             K::TextAfterQuote => write!(f, "text after the closing quote"),
+            K::UnknownKey { key, allowed } => {
+                write!(f, "unknown name `{key}`; allowed here: ")?;
+                for (i, a) in allowed.iter().enumerate() {
+                    write!(f, "{}{a}", if i == 0 { "" } else { ", " })?;
+                }
+                Ok(())
+            }
+            K::MissingKey { key } => write!(f, "`{key}` is missing"),
+            K::FirstKeyNotSteplet => write!(f, "the header must start with `steplet: 1`"),
+            K::UnsupportedVersion { found } => write!(f, "format version {found}; this Steplet reads version 1 only"),
+            K::ExpectedText { key } => write!(f, "`{key}` must be one line of text"),
+            K::ExpectedList { key } => write!(f, "`{key}` must be a list"),
+            K::ExpectedMap { key } => write!(f, "`{key}` must have named fields below it"),
+            K::BadDate => write!(f, "not a date written YYYY-MM-DD"),
+            K::BadUrl => write!(f, "not a public https address Steplet accepts"),
+            K::BadCommit => write!(f, "not a full commit hash"),
+            K::BadDomain => write!(f, "not a host name Steplet accepts"),
+            K::BadFolder => write!(f, "not a folder inside the repository"),
         }
     }
 }
@@ -263,7 +295,201 @@ impl ParseError {
             K::UnclosedQuote => ("the closing quote on the same line", "title: \"Run the tests\""),
             K::BadEscape { .. } => ("inside double quotes, a backslash only before a quote (\\\") or another backslash (\\\\)", "title: \"Say \\\"hi\\\"\""),
             K::TextAfterQuote => ("nothing after the closing quote, not even a comment", "title: \"Run the tests\""),
+            K::UnknownKey { .. } => ("only the names listed in this message", "title: Run the tests"),
+            K::MissingKey { key } => ("every required field", match *key {
+                "steplet" => "steplet: 1",
+                "sender" => "sender: Ana Lee",
+                "expires" => "expires: 2026-10-25",
+                "steps" => "steps:\n  - Run the tests.",
+                "url" => "  url: https://github.com/octocat/Hello-World.git",
+                "commit" => "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+                _ => "title: Run the tests",
+            }),
+            K::FirstKeyNotSteplet => ("`steplet: 1` as the first line of the header", "---\nsteplet: 1\ntitle: Run the tests"),
+            K::UnsupportedVersion { .. } => ("format version 1", "steplet: 1"),
+            K::ExpectedText { .. } => ("a single line of text", "title: Run the tests"),
+            K::ExpectedList { .. } => ("a list, one `- ` item per line, indented two spaces", "steps:\n  - Run the tests."),
+            K::ExpectedMap { .. } => ("named fields indented two spaces below", "repository:\n  url: https://github.com/octocat/Hello-World.git\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"),
+            K::BadDate => ("a real calendar date written YYYY-MM-DD", "expires: 2026-10-25"),
+            K::BadUrl => ("https://, a lowercase host name, then a path of letters, digits and . _ ~ / -; no user name, port, ? or #", "  url: https://github.com/octocat/Hello-World.git"),
+            K::BadCommit => ("the full commit hash: 40 (or 64) lowercase hexadecimal characters", "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"),
+            K::BadDomain => ("an exact lowercase host name with at least one dot; no *, scheme, port or path", "    - crates.io"),
+            K::BadFolder => ("a folder inside the repository written with /, no .. and no leading or trailing /; . means all of it", "    - target/debug"),
         };
         Help { allowed, example }
     }
+}
+
+pub const TOP_KEYS: &[&str] = &["steplet", "title", "sender", "expires", "repository", "steps", "allow", "never"];
+pub const REPOSITORY_KEYS: &[&str] = &["url", "commit"];
+pub const ALLOW_KEYS: &[&str] = &["commands", "domains", "read", "write"];
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Steplet {
+    pub title: Scalar,
+    pub sender: Scalar,
+    pub expires: Date,
+    pub expires_line: u32,
+    pub repository: Option<Repository>,
+    pub steps: Vec<Scalar>,
+    pub allow: Allow,
+    pub never: Vec<Scalar>,
+    /// The cleaned-up, signed body: what the agent is given.
+    pub body: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Repository {
+    pub url: Scalar,
+    pub commit: Scalar,
+}
+
+/// What the file asks to be allowed. Commands are kept as written; their meaning is phase 2's (R8).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Allow {
+    pub commands: Vec<Scalar>,
+    pub domains: Vec<Scalar>,
+    pub read: Vec<Scalar>,
+    pub write: Vec<Scalar>,
+}
+
+/// Reads the header of a cleaned-up file, once, from the signed bytes (row 15).
+pub fn parse(c: &Canonical) -> Result<Steplet, ParseError> {
+    let entries = tree(c.header(), Canonical::HEADER_FIRST_LINE)?;
+    let first = entries.first().ok_or(err(1, K::MissingKey { key: "steplet" }))?;
+    if first.key != "steplet" {
+        return Err(err(first.line, K::FirstKeyNotSteplet));
+    }
+    let version = text(first)?;
+    if version.text != "1" {
+        return Err(err(version.line, K::UnsupportedVersion { found: version.text }));
+    }
+    let top = Fields::new(&entries, TOP_KEYS)?;
+    let expires = text(top.required("expires", 1)?)?;
+    let repository = match top.optional("repository") {
+        None => None,
+        Some(e) => {
+            let f = Fields::new(map_of(e)?, REPOSITORY_KEYS)?;
+            let url = text(f.required("url", e.line)?)?;
+            if !is_https_url(&url.text) {
+                return Err(err(url.line, K::BadUrl));
+            }
+            let commit = text(f.required("commit", e.line)?)?;
+            if !is_commit(&commit.text) {
+                return Err(err(commit.line, K::BadCommit));
+            }
+            Some(Repository { url, commit })
+        }
+    };
+    let allow = match top.optional("allow") {
+        None => Allow::default(),
+        Some(e) => {
+            let f = Fields::new(map_of(e)?, ALLOW_KEYS)?;
+            Allow {
+                commands: f.list("commands")?,
+                domains: checked(f.list("domains")?, is_domain, K::BadDomain)?,
+                read: checked(f.list("read")?, is_folder, K::BadFolder)?,
+                write: checked(f.list("write")?, is_folder, K::BadFolder)?,
+            }
+        }
+    };
+    Ok(Steplet {
+        title: text(top.required("title", 1)?)?,
+        sender: text(top.required("sender", 1)?)?,
+        expires: Date::parse(&expires.text).ok_or(err(expires.line, K::BadDate))?,
+        expires_line: expires.line,
+        repository,
+        steps: list_of(top.required("steps", 1)?)?,
+        allow,
+        never: top.list("never")?,
+        body: c.body().to_string(),
+    })
+}
+
+struct Fields<'a> {
+    entries: &'a [Entry],
+}
+
+impl<'a> Fields<'a> {
+    fn new(entries: &'a [Entry], allowed: &'static [&'static str]) -> Result<Self, ParseError> {
+        if let Some(e) = entries.iter().find(|e| !allowed.contains(&e.key.as_str())) {
+            return Err(err(e.line, K::UnknownKey { key: e.key.clone(), allowed }));
+        }
+        Ok(Fields { entries })
+    }
+    fn optional(&self, key: &str) -> Option<&'a Entry> {
+        self.entries.iter().find(|e| e.key == key)
+    }
+    fn required(&self, key: &'static str, parent_line: u32) -> Result<&'a Entry, ParseError> {
+        self.optional(key).ok_or(err(parent_line, K::MissingKey { key }))
+    }
+    fn list(&self, key: &str) -> Result<Vec<Scalar>, ParseError> {
+        self.optional(key).map_or(Ok(Vec::new()), list_of)
+    }
+}
+
+fn text(e: &Entry) -> Result<Scalar, ParseError> {
+    match &e.value {
+        Node::Scalar(s) if s.text.is_empty() => Err(err(e.line, K::EmptyValue { key: e.key.clone() })),
+        Node::Scalar(s) => Ok(s.clone()),
+        _ => Err(err(e.line, K::ExpectedText { key: e.key.clone() })),
+    }
+}
+
+fn list_of(e: &Entry) -> Result<Vec<Scalar>, ParseError> {
+    match &e.value {
+        Node::List(items) => match items.iter().find(|s| s.text.is_empty()) {
+            Some(empty) => Err(err(empty.line, K::EmptyListItem)),
+            None => Ok(items.clone()),
+        },
+        _ => Err(err(e.line, K::ExpectedList { key: e.key.clone() })),
+    }
+}
+
+fn map_of(e: &Entry) -> Result<&[Entry], ParseError> {
+    match &e.value {
+        Node::Map(m) => Ok(m),
+        _ => Err(err(e.line, K::ExpectedMap { key: e.key.clone() })),
+    }
+}
+
+fn checked(items: Vec<Scalar>, ok: fn(&str) -> bool, kind: ParseErrorKind) -> Result<Vec<Scalar>, ParseError> {
+    match items.iter().find(|s| !ok(&s.text)) {
+        Some(bad) => Err(err(bad.line, kind)),
+        None => Ok(items),
+    }
+}
+
+fn is_domain(s: &str) -> bool {
+    let label_ok = |l: &str| {
+        !l.is_empty()
+            && l.len() <= 63
+            && !l.starts_with('-')
+            && !l.ends_with('-')
+            && l.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    };
+    s.len() <= 253
+        && s.split('.').count() >= 2
+        && s.split('.').all(label_ok)
+        && s.rsplit('.').next().is_some_and(|tld| tld.bytes().any(|b| b.is_ascii_lowercase()))
+}
+
+fn is_https_url(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("https://") else { return false };
+    let (host, path) = rest.find('/').map_or((rest, ""), |i| (&rest[..i], &rest[i..]));
+    is_domain(host) && path.bytes().all(|b| b.is_ascii_alphanumeric() || b"._~/-".contains(&b))
+}
+
+fn is_commit(s: &str) -> bool {
+    (s.len() == 40 || s.len() == 64) && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn is_folder(s: &str) -> bool {
+    s == "."
+        || s.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && part.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        })
 }

@@ -824,3 +824,193 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 4 of 4 reader tests pass; 31 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
+
+## Task 5: the field list (`Steplet`) and the sender's example file
+
+**Step 1, the failing state** (the tests and `examples/run-tests.steplet` exist; `header.rs` has the new types and error kinds, words and help are empty for them, and `parse` always answers "bad date"):
+
+```
+> cargo test -p steplet-core --test header_fields
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.43s
+     Running tests\header_fields.rs (target\debug\deps\header_fields-c6763aa5ad6ce613.exe)
+
+running 8 tests
+test unknown_and_missing_fields ... FAILED
+test optional_parts_may_be_left_out ... FAILED
+test typed_values ... FAILED
+test every_field_error_has_words_and_help ... FAILED
+test the_version_comes_first_and_is_1 ... FAILED
+test reads_every_field_with_its_line ... FAILED
+test the_example_file_reads ... FAILED
+test wrong_shapes ... FAILED
+
+failures:
+
+---- unknown_and_missing_fields stdout ----
+
+thread 'unknown_and_missing_fields' (7128) panicked at crates\steplet-core\tests\header_fields.rs:81:5:
+assertion `left == right` failed
+  left: BadDate
+ right: UnknownKey { key: "colour", allowed: ["steplet", "title", "sender", "expires", "repository", "steps", "allow", "never"] }
+
+---- optional_parts_may_be_left_out stdout ----
+
+thread 'optional_parts_may_be_left_out' (42096) panicked at crates\steplet-core\tests\header_fields.rs:64:101:
+called `Result::unwrap()` on an `Err` value: ParseError { line: 1, kind: BadDate }
+
+---- typed_values stdout ----
+
+thread 'typed_values' (14512) panicked at crates\steplet-core\tests\header_fields.rs:107:9:
+assertion `left == right` failed: http://github.com/x
+  left: BadDate
+ right: BadUrl
+
+---- every_field_error_has_words_and_help stdout ----
+
+thread 'every_field_error_has_words_and_help' (38052) panicked at crates\steplet-core\tests\header_fields.rs:134:9:
+ParseError { line: 4, kind: BadDate }
+
+---- the_version_comes_first_and_is_1 stdout ----
+
+thread 'the_version_comes_first_and_is_1' (45712) panicked at crates\steplet-core\tests\header_fields.rs:73:5:
+assertion `left == right` failed
+  left: BadDate
+ right: UnsupportedVersion { found: "2" }
+
+---- reads_every_field_with_its_line stdout ----
+
+thread 'reads_every_field_with_its_line' (15776) panicked at crates\steplet-core\tests\header_fields.rs:45:24:
+called `Result::unwrap()` on an `Err` value: ParseError { line: 1, kind: BadDate }
+
+---- the_example_file_reads stdout ----
+
+thread 'the_example_file_reads' (42204) panicked at crates\steplet-core\tests\header_fields.rs:140:71:
+called `Result::unwrap()` on an `Err` value: ParseError { line: 1, kind: BadDate }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- wrong_shapes stdout ----
+
+thread 'wrong_shapes' (35856) panicked at crates\steplet-core\tests\header_fields.rs:91:5:
+assertion `left == right` failed
+  left: BadDate
+ right: ExpectedText { key: "title" }
+
+
+failures:
+    every_field_error_has_words_and_help
+    optional_parts_may_be_left_out
+    reads_every_field_with_its_line
+    the_example_file_reads
+    the_version_comes_first_and_is_1
+    typed_values
+    unknown_and_missing_fields
+    wrong_shapes
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test header_fields`
+(exit code 101)
+```
+
+All 8 fail. (In `typed_values`, the first two checks expect "bad date" and so pass against this stub; the URL checks after them fail.)
+
+**Step 3, after writing the field list, every core test so far** (the workspace has only this crate, so this is also the whole-workspace check):
+
+```
+> cargo test -p steplet-core
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.30s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-38718543c69260ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test every_error_has_words_and_help ... ok
+test exactly_one_final_newline ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test leading_and_inner_spaces_stay ... ok
+test no_unicode_normalisation ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test bad_utf8_names_its_line ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test windows_line_endings_become_unix_ones ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-2906a30ba1950f50.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test block_lines_must_be_indented_base64 ... ok
+test block_not_last_in_the_header ... ok
+test markers_without_the_key_line ... ok
+test the_block_is_split_off ... ok
+test the_key_line_must_be_exact ... ok
+test two_blocks ... ok
+test end_marker_missing ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-5a189c9e65d3ab0d.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test reads_and_writes_dates ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-c6763aa5ad6ce613.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test the_example_file_reads ... ok
+test reads_every_field_with_its_line ... ok
+test the_version_comes_first_and_is_1 ... ok
+test wrong_shapes ... ok
+test unknown_and_missing_fields ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-e4442433822f47b1.exe)
+
+running 4 tests
+test every_refusal_has_words_and_help ... ok
+test maps_lists_and_values ... ok
+test values_yaml_reads_as_written ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 1.00s
+(exit code 0)
+```
+
+The example file is stored with Unix line endings, and Git's settings keep it that way (`git check-attr text eol -- examples/run-tests.steplet` printed `text: set` and `eol: lf`; `file` printed `ASCII text`, with no mention of CRLF).
+
+**Verdict: done.** date 5, canon 12, canon_signature 10, header_tree 4, header_fields 8: all 39 pass; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
