@@ -1014,3 +1014,196 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 The example file is stored with Unix line endings, and Git's settings keep it that way (`git check-attr text eol -- examples/run-tests.steplet` printed `text: set` and `eol: lf`; `file` printed `ASCII text`, with no mention of CRLF).
 
 **Verdict: done.** date 5, canon 12, canon_signature 10, header_tree 4, header_fields 8: all 39 pass; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
+
+## Task 7: size limits
+
+**Run before Task 6.** Task 6 needs download B1, which waits for the user's yes. Task 7 uses only the reader and the field list (Tasks 4 and 5), and nothing from Task 6, so it was done first. Task 6's section comes after this one.
+
+**Step 1, the failing state** (the tests exist; `limits.rs` has the types, `check` finds nothing, and the words and help are empty):
+
+```
+> cargo test -p steplet-core --test limits
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.44s
+     Running tests\limits.rs (target\debug\deps\limits-8eba36e20f711b28.exe)
+
+running 5 tests
+test a_command_of_300_characters_is_too_long_counted_in_characters ... FAILED
+test domains_and_folders ... FAILED
+test words_and_help ... FAILED
+test one_over_each_limit_names_the_first_line_over ... FAILED
+test at_the_limits_nothing_is_reported ... ok
+
+failures:
+
+---- a_command_of_300_characters_is_too_long_counted_in_characters stdout ----
+
+thread 'a_command_of_300_characters_is_too_long_counted_in_characters' (2340) panicked at crates\steplet-core\tests\limits.rs:45:5:
+assertion `left == right` failed
+  left: []
+ right: [LimitBreach { what: CommandLength, line: 10, found: 300, max: 299 }]
+
+---- domains_and_folders stdout ----
+
+thread 'domains_and_folders' (4748) panicked at crates\steplet-core\tests\limits.rs:66:5:
+assertion `left == right` failed
+  left: []
+ right: [Domains, ReadFolders, WriteFolders]
+
+---- words_and_help stdout ----
+
+thread 'words_and_help' (31500) panicked at crates\steplet-core\tests\limits.rs:72:5:
+assertion `left == right` failed
+  left: ""
+ right: "line 37: 31 steps; at most 30 are allowed"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- one_over_each_limit_names_the_first_line_over stdout ----
+
+thread 'one_over_each_limit_names_the_first_line_over' (34604) panicked at crates\steplet-core\tests\limits.rs:34:5:
+assertion `left == right` failed
+  left: []
+ right: [LimitBreach { what: Steps, line: 37, found: 31, max: 30 }]
+
+
+failures:
+    a_command_of_300_characters_is_too_long_counted_in_characters
+    domains_and_folders
+    one_over_each_limit_names_the_first_line_over
+    words_and_help
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test limits`
+(exit code 101)
+```
+
+4 fail and `at_the_limits_nothing_is_reported` passes, as the plan predicts.
+
+**Step 3, after writing `check`:**
+
+```
+> cargo test -p steplet-core --test limits
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+     Running tests\limits.rs (target\debug\deps\limits-8eba36e20f711b28.exe)
+
+running 5 tests
+test words_and_help ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test domains_and_folders ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+**Check before committing:**
+
+```
+> cargo test --workspace
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-38718543c69260ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test bad_utf8_names_its_line ... ok
+test leading_and_inner_spaces_stay ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test every_error_has_words_and_help ... ok
+test no_unicode_normalisation ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test windows_line_endings_become_unix_ones ... ok
+test exactly_one_final_newline ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-2906a30ba1950f50.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test block_not_last_in_the_header ... ok
+test block_lines_must_be_indented_base64 ... ok
+test the_key_line_must_be_exact ... ok
+test markers_without_the_key_line ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test two_blocks ... ok
+test the_block_is_split_off ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+test end_marker_missing ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-5a189c9e65d3ab0d.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test refuses_anything_else ... ok
+test reads_and_writes_dates ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-c6763aa5ad6ce613.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test reads_every_field_with_its_line ... ok
+test the_example_file_reads ... ok
+test the_version_comes_first_and_is_1 ... ok
+test unknown_and_missing_fields ... ok
+test wrong_shapes ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-e4442433822f47b1.exe)
+
+running 4 tests
+test values_yaml_reads_as_written ... ok
+test every_refusal_has_words_and_help ... ok
+test maps_lists_and_values ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-8eba36e20f711b28.exe)
+
+running 5 tests
+test words_and_help ... ok
+test domains_and_folders ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 1.02s
+(exit code 0)
+```
+
+**Verdict: done.** 5 of 5 limit tests pass; 44 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. One change from the plan, layout only: the plan said "add to `limits.rs`", which would put the `use` lines below the constants; they were moved to the top of the file, where Rust code normally keeps them. The code itself is the plan's.
