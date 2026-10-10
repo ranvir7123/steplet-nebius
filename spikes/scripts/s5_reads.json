@@ -1,0 +1,11 @@
+{
+  "about": "Reads of the own working copy, then of another run's copy, with the Read tool and with Bash",
+  "steps": [
+    {"tool": "Read", "input": {"file_path": "{WORK}/README.md"}},
+    {"tool": "Bash", "input": {"command": "ls -la", "description": "List files"}},
+    {"tool": "Bash", "input": {"command": "cat README.md", "description": "Show the readme"}},
+    {"tool": "Read", "input": {"file_path": "{HOME}/steplet-work/L1/repo/README.md"}},
+    {"tool": "Bash", "input": {"command": "cat {HOME}/steplet-work/L1/repo/README.md; echo \"EXIT=$?\"", "description": "Show another run's readme"}},
+    {"text": "Spike S5: done."}
+  ]
+}

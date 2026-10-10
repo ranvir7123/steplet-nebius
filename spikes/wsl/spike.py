@@ -94,6 +94,12 @@ def settings_for(shape, work):
         deny = ["/mnt", str(P), str(HOME / "steplet-work"), str(M)]
         fs = {"denyRead": deny, "allowRead": [str(work)], "denyWrite": [str(work / ".git")]}
         rules = [f"Read(/{p}/**)" for p in deny] + [f"Edit(/{work}/.git/**)"]
+    elif shape == "product-readable":
+        # As product, but no Read rule on the work folder: a deny rule has no allowRead-style exception,
+        # so that rule also refused the agent's own Read and ls/cat on its working copy (S6L run 1).
+        deny = ["/mnt", str(P), str(HOME / "steplet-work"), str(M)]
+        fs = {"denyRead": deny, "allowRead": [str(work)], "denyWrite": [str(work / ".git")]}
+        rules = [f"Read(/{p}/**)" for p in deny if p != str(HOME / "steplet-work")] + [f"Edit(/{work}/.git/**)"]
     elif shape == "product-noallow":
         deny = ["/mnt", str(P), str(M)]
         fs = {"denyRead": deny, "denyWrite": [str(work / ".git")]}
