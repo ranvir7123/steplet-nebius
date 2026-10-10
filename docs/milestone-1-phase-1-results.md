@@ -666,3 +666,161 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 12 of 12 clean-up tests and 10 of 10 signature-block tests pass; 27 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
+
+## Task 4: the header reader (a small, strict part of YAML)
+
+**Step 1, the failing state** (the tests exist; `header.rs` holds the types, and `tree` always returns an empty list):
+
+```
+> cargo test -p steplet-core --test header_tree
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.03s
+     Running tests\header_tree.rs (target\debug\deps\header_tree-e4442433822f47b1.exe)
+
+running 4 tests
+test every_refusal_has_words_and_help ... FAILED
+test refusals_name_the_line ... FAILED
+test values_yaml_reads_as_written ... FAILED
+test maps_lists_and_values ... FAILED
+
+failures:
+
+---- every_refusal_has_words_and_help stdout ----
+
+thread 'every_refusal_has_words_and_help' (18008) panicked at crates\steplet-core\tests\header_tree.rs:89:30:
+called `Result::unwrap_err()` on an `Ok` value: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- refusals_name_the_line stdout ----
+
+thread 'refusals_name_the_line' (44204) panicked at crates\steplet-core\tests\header_tree.rs:10:26:
+called `Result::unwrap_err()` on an `Ok` value: []
+
+---- values_yaml_reads_as_written stdout ----
+
+thread 'values_yaml_reads_as_written' (8076) panicked at crates\steplet-core\tests\header_tree.rs:29:51:
+removal index (is 0) should be < len (is 0)
+
+---- maps_lists_and_values stdout ----
+
+thread 'maps_lists_and_values' (28352) panicked at crates\steplet-core\tests\header_tree.rs:17:5:
+assertion `left == right` failed
+  left: []
+ right: [Entry { key: "steplet", line: 2, value: Scalar(Scalar { text: "1", line: 2 }) }, Entry { key: "allow", line: 3, value: Map([Entry { key: "commands", line: 4, value: List([Scalar { text: "cargo test", line: 5 }, Scalar { text: "echo '#1'", line: 6 }]) }]) }, Entry { key: "title", line: 9, value: Scalar(Scalar { text: "it's", line: 9 }) }]
+
+
+failures:
+    every_refusal_has_words_and_help
+    maps_lists_and_values
+    refusals_name_the_line
+    values_yaml_reads_as_written
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test header_tree`
+(exit code 101)
+```
+
+All 4 fail.
+
+**Step 3, after writing the reader:**
+
+```
+> cargo test -p steplet-core --test header_tree
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.46s
+     Running tests\header_tree.rs (target\debug\deps\header_tree-e4442433822f47b1.exe)
+
+running 4 tests
+test maps_lists_and_values ... ok
+test every_refusal_has_words_and_help ... ok
+test refusals_name_the_line ... ok
+test values_yaml_reads_as_written ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+**Check before committing:**
+
+```
+> cargo test --workspace
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.39s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-38718543c69260ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test bad_utf8_names_its_line ... ok
+test a_lone_carriage_return_is_refused ... ok
+test every_error_has_words_and_help ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test leading_and_inner_spaces_stay ... ok
+test exactly_one_final_newline ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test windows_line_endings_become_unix_ones ... ok
+test no_unicode_normalisation ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-2906a30ba1950f50.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test block_not_last_in_the_header ... ok
+test block_lines_must_be_indented_base64 ... ok
+test end_marker_missing ... ok
+test markers_without_the_key_line ... ok
+test the_key_line_must_be_exact ... ok
+test two_blocks ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+test the_block_is_split_off ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-5a189c9e65d3ab0d.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test refuses_anything_else ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test reads_and_writes_dates ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-e4442433822f47b1.exe)
+
+running 4 tests
+test maps_lists_and_values ... ok
+test values_yaml_reads_as_written ... ok
+test every_refusal_has_words_and_help ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 0.85s
+(exit code 0)
+```
+
+**Verdict: done.** 4 of 4 reader tests pass; 31 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
