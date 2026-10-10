@@ -24,7 +24,7 @@ Results so far, with pasted output: `docs/milestone-1-spikes.md`.
 | 13. S8, Windows side from the fence | **PASS** (`7f9770f`), `nat` mode only. The plan's probe had to send the proxy's login (it is in the proxy address). |
 | 14. S9, WASM, WebView2, check page | **PASS** (`8d770b6`, `7015c67`), yes A6 used. Built in the worktree's `spikes/target`. |
 | 15. Live checks | **Done** (`90c7ead`), yes A7, A8 used; about 0.94 USD. L1 **PASS**. S6L could not read its own working copy (the `product` shape's work-folder Read rule); the user chose a stand-in shape `product-readable` (checked by scripted S5r, S5x); on it S6R showed the live switch (`claude-opus-5[1m]` to `claude-opus-4-8`, `cyber`) and S6R-off showed `switchModelsOnFlag: false` stops it. A refused run reports `subtype=success`, `is_error=True`. Results: `spikes/results/live.md`. |
-| 16. Wrap-up | **Done** (10 Oct): summary at the end of `docs/milestone-1-spikes.md` (`spikes/results/summary.md`), status lines in the milestone plan and `docs/handoff.md`. **Waiting for the user:** which `docs/decisions.md` rows change, and the clean-up choices. |
+| 16. Wrap-up | **Done** (10 Oct): summary at the end of `docs/milestone-1-spikes.md` (`spikes/results/summary.md`), status lines in the milestone plan and `docs/handoff.md`. The user chose the recommended option for each decision: E1 to E3, C8, C9 in `docs/decisions.md` (`990e2cc`). `C:\dev\m1\s9` moved to the Recycle Bin. **Still the user's call:** merging (remove the copies in `C:\dev\runFile\spikes` first), revoking the test key or keeping it for phase 5, `npx playwright uninstall`, milestone 0 clean-up. |
 
 ## Changes to the plan made while running it
 

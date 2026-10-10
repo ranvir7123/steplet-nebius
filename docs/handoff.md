@@ -2,7 +2,7 @@
 
 Written 7 Oct 2026 at the end of the design sessions. Read this first in a new session, then the two files it points to. Nothing in the repository is code yet.
 
-**Update, 10 Oct 2026: phase 0 finished on 10 Oct 2026; results in `docs/milestone-1-spikes.md`** (summary at its end: S1, S2, S3, S4, S7, S8, S9 and L1 pass; S5, S6 recorded; the work-folder Read rule in the planned folder layout blocks the agent's own working copy, so the layout is open for phase 3; changes to `docs/decisions.md` wait for the user's yes).
+**Update, 10 Oct 2026: phase 0 finished on 10 Oct 2026; results in `docs/milestone-1-spikes.md`** (summary at its end: S1, S2, S3, S4, S7, S8, S9 and L1 pass; S5, S6 recorded; the work-folder Read rule in the planned folder layout blocks the agent's own working copy, so the layout is open for phase 3; decisions E1 to E3 and corrections C8, C9 recorded in `docs/decisions.md`). Next: the phase 1 build plan.
 
 **Update, 9 Oct 2026: phase 0 tasks 4 to 14 are done** (S7, S2, S1, S3, S4, S8, S9 pass; S5, S6 recorded; Task 15 waits for the test key; the app must give `wsl.exe` `SystemRoot`, never an empty environment; the key goes through `apiKeyHelper` only). Where to pick up: `docs/milestone-1-phase-0-handoff.md`.
 
