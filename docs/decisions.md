@@ -210,6 +210,23 @@ Plan: `docs/plans/2026-10-08-milestone-1-plan.md`, approved by the user on 8 Oct
 | P5 | **Hostile suite runs on this laptop in a separate WSL distribution made only for tests, with a test-only Anthropic API key that has a spending cap.** A second machine before launch. | Keeps real sign-ins away from hostile test code; Windows 11 Home has no Hyper-V for a local virtual machine. |
 | P6 | **`C:\dev\runFile` becomes a git repository** after the user moves `keys.txt` and `sk.json` out of it. Licence decided before the first public push. | Commits need a repository; the two files must never enter history. |
 
+## After milestone 1, phase 0 (10 Oct 2026)
+
+Measured in the test distribution `steplet-test` with Claude Code 2.1.220. Evidence: `docs/milestone-1-spikes.md` (summary at its end; spike names point there). The user chose the recommended option for each item on 10 Oct 2026. Where these rows touch a D-row, these rows win.
+
+| # | Decision | Why |
+|---|---|---|
+| E1 | **The model switch after a refusal is off by default** [replaces D7]. Steplet sets `switchModelsOnFlag: false` in every run's settings file, so a run stays on the model the receiver approved. A refusal ends the run; the report shows the model, the refusal category and its explanation, and offers "run again, allowing another model". When the receiver allows it, D7's rule holds: the live log and report name every model used and show the refusal. The app decides a run failed from `is_error` and `stop_reason`, never from `subtype` alone. | S6 and S6 live: `switchModelsOnFlag: false` stops the switch (`model_refusal_no_fallback`); with the switch on, `claude-opus-4-8` finished a task `claude-opus-5[1m]` refused. A refused run reports `subtype=success` with `is_error=True`. |
+| E2 | **D8's fixed list of harmless commands stays; no setting makes every command ask** [replaces D8's last sentence]. Seen skipping the checker in 2.1.220: `ls`, `cat`, `wc`, `head`, `grep`, `echo`, `pwd`, `git status` (S5r), and `ls … && find …` from the live agent (S6R-off). The list itself is designed in phase 3. Whether `find` with `-exec` or `-delete` also skips the checker is not tested; the list must not accept such a command. | S5: neither `ask: ["Bash"]` nor `ask: ["Bash(*)"]` brings file-reading commands to the checker. |
+| E3 | **Open, to decide before phase 3 builds the runner: how the Linux-side work folders are laid out.** Requirement: the agent's own working copy is readable by its Read tool and by commands; other runs' copies and the private folder stay closed to the fence **and** to the Read tool without relying on the checker. The phase 0 stand-in `product-readable` is not this decision. | A `Read(...)` deny rule has no exception like `allowRead`, so a deny rule on the work folder also refused the agent's own copy (S6L; also S5a–c). Without it, the Read tool, which runs outside the fence, opened another run's copy once the checker said yes (S5x). |
+
+### Corrections to the milestone 1 plan, section 3
+
+| # | Plan row | Correction |
+|---|---|---|
+| C8 | Launching the run | `wsl.exe` gets `SystemRoot` as its only Windows variable, not an emptied environment. An empty environment fails (`Wsl/Service/0x8007072c`) and can leave a stopped distro hanging (S2). |
+| C9 | Linux-side folders | No `Read` deny rule on the work folder: it refused the agent's own copy. `Read` deny rules stay for `/mnt` and the private folder, the `Edit` deny rule for `.git` stays. How other runs' copies are closed: E3. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`
