@@ -1,0 +1,10 @@
+# Steplet product code. spikes/ is a separate, throwaway workspace and is not part of this one.
+[workspace]
+resolver = "3"
+members = ["crates/steplet-core"]
+exclude = ["spikes", "crates/steplet-core/fuzz"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+publish = false
