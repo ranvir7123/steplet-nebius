@@ -3,6 +3,7 @@
 #![no_std]
 extern crate alloc;
 
+pub mod canon;
 pub mod date;
 pub mod limits;
 

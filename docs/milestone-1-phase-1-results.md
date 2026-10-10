@@ -204,3 +204,203 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 5 of 5 date tests pass; the core builds for `wasm32v1-none` (no operating system); the spike workspace still builds on its own and passes 3 of 3, so the new root workspace does not swallow it. `Cargo.lock` was written with only `steplet-core` in it; `spikes/Cargo.lock` did not change (`git status` showed no change under `spikes/`). No compile errors in the plan's code for this task; nothing was changed from the plan.
+
+## Task 2: the clean-up and the header/body split
+
+**Step 1, the failing state** (the tests exist; `canon.rs` is a stub that always answers "no header start", with no words and no help):
+
+```
+> cargo test -p steplet-core --test canon
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.50s
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... FAILED
+test exactly_one_final_newline ... FAILED
+test the_header_opens_on_line_one_and_closes ... FAILED
+test no_unicode_normalisation ... FAILED
+test spaces_and_tabs_at_line_ends_go ... FAILED
+test windows_line_endings_become_unix_ones ... FAILED
+test one_byte_order_mark_is_dropped_and_only_one ... FAILED
+test bad_utf8_names_its_line ... FAILED
+test every_error_has_words_and_help ... FAILED
+test header_and_body_are_split_at_the_first_closing_line ... FAILED
+test leading_and_inner_spaces_stay ... FAILED
+test size_limits ... FAILED
+
+failures:
+
+---- a_lone_carriage_return_is_refused stdout ----
+
+thread 'a_lone_carriage_return_is_refused' (8104) panicked at crates\steplet-core\tests\canon.rs:48:5:
+assertion `left == right` failed
+  left: Err(NoHeaderStart)
+ right: Err(LoneCarriageReturn { line: 2 })
+
+---- exactly_one_final_newline stdout ----
+
+thread 'exactly_one_final_newline' (40012) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- the_header_opens_on_line_one_and_closes stdout ----
+
+thread 'the_header_opens_on_line_one_and_closes' (10336) panicked at crates\steplet-core\tests\canon.rs:56:5:
+assertion `left == right` failed
+  left: Err(NoHeaderStart)
+ right: Err(NoHeaderEnd)
+
+---- no_unicode_normalisation stdout ----
+
+thread 'no_unicode_normalisation' (41856) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- spaces_and_tabs_at_line_ends_go stdout ----
+
+thread 'spaces_and_tabs_at_line_ends_go' (34440) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- windows_line_endings_become_unix_ones stdout ----
+
+thread 'windows_line_endings_become_unix_ones' (44604) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- one_byte_order_mark_is_dropped_and_only_one stdout ----
+
+thread 'one_byte_order_mark_is_dropped_and_only_one' (45880) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- bad_utf8_names_its_line stdout ----
+
+thread 'bad_utf8_names_its_line' (31924) panicked at crates\steplet-core\tests\canon.rs:43:5:
+assertion `left == right` failed
+  left: Err(NoHeaderStart)
+ right: Err(NotUtf8 { line: 3 })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- every_error_has_words_and_help stdout ----
+
+thread 'every_error_has_words_and_help' (44296) panicked at crates\steplet-core\tests\canon.rs:95:9:
+FileTooLarge { bytes: 1 }
+
+---- header_and_body_are_split_at_the_first_closing_line stdout ----
+
+thread 'header_and_body_are_split_at_the_first_closing_line' (35640) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- leading_and_inner_spaces_stay stdout ----
+
+thread 'leading_and_inner_spaces_stay' (18164) panicked at crates\steplet-core\tests\canon.rs:4:34:
+should clean up: NoHeaderStart
+
+---- size_limits stdout ----
+
+thread 'size_limits' (41136) panicked at crates\steplet-core\tests\canon.rs:73:5:
+assertion failed: canonicalize(&at_limit).is_ok()
+
+
+failures:
+    a_lone_carriage_return_is_refused
+    bad_utf8_names_its_line
+    every_error_has_words_and_help
+    exactly_one_final_newline
+    header_and_body_are_split_at_the_first_closing_line
+    leading_and_inner_spaces_stay
+    no_unicode_normalisation
+    one_byte_order_mark_is_dropped_and_only_one
+    size_limits
+    spaces_and_tabs_at_line_ends_go
+    the_header_opens_on_line_one_and_closes
+    windows_line_endings_become_unix_ones
+
+test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test canon`
+(exit code 101)
+```
+
+All 12 fail, each for the reason the plan gives.
+
+**Step 3, after writing `canon.rs`:**
+
+```
+> cargo test -p steplet-core --test canon
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.31s
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test bad_utf8_names_its_line ... ok
+test every_error_has_words_and_help ... ok
+test exactly_one_final_newline ... ok
+test leading_and_inner_spaces_stay ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test no_unicode_normalisation ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test windows_line_endings_become_unix_ones ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+**Check before committing** (the whole workspace, and the no-operating-system build again):
+
+```
+> cargo test --workspace
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.25s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-38718543c69260ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-0f861d96947b4089.exe)
+
+running 12 tests
+test exactly_one_final_newline ... ok
+test leading_and_inner_spaces_stay ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test a_lone_carriage_return_is_refused ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test bad_utf8_names_its_line ... ok
+test every_error_has_words_and_help ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test no_unicode_normalisation ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test windows_line_endings_become_unix_ones ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-5a189c9e65d3ab0d.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test reads_and_writes_dates ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 0.86s
+(exit code 0)
+```
+
+**Verdict: done.** 12 of 12 clean-up tests pass; 17 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. The plan's code compiled as written; nothing was changed from the plan.
