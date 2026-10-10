@@ -3,3 +3,5 @@
 *.py text eol=lf
 *.mjs text eol=lf
 spikes/s9-core/tests/vectors/** binary
+*.steplet text eol=lf
+crates/steplet-core/tests/vectors/*.steplet binary

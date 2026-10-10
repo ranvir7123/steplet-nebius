@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans, run inline in one session (the user's choice from phase 0: not through separate agents). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Written 11 Oct 2026. Status: **approved by the user on 11 Oct 2026, with the recommended option for F1, F2 and F3** (recorded in `docs/decisions.md`, "Milestone 1, phase 1 choices"). To be run inline in a new session, starting at Task 1. Before approval, nothing in it had been built, installed or run, except the read-only checks in section 2.
+Written 11 Oct 2026. Status: **approved by the user on 11 Oct 2026, with the recommended option for F1, F2 and F3** (recorded in `docs/decisions.md`, "Milestone 1, phase 1 choices"). To be run inline in a new session, starting at Task 1. Before approval, nothing in it had been built, installed or run, except the read-only checks in section 2. **Re-reviewed on 11 Oct 2026, after approval:** every test traced by hand against its code, library names checked in the cached sources and on docs.rs; fixes applied (clippy download B4, example expiry moved to 2027-09-30, size check when signing, `Cargo.lock` from Task 1, no `cd` in steps, `.gitattributes` lines added to the repository, stale branch names).
 
 **Goal:** a strict, signed `.steplet` file format that the app (phase 4) and the check page (phase 6) read with the same code, and a command-line tool, `steplet-sign`, that lets a sender check and sign a file.
 
@@ -126,9 +126,9 @@ Every task includes these.
 - `ssh-keygen` is always called by full path on Windows: `C:\Windows\System32\OpenSSH\ssh-keygen.exe` (Git Bash finds a different one first).
 - Test keys are throwaway. Keys made for the committed test files live in `C:\dev\m1\p1` and are never committed; only public halves and signed files are.
 - New crate versions: the newest release at least 14 days old (section 2). Pinned with `=`.
-- Commits are local, on this worktree's branch `claude/steplet-phase1-plan-15bade`, never pushed. No attribution lines. Plain words in messages. Approving this plan approves the commits it lists; each download still gets its own yes (section 5).
+- Commits go on the branch of the worktree the session runs in, never straight onto `main`. Nothing is pushed unless the user says so (the GitHub repository `ranvir7123/steplet` is private; `main` is on it). No attribution lines. Plain words in messages. Approving this plan approves the commits it lists; each download still gets its own yes (section 5).
 - Evidence: no task is done without its test command and pasted output in `docs/milestone-1-phase-1-results.md`.
-- All commands run from the repository root of this worktree, `C:\dev\runFile\.claude\worktrees\steplet-phase1-plan-15bade`, in PowerShell unless marked. (`cd` lines below say "the repository root".)
+- All commands run from the repository root of the worktree the session runs in, in PowerShell unless marked. No step changes the working folder (`cd`): a `cd` in the PowerShell tool moves the whole session, so the steps use `--manifest-path` and `--fuzz-dir` instead.
 
 ---
 
@@ -215,6 +215,7 @@ Row 19 says "expiry required on signed files". I propose **required on every fil
 | B1 | Task 6 | cargo downloads `proptest` 1.11.0 and `saphyr-parser` 0.1.0, with their dependencies, from crates.io (test-only) | a few MB | delete the two lines from `crates/steplet-core/Cargo.toml` |
 | B2 | Task 13 | cargo downloads `libfuzzer-sys` 0.4.13, if it is not already in the cache from phase 0's fuzz smoke test (I check first and tell you) | under 1 MB | delete `crates/steplet-core/fuzz` |
 | B3 | Task 12, optional | **You** make a passphrase-protected throwaway key and sign one file with it in your own terminal (I cannot type a passphrase) | none | delete `C:\dev\m1\p1\pass*` |
+| B4 | Task 14 | `rustup component add clippy` (the Rust lint tool; checked 11 Oct 2026: not installed for the stable toolchain) | about 10 MB | `rustup component remove clippy` |
 
 Also, without a separate yes (covered by approving this plan): Task 9 makes two throwaway keys (Ed25519 and RSA) in `C:\dev\m1\p1`; the `steplet-sign` tests make throwaway keys in a fresh folder under `%TEMP%` and delete that folder when they finish.
 
@@ -503,7 +504,7 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 ```powershell
 cargo test -p steplet-core --test date
 cargo build -p steplet-core --target wasm32v1-none --release
-cd spikes; cargo test -p s9-core; cd ..
+cargo test --manifest-path spikes/Cargo.toml -p s9-core
 ```
 Expected: `5 passed`; the `wasm32v1-none` build finishes; `s9-core` still passes 3 of 3 (the new root workspace does not swallow the spikes).
 
@@ -517,10 +518,10 @@ Plan: `docs/plans/2026-10-11-milestone-1-phase-1.md`. Each task: the commands, t
 ```
 Paste the three commands and their output under it.
 ```powershell
-git add Cargo.toml crates/steplet-core docs/milestone-1-phase-1-results.md
+git add Cargo.toml Cargo.lock crates/steplet-core docs/milestone-1-phase-1-results.md
 git commit -m "Start the file core: workspace, dates, size limit numbers"
 ```
-(`Cargo.lock` appears once the core has a dependency, in Task 6; it is committed then.)
+(`Cargo.lock` is written by the first `cargo test`, even with no dependencies; it is committed from here on, so `git status` stays clean.)
 
 ---
 
@@ -1612,7 +1613,7 @@ Create `examples/run-tests.steplet`:
 steplet: 1
 title: Count the lines of the README in Hello-World
 sender: Ana Lee
-expires: 2026-10-25
+expires: 2027-09-30
 repository:
   url: https://github.com/octocat/Hello-World.git
   commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
@@ -1635,6 +1636,8 @@ The repository is already checked out at the commit above.
 2. Run `wc -l README`.
 3. Report the number it prints, and nothing else.
 ```
+(The expiry is 354 days out, the longest the 365-day cap allows with room to spare, so the committed example keeps passing `check` for most of a year. It still has to be moved forward before 30 Sep 2027; the sender's guide says so.)
+
 Add stubs so the test file compiles: the new error variants (with one `_ => …` arm in `Display` writing nothing and in `help()` returning empty strings), the three key lists, the types from **Interfaces**, and `parse` returning `Err(ParseError { line: 1, kind: ParseErrorKind::BadDate })`.
 
 Run: `cargo test -p steplet-core --test header_fields`
@@ -1877,7 +1880,7 @@ git commit -m "File core: the header's field list, typed values, and the sender'
 **Files:**
 - Modify: `crates/steplet-core/Cargo.toml` (dev-dependencies)
 - Test: `crates/steplet-core/tests/differential.rs`
-- Create: `Cargo.lock` (first dependency)
+- Modify: `Cargo.lock` (first dependencies)
 
 **Interfaces:** Consumes `header::{tree, Entry, Node}`. Produces nothing new.
 
@@ -2551,7 +2554,7 @@ git commit -m "File core: signature check, plus property tests for clean-up and 
 
 **Files:**
 - Create: `crates/steplet-core/tests/vectors/make_vectors.py`, the files it writes (listed below), `crates/steplet-core/tests/vectors.rs`
-- Modify: `.gitattributes` (add `crates/steplet-core/tests/vectors/*.steplet binary`)
+- Check: `.gitattributes` (the two `.steplet` lines, see Step 2)
 
 **Interfaces:** Consumes `canonicalize`, `verify`, `header::parse`. Produces the committed vectors, which Task 12 also reads.
 
@@ -2675,11 +2678,12 @@ python -I crates/steplet-core/tests/vectors/make_vectors.py
 ```
 Expected: every `ssh-keygen` line `exit 0`; the check line says `Good "steplet-v1" signature with ED25519 key SHA256:…`; the same fingerprint printed last. If `-O hashalg=sha256` is refused by `ssh-keygen` 9.5, record its message, drop that vector, and note it under "not verified".
 
-Add to `.gitattributes`:
+`.gitattributes` already holds these two lines (added 11 Oct 2026, when the plan was reviewed); check they are still there:
 ```
+*.steplet text eol=lf
 crates/steplet-core/tests/vectors/*.steplet binary
 ```
-(so git never changes `crlf.steplet`'s line endings).
+The first keeps the example file on disk identical to what gets signed (git has `core.autocrlf=true` here, which would otherwise write it with Windows line endings on checkout). The second, which wins for the vectors folder because later lines win, makes git never touch `crlf.steplet`'s line endings.
 
 - [ ] **Step 3: write the tests.** `crates/steplet-core/tests/vectors.rs`:
 ```rust
@@ -2744,7 +2748,7 @@ fn the_signed_header_reads() {
 
 - [ ] **Step 5: paste the script output and the test output under "## Task 9" and commit.**
 ```powershell
-git add .gitattributes crates/steplet-core/tests docs/milestone-1-phase-1-results.md
+git add crates/steplet-core/tests docs/milestone-1-phase-1-results.md
 git status --short
 git commit -m "File core: test files signed by Windows' own ssh-keygen"
 ```
@@ -3082,7 +3086,7 @@ fn a_good_unsigned_file() {
         "run-tests.steplet: ok
   3 steps; allowed: 1 command, 0 domains, 0 read folders, 0 write folders; 2 never lines
   repository: https://github.com/octocat/Hello-World.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
-  expires: 2026-10-25 (in 14 days)
+  expires: 2027-09-30 (in 354 days)
   signature: not signed
 "
     );
@@ -3108,12 +3112,12 @@ fn a_tab_names_its_line_and_shows_an_example() {
 
 #[test]
 fn expiry_in_the_past_or_too_far_ahead() {
-    let r = check("t", GOOD.as_bytes(), Date::parse("2026-10-26").unwrap());
-    assert!(!r.ok && r.text.contains("problem: line 5: this file expired on 2026-10-25"), "{}", r.text);
-    assert!(r.text.contains("expires: 2026-11-09"), "the example shows today + 14 days:\n{}", r.text);
-    let r = check("t", GOOD.as_bytes(), Date::parse("2025-10-24").unwrap());
+    let r = check("t", GOOD.as_bytes(), Date::parse("2027-10-01").unwrap());
+    assert!(!r.ok && r.text.contains("problem: line 5: this file expired on 2027-09-30"), "{}", r.text);
+    assert!(r.text.contains("expires: 2027-10-15"), "the example shows today + 14 days:\n{}", r.text);
+    let r = check("t", GOOD.as_bytes(), Date::parse("2026-09-29").unwrap());
     assert!(!r.ok && r.text.contains("more than 365 days"), "{}", r.text);
-    assert!(check("t", GOOD.as_bytes(), Date::parse("2026-10-25").unwrap()).text.contains("(today)"));
+    assert!(check("t", GOOD.as_bytes(), Date::parse("2027-09-30").unwrap()).text.contains("(today)"));
 }
 
 #[test]
@@ -3135,7 +3139,7 @@ fn limits_and_clean_up_errors() {
     assert!(!r.ok && r.text.contains("problem: line 1: the file must start with a line holding only `---`"), "{}", r.text);
 }
 ```
-Line numbers: in `examples/run-tests.steplet`, `Report the count.` is line 12 and `expires` line 5; with 31 steps starting on line 10, step 31 is on line 40.
+Line numbers: in `examples/run-tests.steplet`, `Report the count.` is line 12 and `expires` line 5; with 31 steps starting on line 10, step 31 is on line 40. Dates: from 11 Oct 2026 to 30 Sep 2027 is 354 days; from 29 Sep 2026 it is 366 days, one over the cap; 1 Oct 2027 plus 14 days is 15 Oct 2027.
 
 Stub `crates/steplet-sign/src/check.rs`:
 ```rust
@@ -3313,7 +3317,7 @@ cargo run -q -p steplet-sign -- check examples/run-tests.steplet; "exit code: $L
 cargo run -q -p steplet-sign -- check crates/steplet-core/tests/vectors/tampered.steplet; "exit code: $LASTEXITCODE"
 cargo run -q -p steplet-sign -- check; "exit code: $LASTEXITCODE"
 ```
-Expected: `5 passed`; the example prints `ok` with exit code 0 (until 25 Oct 2026; after that it says expired, exit 1); the tampered vector prints the signature problem with exit code 1; no file prints the usage with exit code 2.
+Expected: `5 passed`; the example prints `ok` with exit code 0 (until 30 Sep 2027; after that it says expired, exit 1); the tampered vector prints the signature problem with exit code 1 (until 31 Dec 2026, its expiry; after that an expiry problem too); no file prints the usage with exit code 2.
 
 - [ ] **Step 5: paste under "## Task 11" and commit.**
 ```powershell
@@ -3338,7 +3342,7 @@ What `sign` does, in order; it writes nothing unless every step succeeds:
 1. Reads and cleans up the file. An existing signature block is dropped from the text to sign (so signing again replaces it).
 2. Runs `content` (header, limits, expiry). Any problem: stop, show them.
 3. Writes the text to sign into a new folder under `%TEMP%`, runs `ssh-keygen -Y sign -f <key> -n steplet-v1 -O hashalg=sha512 <file>` with this terminal attached, so passphrase prompts work as usual. A non-zero exit: stop.
-4. Builds the signed file (`with_signature`), cleans it up again, and checks the signature with our own core. Not valid (for example an RSA key): stop.
+4. Builds the signed file (`with_signature`). If the block pushes it over the 256 KiB file limit: stop, with a plain message (the limit is checked on the whole file, so a file that passed `check` just under the limit can fail here). Then cleans it up again and checks the signature with our own core. Not valid (for example an RSA key): stop.
 5. Writes `<file>.steplet-sign-tmp` next to the file, then renames it over the file. Deletes the temporary folder in every case.
 
 - [ ] **Step 1: write the failing tests.** `crates/steplet-sign/tests/cli.rs`:
@@ -3541,6 +3545,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use steplet_core::NAMESPACE;
 use steplet_core::canon::canonicalize;
 use steplet_core::date::Date;
+use steplet_core::limits::MAX_FILE_BYTES;
 use steplet_core::sig::{self, SigStatus};
 
 use crate::check::{content, problem};
@@ -3585,6 +3590,12 @@ pub fn sign(req: &SignRequest) -> Result<String, String> {
     let pem = fs::read_to_string(work.0.join("payload.steplet.sig")).map_err(|e| format!("cannot read ssh-keygen's signature: {e}"))?;
 
     let signed = c.with_signature(&pem);
+    if signed.len() > MAX_FILE_BYTES {
+        return Err(format!(
+            "{name}: not signed; with the signature block the file would be {} bytes, over the limit of {MAX_FILE_BYTES} bytes (256 KiB); shorten it first",
+            signed.len()
+        ));
+    }
     let again = canonicalize(signed.as_bytes()).map_err(|e| format!("{name}: not signed; internal error: {e}"))?;
     let fingerprint = match sig::verify(&again, NAMESPACE) {
         SigStatus::Valid { fingerprint } => fingerprint,
@@ -3768,14 +3779,12 @@ crates/steplet-core/fuzz/coverage/
 $asan = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64"
 New-Item -ItemType Directory -Force crates\steplet-core\fuzz\corpus\read_file | Out-Null
 Copy-Item crates\steplet-core\tests\vectors\*.steplet, examples\*.steplet crates\steplet-core\fuzz\corpus\read_file\
-cd crates\steplet-core
 $env:PATH = "$asan;$env:PATH"
-cmd /c "cargo +nightly fuzz run read_file fuzz/corpus/read_file -- -max_total_time=900 -max_len=65536 > C:\dev\m1\p1\fuzz.txt 2>&1"
+cmd /c "cargo +nightly fuzz run --fuzz-dir crates/steplet-core/fuzz read_file crates/steplet-core/fuzz/corpus/read_file -- -max_total_time=900 -max_len=65536 > C:\dev\m1\p1\fuzz.txt 2>&1"
 "exit code: $LASTEXITCODE"
-cd ..\..
 Get-Content C:\dev\m1\p1\fuzz.txt -Tail 25
 ```
-Expected: the last lines show `Done N runs in 901 second(s)` and exit code 0. If it crashes: the input is in `fuzz/artifacts/read_file/`; I turn it into a normal test in the right test file, fix the code, and run again for the full 15 minutes. Each crash and fix is recorded.
+(`--fuzz-dir` points cargo-fuzz at the fuzz project from the repository root, so no `cd` is needed.) Expected: the last lines show `Done N runs in 901 second(s)` and exit code 0. If it crashes: the input is in `crates/steplet-core/fuzz/artifacts/read_file/`; I turn it into a normal test in the right test file, fix the code, and run again for the full 15 minutes. Each crash and fix is recorded.
 
 - [ ] **Step 4: paste the last lines (runs, time, corpus size) under "## Task 13" and commit.**
 ```powershell
@@ -3799,10 +3808,10 @@ git commit -m "File core: fuzz target, run for 15 minutes without a crash"
   3. The complete example (the F1 block from section 4 of this plan, without the `#` remarks).
   4. A table with one row per field: name, required or not, what is allowed, limit, example. (Values from Task 5's rules and row 12.)
   5. "Writing values": plain text; when to use double quotes (starts with a symbol, contains `: ` or ` #`, ends with `:`); the only two escapes; no tabs; two spaces per level; one line per value; comments only on their own line.
-  6. "Signing": Ed25519 keys only (`ssh-keygen -t ed25519`); what `sign` changes in the file (adds the block; Windows line endings become Unix ones); editing after signing breaks the signature; spaces and empty lines at line ends are not covered by the signature by design (R13); sign again to replace.
+  6. "Signing": Ed25519 keys only (`ssh-keygen -t ed25519`); what `sign` changes in the file (adds the block; Windows line endings become Unix ones); editing after signing breaks the signature; spaces and empty lines at line ends are not covered by the signature by design (R13); sign again to replace. Expiry: required, at most 365 days ahead, 14 days is usual; the example file's own date has to be moved forward before 30 Sep 2027.
   7. "What the messages mean": the exit codes 0, 1, 2, and two sample outputs (one ok, one problem) copied from Task 11's real output.
 
-- [ ] **Step 2: run every check and paste the output.**
+- [ ] **Step 2: run every check and paste the output.** Clippy is not installed (section 2); ask for yes B4 and run `rustup component add clippy` first.
 ```powershell
 cargo test --workspace 2>$null | Select-String -Pattern "^running|^test result|FAILED|panicked"
 cargo clippy --workspace --all-targets -- -D warnings
@@ -3827,7 +3836,7 @@ Then "What phase 1 did not verify" (Step 5's list, updated with anything found o
 
 - [ ] **Step 4: update the status lines and memory.** `docs/handoff.md` and the milestone plan get one dated status line each ("phase 1 finished on <date>; results in `docs/milestone-1-phase-1-results.md`"). `docs/decisions.md` already has the section "Milestone 1, phase 1 choices (11 Oct 2026)"; add a row only for anything decided differently during the phase (for example a change to the invisible-character table or a vector that `ssh-keygen` could not make). The memory file `project-steplet-state.md` gets the new state and next step (phase 2's build plan).
 
-- [ ] **Step 5: commit, then ask the user** whether to merge this branch into `main` (fast-forward, as after phase 0) and whether to remove the two old worktrees.
+- [ ] **Step 5: commit, then ask the user** whether to fast-forward `main` to this branch (as after phase 0), whether to push `main` to GitHub, and whether to remove the old worktrees (`phase-0-plan-continuation-775872`, `steplet-phase0-live-checks-15666e`, `steplet-phase1-plan-15bade`).
 ```powershell
 git add docs
 git commit -m "Phase 1 wrap-up: sender's guide, full checks, results summary"
@@ -3845,4 +3854,6 @@ git log --oneline main..HEAD
 - The transit test through WhatsApp, Gmail and Outlook (R13): a launch blocker, not part of milestone 1's phase 1.
 - How the preview draws the pieces (phase 4), the rating that turns these results into colours (phase 2), and the WASM build's results matching the native ones (phase 2's parity test). Task 14 only shows the core *builds* for WASM.
 - A fuzz run is a sample, not a proof: 15 minutes without a crash says nothing about inputs it did not try.
+- No cap on the length of a single `title`, `sender`, step or `never` line: row 12 caps list counts and command length only, so one step could be close to the 32 KiB header limit. Phase 2's rating (row 28: nothing cut off) decides whether that needs a limit; a decisions row then.
+- The code in this plan was never compiled before the run. The 11 Oct 2026 review traced every test by hand against the code and checked the library names in the cached sources and on docs.rs; a compile error found during the run is fixed openly and recorded.
 - macOS and Linux: `steplet-sign`'s tests run on Windows only (`#![cfg(windows)]`).
