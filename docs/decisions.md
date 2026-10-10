@@ -227,6 +227,23 @@ Measured in the test distribution `steplet-test` with Claude Code 2.1.220. Evide
 | C8 | Launching the run | `wsl.exe` gets `SystemRoot` as its only Windows variable, not an emptied environment. An empty environment fails (`Wsl/Service/0x8007072c`) and can leave a stopped distro hanging (S2). |
 | C9 | Linux-side folders | No `Read` deny rule on the work folder: it refused the agent's own copy. `Read` deny rules stay for `/mnt` and the private folder, the `Edit` deny rule for `.git` stays. How other runs' copies are closed: E3. |
 
+## Milestone 1, phase 1 choices (11 Oct 2026)
+
+Plan: `docs/plans/2026-10-11-milestone-1-phase-1.md`, approved by the user on 11 Oct 2026 with the recommended option for F1 to F3. Rows F4 to F10 are the smaller technical choices from the plan's section 4, approved with it.
+
+| # | Decision | Why |
+|---|---|---|
+| F1 | **Header fields, format version 1:** `steplet: 1` (first line), `title`, `sender`, `expires`, `repository` (`url`, `commit`), `steps` (1 to 30 one-line steps, in the header), `allow` (`commands`, `domains`, `read`, `write`), `never`, then `signature` as the last thing. Every other field is refused. Commands are plain text until phase 2 decides what a command rule means (R8). Domains are exact lowercase host names, no wildcards. Folders are relative paths inside the repository. | No earlier row listed the fields. Steps in the header give the preview an exact count and one row per step (row 28). |
+| F2 | **`steplet-sign sign` replaces the file in place**, through a temporary file and a rename; Windows line endings become Unix ones. | A second "signed" copy invites sending the wrong file. |
+| F3 | **`expires` is required on every file**, signed or not [amends row 19]. | One rule; an unsigned draft becomes signable without a new field. |
+| F4 | The header reader accepts only maps and lists of one-line values (plain, single- or double-quoted). No `|` blocks and no lists of maps [narrows plan section 3]. | The signature, the only multi-line value, is cut out by fixed markers before the reader runs. Less grammar, fewer ways to disagree with other YAML readers. Phase 2 adds lists of maps if R8 needs them. |
+| F5 | A lone carriage return (`\r` not followed by `\n`) refuses the file. | A known way to hide text in terminals; row 14 only covers CRLF. |
+| F6 | A signature marker line anywhere but the one allowed place, or a second `signature:` line, refuses the file. | R13: fixed markers, no guessing. |
+| F7 | `never` holds at most 25 lines. | Row 12 did not cover it; a starting value equal to the command limit. |
+| F8 | `display::Segment::Link { shown: Option<…>, real }`; a bare address has no separate shown text. | Lets a test prove the pieces always join back into the exact original text. |
+| F9 | Invisible characters (shown as badges): Unicode's default-ignorable characters and the categories Cc, Cf, Zs, Zl, Zp, Co, except tab, newline and space. Hand-written table, checked against `icu_properties` for every code point. | No Unicode library in the core keeps the WASM small; the test keeps the table honest. |
+| F10 | `steplet-sign` exit codes: 0 fine, 1 problems found or signing failed, 2 wrong use or the file could not be read. | |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`
