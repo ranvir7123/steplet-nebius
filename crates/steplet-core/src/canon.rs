@@ -61,6 +61,23 @@ impl Canonical {
     pub fn signature(&self) -> Option<&SignatureBlock> {
         self.signature.as_ref()
     }
+    /// The signed text with `pem` embedded as the signature block, the last thing in the header.
+    /// A block already present is left out, so this also replaces an old signature.
+    /// Line endings and empty lines in `pem` do not matter.
+    pub fn with_signature(&self, pem: &str) -> String {
+        let at = self.header.end;
+        let mut out = String::with_capacity(self.signed.len() + pem.len() + 64);
+        out.push_str(&self.signed[..at]);
+        out.push_str(SIGNATURE_KEY_LINE);
+        out.push('\n');
+        for line in pem.lines().map(str::trim_end).filter(|l| !l.is_empty()) {
+            out.push_str("  ");
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push_str(&self.signed[at..]);
+        out
+    }
 }
 
 pub fn canonicalize(raw: &[u8]) -> Result<Canonical, CanonError> {
@@ -120,9 +137,65 @@ fn split(lines: &[&str]) -> Result<Canonical, CanonError> {
     Ok(Canonical { text, signed, header, body, signature })
 }
 
-/// Task 3 replaces this with the real search. For now: no signature block.
-fn signature_block(_lines: &[&str], _close: usize) -> Result<Option<(usize, usize, String)>, CanonError> {
-    Ok(None)
+pub const BEGIN: &str = "-----BEGIN SSH SIGNATURE-----";
+pub const END: &str = "-----END SSH SIGNATURE-----";
+pub const SIGNATURE_KEY_LINE: &str = "signature: |";
+
+/// Finds the signature block: (index of `signature: |`, index of the END line, armoured text).
+/// `close` is the index of the closing `---` line. Indexes are 0-based.
+fn signature_block(lines: &[&str], close: usize) -> Result<Option<(usize, usize, String)>, CanonError> {
+    let line_no = |i: usize| i as u32 + 1;
+    let mut keys = (1..close).filter(|&i| lines[i].starts_with("signature:"));
+    let found = keys.next();
+    if let Some(second) = keys.next() {
+        return Err(CanonError::SignatureTwice { line: line_no(second) });
+    }
+    let mut block = None;
+    if let Some(k) = found {
+        if lines[k] != SIGNATURE_KEY_LINE {
+            return Err(CanonError::SignatureBroken { line: line_no(k) });
+        }
+        if lines.get(k + 1).and_then(|l| l.strip_prefix("  ")) != Some(BEGIN) {
+            return Err(CanonError::SignatureBroken { line: line_no(k + 1) });
+        }
+        let mut pem = String::from(BEGIN);
+        pem.push('\n');
+        let mut j = k + 2;
+        let end = loop {
+            if j >= close {
+                return Err(CanonError::SignatureBroken { line: line_no(close) });
+            }
+            let content = lines[j].strip_prefix("  ").unwrap_or("");
+            if content == END {
+                break j;
+            }
+            let base64 = |b: u8| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=';
+            if content.is_empty() || !content.bytes().all(base64) {
+                return Err(CanonError::SignatureBroken { line: line_no(j) });
+            }
+            pem.push_str(content);
+            pem.push('\n');
+            j += 1;
+        };
+        if end == k + 2 {
+            return Err(CanonError::SignatureBroken { line: line_no(end) });
+        }
+        if end + 1 != close {
+            return Err(CanonError::SignatureMisplaced { line: line_no(k) });
+        }
+        pem.push_str(END);
+        pem.push('\n');
+        block = Some((k, end, pem));
+    }
+    let is_marker = |l: &str| {
+        let t = l.trim_start_matches(' ');
+        t.starts_with("-----BEGIN SSH SIGNATURE") || t.starts_with("-----END SSH SIGNATURE")
+    };
+    let inside = |i: usize| block.as_ref().is_some_and(|(k, e, _)| (*k..=*e).contains(&i));
+    if let Some(i) = (0..lines.len()).find(|&i| !inside(i) && is_marker(lines[i])) {
+        return Err(CanonError::SignatureMisplaced { line: line_no(i) });
+    }
+    Ok(block)
 }
 
 fn line_of(before: &[u8]) -> u32 {
