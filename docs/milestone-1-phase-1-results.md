@@ -2326,3 +2326,247 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 5. `Cargo.lock`: `zeroize` pinned to 1.9.0.
 
 **Not verified here:** that the re-encoding check accepts real `ssh-keygen` signatures inside a `.steplet` file; Task 9's `valid.steplet` and `crlf.steplet` test exactly that, and must pass. The property tests take about 100 to 120 seconds per run (debug build, 2,000 signatures each).
+
+## Task 9: test vectors from Windows' own `ssh-keygen`
+
+`C:\dev\m1\p1` did not exist before this task; the script made it and the two throwaway keys in it (covered by approving the plan). The private keys stay there and are not committed.
+
+**Step 2, making the vectors** (with `ssh-keygen` and Python only, without Steplet's code):
+
+```
+> python -I crates/steplet-core/tests/vectors/make_vectors.py
+$ ssh-keygen -t ed25519 -N  -q -C steplet-p1-vectors -f C:\dev\m1\p1\ed25519
+  exit 0: 
+$ ssh-keygen -t rsa -b 3072 -N  -q -C steplet-p1-vectors -f C:\dev\m1\p1\rsa
+  exit 0: 
+$ ssh-keygen -Y sign -f C:\dev\m1\p1\ed25519 -n steplet-v1 -O hashalg=sha512 C:\dev\m1\p1\msg.txt
+  exit 0: Signing file C:\dev\m1\p1\msg.txt
+
+Write signature to C:\dev\m1\p1\msg.txt.sig
+$ ssh-keygen -Y check-novalidate -n steplet-v1 -s C:\dev\m1\p1\msg.txt.sig
+  exit 0: Good "steplet-v1" signature with ED25519 key SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk
+$ ssh-keygen -Y sign -f C:\dev\m1\p1\ed25519 -n runfile-v1 C:\dev\m1\p1\msg.txt
+  exit 0: Signing file C:\dev\m1\p1\msg.txt
+
+Write signature to C:\dev\m1\p1\msg.txt.sig
+$ ssh-keygen -Y sign -f C:\dev\m1\p1\ed25519 -n steplet-v1 -O hashalg=sha256 C:\dev\m1\p1\msg.txt
+  exit 0: Signing file C:\dev\m1\p1\msg.txt
+
+Write signature to C:\dev\m1\p1\msg.txt.sig
+$ ssh-keygen -Y sign -f C:\dev\m1\p1\rsa -n steplet-v1 C:\dev\m1\p1\msg.txt
+  exit 0: Signing file C:\dev\m1\p1\msg.txt
+
+Write signature to C:\dev\m1\p1\msg.txt.sig
+$ ssh-keygen -l -f C:\dev\m1\p1\ed25519.pub
+  exit 0: 256 SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk steplet-p1-vectors (ED25519)
+fingerprint: SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk
+(exit code 0)
+```
+
+Every `ssh-keygen` call ended with exit 0; its own check says `Good "steplet-v1" signature with ED25519 key SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk`, the same fingerprint printed last. `ssh-keygen` 9.5 accepted `-O hashalg=sha256`, so the `sha256.steplet` vector stays.
+
+`.gitattributes` still has both lines (`*.steplet text eol=lf` and `crates/steplet-core/tests/vectors/*.steplet binary`), and git applies them to the vectors:
+
+```
+> git check-attr text eol binary -- crates/steplet-core/tests/vectors/crlf.steplet crates/steplet-core/tests/vectors/valid.steplet
+crates/steplet-core/tests/vectors/crlf.steplet: text: unset
+crates/steplet-core/tests/vectors/crlf.steplet: eol: lf
+crates/steplet-core/tests/vectors/crlf.steplet: binary: set
+crates/steplet-core/tests/vectors/valid.steplet: text: unset
+crates/steplet-core/tests/vectors/valid.steplet: eol: lf
+crates/steplet-core/tests/vectors/valid.steplet: binary: set
+(exit code 0)
+```
+
+```
+> crlf.steplet as stored in git's index (git show :crates/steplet-core/tests/vectors/crlf.steplet, counted in Python)
+crlf.steplet as stored in git: bytes 760 CRLF pairs 25 lone LF 0
+```
+
+**Step 4, the tests** (no failing run first, as the plan says: the code under test exists since Task 8; this task adds outside evidence):
+
+```
+> cargo test -p steplet-core --test vectors --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.88s
+     Running tests\vectors.rs (target\debug\deps\vectors-a6c32ae3162402c1.exe)
+
+running 5 tests
+test windows_line_endings_clean_up_to_the_same_signed_text ... ok
+test missing_cut_doubled_and_moved_blocks ... ok
+test the_signed_header_reads ... ok
+test refused_signatures ... ok
+test ssh_keygen_signatures_verify_with_the_same_fingerprint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+(exit code 0)
+```
+
+This also settles the one open point from Task 8: the exact re-encoding check accepts real `ssh-keygen` signatures, with Unix and Windows line endings.
+
+**Before committing,** the staged files (no private key: only `ed25519.pub` and `rsa.pub`):
+
+```
+> git status --short
+A  crates/steplet-core/tests/vectors.rs
+A  crates/steplet-core/tests/vectors/crlf.steplet
+A  crates/steplet-core/tests/vectors/cut.steplet
+A  crates/steplet-core/tests/vectors/doubled.steplet
+A  crates/steplet-core/tests/vectors/ed25519.pub
+A  crates/steplet-core/tests/vectors/fingerprint.txt
+A  crates/steplet-core/tests/vectors/make_vectors.py
+A  crates/steplet-core/tests/vectors/moved-in-header.steplet
+A  crates/steplet-core/tests/vectors/moved-to-body.steplet
+A  crates/steplet-core/tests/vectors/rsa.pub
+A  crates/steplet-core/tests/vectors/rsa.steplet
+A  crates/steplet-core/tests/vectors/sha256.steplet
+A  crates/steplet-core/tests/vectors/tampered.steplet
+A  crates/steplet-core/tests/vectors/unsigned.steplet
+A  crates/steplet-core/tests/vectors/valid.steplet
+A  crates/steplet-core/tests/vectors/wrong-namespace.steplet
+(exit code 0)
+```
+
+```
+> cargo test --workspace --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-9cadb7b7c5e7a274.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-accea582b118f23b.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test bad_utf8_names_its_line ... ok
+test every_error_has_words_and_help ... ok
+test no_unicode_normalisation ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test windows_line_endings_become_unix_ones ... ok
+test exactly_one_final_newline ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test leading_and_inner_spaces_stay ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-b59b9cc975aad58c.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test block_not_last_in_the_header ... ok
+test markers_without_the_key_line ... ok
+test two_blocks ... ok
+test block_lines_must_be_indented_base64 ... ok
+test the_block_is_split_off ... ok
+test the_key_line_must_be_exact ... ok
+test end_marker_missing ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-4eab5dc7b8e842f7.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test counts_days_from_1970 ... ok
+test adds_days_across_months_and_years ... ok
+test reads_and_writes_dates ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential.rs (target\debug\deps\differential-7eb12dda76371c10.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.20s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-ae1973f54db25e03.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test the_example_file_reads ... ok
+test reads_every_field_with_its_line ... ok
+test the_version_comes_first_and_is_1 ... ok
+test wrong_shapes ... ok
+test unknown_and_missing_fields ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-6b7e71545926ed04.exe)
+
+running 4 tests
+test every_refusal_has_words_and_help ... ok
+test maps_lists_and_values ... ok
+test refusals_name_the_line ... ok
+test values_yaml_reads_as_written ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-54439d63506cdf51.exe)
+
+running 5 tests
+test words_and_help ... ok
+test domains_and_folders ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\properties.rs (target\debug\deps\properties-711abe513802300a.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 100.27s
+
+     Running tests\sig.rs (target\debug\deps\sig-c4623a06b1aa6458.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test an_edited_length_before_the_public_key_is_refused ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests\vectors.rs (target\debug\deps\vectors-a6c32ae3162402c1.exe)
+
+running 5 tests
+test windows_line_endings_clean_up_to_the_same_signed_text ... ok
+test missing_cut_doubled_and_moved_blocks ... ok
+test the_signed_header_reads ... ok
+test refused_signatures ... ok
+test ssh_keygen_signatures_verify_with_the_same_fingerprint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+**Verdict: done.** 5 of 5 vector tests pass; 64 tests pass in the workspace; no compiler warnings. Our check agrees with Windows' `ssh-keygen` on all eleven files. Nothing was changed from the plan.

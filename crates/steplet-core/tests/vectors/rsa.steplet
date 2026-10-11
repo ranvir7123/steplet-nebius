@@ -1,0 +1,38 @@
+---
+steplet: 1
+title: Count the lines of the README in Hello-World
+sender: Steplet test vectors
+expires: 2026-12-31
+repository:
+  url: https://github.com/octocat/Hello-World.git
+  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+steps:
+  - Count the lines in the README file.
+  - Report the count.
+allow:
+  commands:
+    - wc -l README
+signature: |
+  -----BEGIN SSH SIGNATURE-----
+  U1NIU0lHAAAAAQAAAZcAAAAHc3NoLXJzYQAAAAMBAAEAAAGBALpse+ksmmngcdNw7gOyG4
+  tM3oZDVbrJWxGCbGZne0rns7RybPPPiXsAtBTcu77wSiXyyBjQqvfNdZpHjVeFB24Uy9OS
+  SoxDDXec88OIZCZbefD5HmY8j88ogH6iwgHkYFep41ONR56+EuG/da4NnhPC/X74ojvn+r
+  VU65Gcc1RmLYcUJRu22CjuGNwYpGrDviK8PIOk2rLkm/e36OvgzCTFwepbNlGHz5Sujvm7
+  LsEFp2QRr/+LPf5RflQiyU5zzcYaheyq6GLgEmiXxRTmpN9iTwGHHxfUvonLjrIyqUNz9r
+  2yaXd9rkfT2o37rSFn5dpKeZnr4JtG+9Ng7QBUzYUlRkUXFVoOdYQLXKBD1jILppRxLYJE
+  GLiW6gO6WkCvIgYpGbQUCFd3YleGZ7zWekvSqUFp8zfGWA9ELZbGLpavRtsj3rWntHE3If
+  JtvMDpsfh3NU8qnQLfuW32mNkT1scd6V/lDDzsYww4lGsbJLt94l2wV6FOHRduYyFrOvtj
+  6wAAAApzdGVwbGV0LXYxAAAAAAAAAAZzaGE1MTIAAAGUAAAADHJzYS1zaGEyLTUxMgAAAY
+  BYvBqK+YLm5St0mxX21eKPisFJ2fl9k4IomtdKuoBAEXdwlUyn+mDOlPtpVbd3/NnlSn0L
+  AhhSiPUCy0/jHB8CMtP572tMqA6gFTnEhPE4IkmeFrXAJSYZPZoDTKisLBm1FPMtxuJbSE
+  HdTB4C4LZqLSBUzpqWsL4zf1kKi6+uhO/HFAmRsyILfQdo1NVlE3TV8H8WCBXXVBDKmGHN
+  4lPLpqOGaU3+RRSgEnYuxqcLAwDhNGcD12/DJAQjjP3ck9aIrXpJoPQpbkUS1sYI9B+8Xi
+  TfXyQ5nf7JLiVpxMgOjOVtJEK33+/8TLkFkDUxin7P7eofzvcxl+1/Ok25Xi9O0QDzmp6F
+  uJ22td/znaPdWG05A5Rt/2xbIJJh0AxXT/ouayW9oCYglJYowjdwU7zQgDLlrPEFcYGnjj
+  rwzhc0Va98BbBRbQWUyulDOi/qmpHy4WG9Ft1wBBFJZ5FzIET4xOmE1qn+ugKp281gHgEL
+  NV1Ii3Fi7mAXyncc18Z3FFE=
+  -----END SSH SIGNATURE-----
+---
+# Count the README lines
+
+Run `wc -l README` and report the number.

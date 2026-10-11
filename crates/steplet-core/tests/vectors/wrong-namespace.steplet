@@ -1,0 +1,25 @@
+---
+steplet: 1
+title: Count the lines of the README in Hello-World
+sender: Steplet test vectors
+expires: 2026-12-31
+repository:
+  url: https://github.com/octocat/Hello-World.git
+  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+steps:
+  - Count the lines in the README file.
+  - Report the count.
+allow:
+  commands:
+    - wc -l README
+signature: |
+  -----BEGIN SSH SIGNATURE-----
+  U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgab5rFl0wj6GdP1L5Tqy/hGD155
+  7Tww0p5j6uhzBIxzQAAAAKcnVuZmlsZS12MQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt
+  ZWQyNTUxOQAAAEBn0LtdXjkOFbYZgwJ3aTCBlKUQCPhLcZr+1WNjWMmHv9vUWcbgoGVd5g
+  BBJXQVDo2ZteH35+76r7toj23tai0O
+  -----END SSH SIGNATURE-----
+---
+# Count the README lines
+
+Run `wc -l README` and report the number.
