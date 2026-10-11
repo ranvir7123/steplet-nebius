@@ -3469,3 +3469,399 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 5 of 5 `check` tests pass; 74 tests pass in the workspace; no compiler warnings. `steplet-core` did not change in this task, so the `wasm32v1-none` build was not repeated. The plan's code compiled and passed as written; nothing was changed from the plan.
+
+## Task 12: `steplet-sign sign`, and `ssh-keygen` agreeing with us (yes: B3, optional)
+
+**Step 1, the failing state** (stub `sign` always answers "not written yet"; the `sign` command in `main.rs` is already the real one):
+
+```
+> cargo test -p steplet-sign --test cli --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.79s
+     Running tests\cli.rs (target\debug\deps\cli-dd89b904ca1b9d81.exe)
+
+running 9 tests
+test wrong_use_prints_how_to_use_it ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:zbv/nU7iZdO0fB0DalMI70dP6/yFD8sctXvvW4+OokY
+test ssh_keygen_accepts_a_signature_made_in_rust ... ok
+test ssh_keygen_accepts_what_we_signed_and_what_we_cut_out ... FAILED
+test header_problems_stop_signing ... FAILED
+test windows_line_endings_are_written_back_as_unix_ones_and_still_verify ... FAILED
+test signing_again_after_an_edit_replaces_the_signature ... FAILED
+test sign_then_check_shows_ssh_keygens_fingerprint ... FAILED
+test expiry_must_be_from_today_to_365_days_ahead ... ok
+test an_rsa_key_is_refused_and_the_file_is_left_alone ... FAILED
+
+failures:
+
+---- ssh_keygen_accepts_what_we_signed_and_what_we_cut_out stdout ----
+
+thread 'ssh_keygen_accepts_what_we_signed_and_what_we_cut_out' (45648) panicked at crates\steplet-sign\tests\cli.rs:92:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- header_problems_stop_signing stdout ----
+
+thread 'header_problems_stop_signing' (29816) panicked at crates\steplet-sign\tests\cli.rs:171:5:
+not written yet
+
+
+---- windows_line_endings_are_written_back_as_unix_ones_and_still_verify stdout ----
+
+thread 'windows_line_endings_are_written_back_as_unix_ones_and_still_verify' (28352) panicked at crates\steplet-sign\tests\cli.rs:156:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+
+---- signing_again_after_an_edit_replaces_the_signature stdout ----
+
+thread 'signing_again_after_an_edit_replaces_the_signature' (10328) panicked at crates\steplet-sign\tests\cli.rs:139:5:
+assertion `left == right` failed
+  left: 1
+ right: 0
+
+---- sign_then_check_shows_ssh_keygens_fingerprint stdout ----
+
+thread 'sign_then_check_shows_ssh_keygens_fingerprint' (43348) panicked at crates\steplet-sign\tests\cli.rs:78:5:
+assertion `left == right` failed: not written yet
+
+  left: 1
+ right: 0
+
+---- an_rsa_key_is_refused_and_the_file_is_left_alone stdout ----
+
+thread 'an_rsa_key_is_refused_and_the_file_is_left_alone' (33820) panicked at crates\steplet-sign\tests\cli.rs:115:5:
+not written yet
+
+
+
+failures:
+    an_rsa_key_is_refused_and_the_file_is_left_alone
+    header_problems_stop_signing
+    sign_then_check_shows_ssh_keygens_fingerprint
+    signing_again_after_an_edit_replaces_the_signature
+    ssh_keygen_accepts_what_we_signed_and_what_we_cut_out
+    windows_line_endings_are_written_back_as_unix_ones_and_still_verify
+
+test result: FAILED. 3 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+error: test failed, to rerun pass `-p steplet-sign --test cli`
+(exit code 101)
+```
+
+3 pass and 6 fail, the split the plan predicts. (The `Good "steplet-v1" signature` line is `ssh-keygen`'s own output in `ssh_keygen_accepts_a_signature_made_in_rust`.)
+
+**Step 2, after writing `sign.rs`, first run: the same linker lock as in Task 11.**
+
+```
+> cargo test -p steplet-sign --test cli --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+error: linking with `link.exe` failed: exit code: 1104
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe" "/NOLOGO" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\rustcInWQoB\\symbols.o" "<47 object files omitted>" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps/libsteplet_sign-4fbecb01ecd3002e.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libtest-*,libgetopts-*,librustc_std_workspace_std-*}.rlib" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps/{libsteplet_core-e12a9e40f354bfb4,libssh_key-0f1e95c93583d61f,libed25519_dalek-2f65962830291be0,libcurve25519_dalek-85311eb48ec5504b,libed25519-05c837217e31d15c,libsignature-380f442534370788,libssh_cipher-534e4c2bac3c31c6,librand_core-d32b75db77435624,libzeroize-f3366170dcc3acbb,libsubtle-2d823eaec270a8fd,libssh_encoding-dca5edaa7d9e59b2,libsha2-21b320959b7aa6df,libcpufeatures-7c683ec64b9c4309,libcfg_if-dfda34af91a39ce5,libdigest-e80e694e4755cb1d,libblock_buffer-9672a667267db7c2,libcrypto_common-305a8e0676fed5af,libgeneric_array-3f6784c5b59eb82c,libtypenum-6d29c9342295d5b5,libpem_rfc7468-5547dd0b9ef0a608,libbase64ct-3cacfb0945ab8e47}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/OUT:C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\cli-dd89b904ca1b9d81.exe" "/OPT:REF,NOICF" "/DEBUG" "/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\target\debug\deps\cli-dd89b904ca1b9d81.exe'
+          
+
+error: could not compile `steplet-sign` (test "cli") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+The same command, run again unchanged (before it: no `steplet-sign*` folder in `%TEMP%`):
+
+```
+> cargo test -p steplet-sign --test cli --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running tests\cli.rs (target\debug\deps\cli-dd89b904ca1b9d81.exe)
+
+running 9 tests
+test wrong_use_prints_how_to_use_it ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:zbv/nU7iZdO0fB0DalMI70dP6/yFD8sctXvvW4+OokY
+test ssh_keygen_accepts_a_signature_made_in_rust ... ok
+test header_problems_stop_signing ... ok
+test windows_line_endings_are_written_back_as_unix_ones_and_still_verify ... ok
+test expiry_must_be_from_today_to_365_days_ahead ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:6S61VUOOR3RospgQwrTae9lsZuY+mpWNRCM9szg3YbY
+Signature verification failed: incorrect signature
+Could not verify signature.
+test ssh_keygen_accepts_what_we_signed_and_what_we_cut_out ... ok
+test sign_then_check_shows_ssh_keygens_fingerprint ... ok
+test signing_again_after_an_edit_replaces_the_signature ... ok
+test an_rsa_key_is_refused_and_the_file_is_left_alone ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.39s
+(exit code 0)
+```
+
+```
+> (Get-ChildItem $env:TEMP -Directory -Filter "steplet-sign*").Count   (after the run)
+steplet-sign folders in %TEMP% after: 0
+```
+
+9 of 9 pass. `Signature verification failed: incorrect signature` is `ssh-keygen` refusing the edited text in `ssh_keygen_accepts_what_we_signed_and_what_we_cut_out`, as that test requires. Every temporary folder (the tool's own and the tests') was removed.
+
+### The linker lock (`LNK1104`), looked into
+
+It came back on the whole-workspace run, each time on a different test program that already existed from an earlier build:
+
+```
+> cargo test --workspace --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+error: linking with `link.exe` failed: exit code: 1104
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe" "/NOLOGO" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\rustcd8Mk5i\\symbols.o" "<6 object files omitted>" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libtest-*,libgetopts-*,librustc_std_workspace_std-*}.rlib" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps/{libsteplet_core-bd21636b1d53d930,libssh_key-7f1632d69040e380,libed25519_dalek-3fdaa7ab15863965,libcurve25519_dalek-8c4b7d9cacf46e72,libed25519-05c837217e31d15c,libsignature-380f442534370788,libssh_cipher-534e4c2bac3c31c6,librand_core-d32b75db77435624,libzeroize-f3366170dcc3acbb,libsubtle-2d823eaec270a8fd,libssh_encoding-dca5edaa7d9e59b2,libsha2-21b320959b7aa6df,libcpufeatures-7c683ec64b9c4309,libcfg_if-dfda34af91a39ce5,libdigest-e80e694e4755cb1d,libblock_buffer-9672a667267db7c2,libcrypto_common-305a8e0676fed5af,libgeneric_array-3f6784c5b59eb82c,libtypenum-6d29c9342295d5b5,libpem_rfc7468-5547dd0b9ef0a608,libbase64ct-3cacfb0945ab8e47}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/OUT:C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\steplet_sign-4b89c9d42e35cede.exe" "/OPT:REF,NOICF" "/DEBUG" "/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\target\debug\deps\steplet_sign-4b89c9d42e35cede.exe'
+          
+
+error: could not compile `steplet-sign` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+What was checked, straight after a failure:
+- The program file named in the error did not exist (`Test-Path`: False), and no program with that name was running (`Get-Process`: nothing). So it was most likely deleted but still held open by something ("delete pending"), which stops a new file with the same name being made until the holder lets go.
+- Microsoft Defender's real-time scanning is off (`Get-MpComputerStatus`: `RealTimeProtectionEnabled : False`, `AMRunningMode : Not running`).
+- McAfee is installed and active (`Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct`: `displayName : McAfee`, `productState : 266240`).
+
+**Most likely cause, not proven:** McAfee checks each newly built or newly run program in `target\` and holds it briefly. Each old program fails once and builds on the next try. This is a property of this laptop, not of Steplet's code. Excluding this repository's `target` folders from McAfee's scanning would probably stop it; that is a security setting, so it is left to the user. The workaround used here: build first, trying up to three times, then run the tests once.
+
+**Step 3, every test in the workspace:**
+
+```
+> cargo test --workspace --offline --no-run
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.53s
+  Executable unittests src\lib.rs (target\debug\deps\steplet_core-66bcd76587c676e3.exe)
+  Executable tests\canon.rs (target\debug\deps\canon-5ef887b940c8a763.exe)
+  Executable tests\canon_signature.rs (target\debug\deps\canon_signature-118d954e88ed4bc4.exe)
+  Executable tests\date.rs (target\debug\deps\date-bf07833a61cd0ef4.exe)
+  Executable tests\differential.rs (target\debug\deps\differential-7474fcedf0d59ba4.exe)
+  Executable tests\display.rs (target\debug\deps\display-a78ff8cda0f19313.exe)
+  Executable tests\header_fields.rs (target\debug\deps\header_fields-ec969918d7875e33.exe)
+  Executable tests\header_tree.rs (target\debug\deps\header_tree-9529288ab4b5c7ab.exe)
+  Executable tests\limits.rs (target\debug\deps\limits-5e5fc15be066c18a.exe)
+  Executable tests\properties.rs (target\debug\deps\properties-d192c70b6252f6c0.exe)
+  Executable tests\sig.rs (target\debug\deps\sig-aefa57c352282fe8.exe)
+  Executable tests\vectors.rs (target\debug\deps\vectors-f9059f174805bfbc.exe)
+  Executable unittests src\lib.rs (target\debug\deps\steplet_sign-4b89c9d42e35cede.exe)
+  Executable unittests src\main.rs (target\debug\deps\steplet_sign-c053de2a7e1b4390.exe)
+  Executable tests\check.rs (target\debug\deps\check-3dd7976f398a28b2.exe)
+  Executable tests\cli.rs (target\debug\deps\cli-eb833adb47cb9915.exe)
+(exit code 0)
+```
+
+```
+> cargo test --workspace --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-66bcd76587c676e3.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-5ef887b940c8a763.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test exactly_one_final_newline ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test bad_utf8_names_its_line ... ok
+test no_unicode_normalisation ... ok
+test leading_and_inner_spaces_stay ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test every_error_has_words_and_help ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test windows_line_endings_become_unix_ones ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-118d954e88ed4bc4.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test markers_without_the_key_line ... ok
+test block_not_last_in_the_header ... ok
+test end_marker_missing ... ok
+test block_lines_must_be_indented_base64 ... ok
+test the_block_is_split_off ... ok
+test the_key_line_must_be_exact ... ok
+test two_blocks ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-bf07833a61cd0ef4.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test reads_and_writes_dates ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential.rs (target\debug\deps\differential-7474fcedf0d59ba4.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+
+     Running tests\display.rs (target\debug\deps\display-a78ff8cda0f19313.exe)
+
+running 5 tests
+test invisible_characters_become_badges ... ok
+test bare_addresses ... ok
+test markdown_links_show_their_real_address ... ok
+test nothing_is_ever_dropped ... ok
+test the_invisible_table_matches_unicode ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-ec969918d7875e33.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test the_example_file_reads ... ok
+test reads_every_field_with_its_line ... ok
+test the_version_comes_first_and_is_1 ... ok
+test unknown_and_missing_fields ... ok
+test wrong_shapes ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-9529288ab4b5c7ab.exe)
+
+running 4 tests
+test maps_lists_and_values ... ok
+test every_refusal_has_words_and_help ... ok
+test values_yaml_reads_as_written ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-5e5fc15be066c18a.exe)
+
+running 5 tests
+test words_and_help ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test domains_and_folders ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\properties.rs (target\debug\deps\properties-d192c70b6252f6c0.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 107.23s
+
+     Running tests\sig.rs (target\debug\deps\sig-aefa57c352282fe8.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test an_edited_length_before_the_public_key_is_refused ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests\vectors.rs (target\debug\deps\vectors-f9059f174805bfbc.exe)
+
+running 5 tests
+test missing_cut_doubled_and_moved_blocks ... ok
+test windows_line_endings_clean_up_to_the_same_signed_text ... ok
+test the_signed_header_reads ... ok
+test refused_signatures ... ok
+test ssh_keygen_signatures_verify_with_the_same_fingerprint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\steplet_sign-4b89c9d42e35cede.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\steplet_sign-c053de2a7e1b4390.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\check.rs (target\debug\deps\check-3dd7976f398a28b2.exe)
+
+running 5 tests
+test a_tab_names_its_line_and_shows_an_example ... ok
+test a_good_unsigned_file ... ok
+test limits_and_clean_up_errors ... ok
+test expiry_in_the_past_or_too_far_ahead ... ok
+test a_changed_signed_file_is_a_problem ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\cli.rs (target\debug\deps\cli-eb833adb47cb9915.exe)
+
+running 9 tests
+test wrong_use_prints_how_to_use_it ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:zbv/nU7iZdO0fB0DalMI70dP6/yFD8sctXvvW4+OokY
+test ssh_keygen_accepts_a_signature_made_in_rust ... ok
+test header_problems_stop_signing ... ok
+test expiry_must_be_from_today_to_365_days_ahead ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:WGVgQj2fma8vwXsYDKE6k0hiquq6XNATsuPsEGJtjSA
+test windows_line_endings_are_written_back_as_unix_ones_and_still_verify ... ok
+Signature verification failed: incorrect signature
+test sign_then_check_shows_ssh_keygens_fingerprint ... ok
+Could not verify signature.
+test ssh_keygen_accepts_what_we_signed_and_what_we_cut_out ... ok
+test signing_again_after_an_edit_replaces_the_signature ... ok
+test an_rsa_key_is_refused_and_the_file_is_left_alone ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_sign
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> (Get-ChildItem $env:TEMP -Directory -Filter "steplet-sign*").Count; git diff --stat -- Cargo.lock
+steplet-sign folders in %TEMP% after: 0
+```
+(`git diff --stat -- Cargo.lock` printed nothing: no new libraries.)
+
+**Step 4, B3 (optional): not done.** It needs the user to type a passphrase in their own terminal, which this session cannot do. It is listed under "not verified".
+
+**Verdict: done, except optional B3.** 9 of 9 command-line tests pass, run against the real `steplet-sign` program and Windows' own `ssh-keygen`; 83 tests pass in the workspace; no compiler warnings. `ssh-keygen` accepts what `sign` writes, refuses it after an edit, and accepts a signature made in Rust. An RSA key, a bad expiry and a header problem each stop signing and leave the file unchanged. The plan's code compiled and passed as written; nothing was changed from the plan.

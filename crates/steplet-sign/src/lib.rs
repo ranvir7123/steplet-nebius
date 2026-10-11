@@ -1,6 +1,7 @@
 //! The sender's tool: check a .steplet file, and sign it with the sender's own ssh-keygen.
 
 pub mod check;
+pub mod sign;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
