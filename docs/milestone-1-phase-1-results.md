@@ -3123,3 +3123,349 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 5 of 5 display tests pass; 69 tests pass in the workspace; no compiler warnings; the core with `display` still builds for `wasm32v1-none` (the Unicode library is test-only and not part of it). The plan's code compiled and passed as written; the only change is `yoke-derive` pinned to 0.8.2 in `Cargo.lock`.
+
+## Task 11: `steplet-sign check`
+
+**Step 2, the failing state** (stub `check` returns an empty report that is not ok):
+
+```
+> cargo test -p steplet-sign --test check --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.17s
+     Running tests\check.rs (target\debug\deps\check-becb58ae1f5e1601.exe)
+
+running 5 tests
+test a_changed_signed_file_is_a_problem ... FAILED
+test expiry_in_the_past_or_too_far_ahead ... FAILED
+test a_good_unsigned_file ... FAILED
+test a_tab_names_its_line_and_shows_an_example ... FAILED
+test limits_and_clean_up_errors ... FAILED
+
+failures:
+
+---- a_changed_signed_file_is_a_problem stdout ----
+
+thread 'a_changed_signed_file_is_a_problem' (3764) panicked at crates\steplet-sign\tests\check.rs:57:5:
+
+
+---- expiry_in_the_past_or_too_far_ahead stdout ----
+
+thread 'expiry_in_the_past_or_too_far_ahead' (4992) panicked at crates\steplet-sign\tests\check.rs:46:5:
+
+
+---- a_good_unsigned_file stdout ----
+
+thread 'a_good_unsigned_file' (16116) panicked at crates\steplet-sign\tests\check.rs:13:5:
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- a_tab_names_its_line_and_shows_an_example stdout ----
+
+thread 'a_tab_names_its_line_and_shows_an_example' (39024) panicked at crates\steplet-sign\tests\check.rs:29:5:
+assertion `left == right` failed
+  left: ""
+ right: "t.steplet: 1 problem\n  signature: not signed\n  problem: line 12: a tab character\n    allowed: indent with spaces, two per level; no tab characters anywhere in the header\n    for example:\n      allow:\n        commands:\n          - cargo test\n"
+
+---- limits_and_clean_up_errors stdout ----
+
+thread 'limits_and_clean_up_errors' (38880) panicked at crates\steplet-sign\tests\check.rs:67:5:
+
+
+
+failures:
+    a_changed_signed_file_is_a_problem
+    a_good_unsigned_file
+    a_tab_names_its_line_and_shows_an_example
+    expiry_in_the_past_or_too_far_ahead
+    limits_and_clean_up_errors
+
+test result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-sign --test check`
+(exit code 101)
+```
+
+All 5 fail, as the plan predicts.
+
+**Step 4, after writing `check.rs` and `main.rs`, first run: a linker error, not a test failure.**
+
+```
+> cargo test -p steplet-sign --test check --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+error: linking with `link.exe` failed: exit code: 1104
+  |
+  = note: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe" "/NOLOGO" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\rustc04SLfR\\symbols.o" "<28 object files omitted>" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libtest-*,libgetopts-*,librustc_std_workspace_std-*}.rlib" "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps/{libsteplet_sign-4fbecb01ecd3002e,libsteplet_core-e12a9e40f354bfb4,libssh_key-0f1e95c93583d61f,libed25519_dalek-2f65962830291be0,libcurve25519_dalek-85311eb48ec5504b,libed25519-05c837217e31d15c,libsignature-380f442534370788,libssh_cipher-534e4c2bac3c31c6,librand_core-d32b75db77435624,libzeroize-f3366170dcc3acbb,libsubtle-2d823eaec270a8fd,libssh_encoding-dca5edaa7d9e59b2,libsha2-21b320959b7aa6df,libcpufeatures-7c683ec64b9c4309,libcfg_if-dfda34af91a39ce5,libdigest-e80e694e4755cb1d,libblock_buffer-9672a667267db7c2,libcrypto_common-305a8e0676fed5af,libgeneric_array-3f6784c5b59eb82c,libtypenum-6d29c9342295d5b5,libpem_rfc7468-5547dd0b9ef0a608,libbase64ct-3cacfb0945ab8e47}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/OUT:C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase1-task1-run-e26214\\target\\debug\\deps\\check-becb58ae1f5e1601.exe" "/OPT:REF,NOICF" "/DEBUG" "/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\target\debug\deps\check-becb58ae1f5e1601.exe'
+          
+
+error: could not compile `steplet-sign` (test "check") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+The linker could not open the old test program to replace it (`LNK1104`). Straight after, no such program was running and the file was gone (`Get-Process` listed nothing matching; `Test-Path` on the file: not there). So the lock was brief; most likely the virus scanner reading the newly built program. The same command, run again unchanged:
+
+```
+> cargo test -p steplet-sign --test check --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.73s
+     Running tests\check.rs (target\debug\deps\check-becb58ae1f5e1601.exe)
+
+running 5 tests
+test a_tab_names_its_line_and_shows_an_example ... ok
+test limits_and_clean_up_errors ... ok
+test a_good_unsigned_file ... ok
+test expiry_in_the_past_or_too_far_ahead ... ok
+test a_changed_signed_file_is_a_problem ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+(exit code 0)
+```
+
+**Trying it by hand** (the program was built first with `cargo build -q -p steplet-sign --offline`, exit 0):
+
+```
+> cargo run -q -p steplet-sign --offline -- check examples/run-tests.steplet
+examples/run-tests.steplet: ok
+  3 steps; allowed: 1 command, 0 domains, 0 read folders, 0 write folders; 2 never lines
+  repository: https://github.com/octocat/Hello-World.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+  expires: 2027-09-30 (in 354 days)
+  signature: not signed
+(exit code 0)
+```
+
+```
+> cargo run -q -p steplet-sign --offline -- check crates/steplet-core/tests/vectors/tampered.steplet
+crates/steplet-core/tests/vectors/tampered.steplet: 1 problem
+  2 steps; allowed: 1 command, 0 domains, 0 read folders, 0 write folders; 0 never lines
+  repository: https://github.com/octocat/Hello-World.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+  expires: 2026-12-31 (in 81 days)
+  problem: signature: the file was changed after it was signed, or the signature belongs to another file
+    allowed: a signature made by steplet-sign over the file exactly as it is now
+    for example:
+      steplet-sign sign my-task.steplet --key C:\Users\you\.ssh\id_ed25519
+(exit code 1)
+```
+
+```
+> cargo run -q -p steplet-sign --offline -- check
+usage:
+  steplet-sign check <file>
+  steplet-sign sign <file> --key <private key file, or its .pub when the key is in ssh-agent> [--ssh-keygen <path>]
+(exit code 2)
+```
+
+All three as the plan expects: the example is `ok` with exit code 0; the tampered vector shows the signature problem with exit code 1; no file prints the usage with exit code 2.
+
+**Check before committing.** The lock file gains only the new crate itself, no new libraries:
+
+```
+> git diff -- Cargo.lock
+warning: in the working copy of 'Cargo.lock', LF will be replaced by CRLF the next time Git touches it
+diff --git a/Cargo.lock b/Cargo.lock
+index b863023..ce3e056 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -571,6 +571,14 @@ dependencies = [
+  "ssh-key",
+ ]
+ 
++[[package]]
++name = "steplet-sign"
++version = "0.1.0"
++dependencies = [
++ "ssh-key",
++ "steplet-core",
++]
++
+ [[package]]
+ name = "subtle"
+ version = "2.6.1"
+(exit code 0)
+```
+
+```
+> cargo test --workspace --offline
+   Compiling steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.19s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-66bcd76587c676e3.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-5ef887b940c8a763.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test exactly_one_final_newline ... ok
+test every_error_has_words_and_help ... ok
+test bad_utf8_names_its_line ... ok
+test leading_and_inner_spaces_stay ... ok
+test no_unicode_normalisation ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test windows_line_endings_become_unix_ones ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-118d954e88ed4bc4.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test end_marker_missing ... ok
+test the_block_is_split_off ... ok
+test block_lines_must_be_indented_base64 ... ok
+test markers_without_the_key_line ... ok
+test block_not_last_in_the_header ... ok
+test the_key_line_must_be_exact ... ok
+test two_blocks ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-bf07833a61cd0ef4.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test reads_and_writes_dates ... ok
+test counts_days_from_1970 ... ok
+test adds_days_across_months_and_years ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential.rs (target\debug\deps\differential-7474fcedf0d59ba4.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+
+     Running tests\display.rs (target\debug\deps\display-a78ff8cda0f19313.exe)
+
+running 5 tests
+test bare_addresses ... ok
+test invisible_characters_become_badges ... ok
+test markdown_links_show_their_real_address ... ok
+test nothing_is_ever_dropped ... ok
+test the_invisible_table_matches_unicode ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-ec969918d7875e33.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test the_example_file_reads ... ok
+test reads_every_field_with_its_line ... ok
+test the_version_comes_first_and_is_1 ... ok
+test wrong_shapes ... ok
+test unknown_and_missing_fields ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-9529288ab4b5c7ab.exe)
+
+running 4 tests
+test maps_lists_and_values ... ok
+test every_refusal_has_words_and_help ... ok
+test values_yaml_reads_as_written ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-5e5fc15be066c18a.exe)
+
+running 5 tests
+test words_and_help ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test domains_and_folders ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\properties.rs (target\debug\deps\properties-d192c70b6252f6c0.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 108.45s
+
+     Running tests\sig.rs (target\debug\deps\sig-aefa57c352282fe8.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+test an_edited_length_before_the_public_key_is_refused ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests\vectors.rs (target\debug\deps\vectors-f9059f174805bfbc.exe)
+
+running 5 tests
+test windows_line_endings_clean_up_to_the_same_signed_text ... ok
+test missing_cut_doubled_and_moved_blocks ... ok
+test the_signed_header_reads ... ok
+test refused_signatures ... ok
+test ssh_keygen_signatures_verify_with_the_same_fingerprint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\steplet_sign-4b89c9d42e35cede.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\steplet_sign-c053de2a7e1b4390.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\check.rs (target\debug\deps\check-3dd7976f398a28b2.exe)
+
+running 5 tests
+test a_tab_names_its_line_and_shows_an_example ... ok
+test a_good_unsigned_file ... ok
+test limits_and_clean_up_errors ... ok
+test expiry_in_the_past_or_too_far_ahead ... ok
+test a_changed_signed_file_is_a_problem ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_sign
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+**Verdict: done.** 5 of 5 `check` tests pass; 74 tests pass in the workspace; no compiler warnings. `steplet-core` did not change in this task, so the `wasm32v1-none` build was not repeated. The plan's code compiled and passed as written; nothing was changed from the plan.

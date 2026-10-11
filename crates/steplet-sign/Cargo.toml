@@ -1,0 +1,12 @@
+[package]
+name = "steplet-sign"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+steplet-core = { path = "../steplet-core" }
+
+[dev-dependencies]
+ssh-key = { version = "=0.6.7", default-features = false, features = ["alloc", "ed25519"] }
