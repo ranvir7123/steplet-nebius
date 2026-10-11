@@ -5,3 +5,4 @@
 spikes/s9-core/tests/vectors/** binary
 *.steplet text eol=lf
 crates/steplet-core/tests/vectors/*.steplet binary
+crates/steplet-core/tests/vectors/commands.txt binary

@@ -490,3 +490,157 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 11 new or changed tests pass (8 in `limits`, 2 in `body_line`, 1 in `space_like`); every other test in the workspace still passes (0 failures); clippy is clean. Not verified: `rustfmt` formatting (tool not installed).
+
+## Task 2: a command read as exact words, the same words bash makes
+
+Run 12 Oct 2026, same worktree, starting from `c53f1ef`.
+
+Changes from the plan while running it:
+- None to the code, the tests or the script: all compiled and passed as written.
+- The failing run (Step 1) made proptest write `tests/command_split.proptest-regressions`, recording the stub's failure on the input `[""]`. That file was deleted before the commit: it records a failure of the empty stub, not of `split`.
+- Y2 (bash in the WSL distribution `steplet-test` splitting 2,000 made-up lines) ran as approved with the plan.
+
+**Step 1, the failing state** (`split` is a stub that always answers `Empty`):
+
+```
+> cargo test -p steplet-core --offline --test command_split
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.27s
+     Running tests\command_split.rs (target\debug\deps\command_split-2df096c8ea86e630.exe)
+
+running 5 tests
+test other_reasons ... FAILED
+test shell_symbols_are_not_read ... FAILED
+test quotes_make_one_word ... FAILED
+test plain_words_and_spaces ... FAILED
+test single_quoted_words_come_back_unchanged ... FAILED
+
+failures:
+
+---- other_reasons stdout ----
+
+thread 'other_reasons' (6476) panicked at crates\steplet-core\tests\command_split.rs:59:5:
+assertion `left == right` failed
+  left: Err(Empty)
+ right: Err(Control)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- shell_symbols_are_not_read stdout ----
+
+thread 'shell_symbols_are_not_read' (3172) panicked at crates\steplet-core\tests\command_split.rs:51:9:
+assertion `left == right` failed: cargo test | tail
+  left: Err(Empty)
+ right: Err(Symbol('|'))
+
+---- quotes_make_one_word stdout ----
+
+thread 'quotes_make_one_word' (40232) panicked at crates\steplet-core\tests\command_split.rs:18:5:
+assertion `left == right` failed
+  left: Err(Empty)
+ right: Ok(["pytest", "-k", "a or b"])
+
+---- plain_words_and_spaces stdout ----
+
+thread 'plain_words_and_spaces' (33696) panicked at crates\steplet-core\tests\command_split.rs:10:5:
+assertion `left == right` failed
+  left: Err(Empty)
+ right: Ok(["cargo", "test", "--release"])
+
+---- single_quoted_words_come_back_unchanged stdout ----
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: Saving this and future failures in C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core\tests\command_split.proptest-regressions
+proptest: If this test was run on a CI system, you may wish to add the following line to your copy of the file. (You may need to create it.)
+cc 7e0f8aed738d6f0e8c28ff8186b1872b13f4f0d4968106da9be4e122621c0f39
+
+thread 'single_quoted_words_come_back_unchanged' (28324) panicked at crates\steplet-core\tests\command_split.rs:68:1:
+Test failed: assertion failed: `(left == right)` 
+  left: `Err(Empty)`,
+ right: `Ok([""])` at crates\steplet-core\tests\command_split.rs:75.
+minimal failing input: words = [
+    "",
+]
+	successes: 0
+	local rejects: 0
+	global rejects: 0
+
+
+
+failures:
+    other_reasons
+    plain_words_and_spaces
+    quotes_make_one_word
+    shell_symbols_are_not_read
+    single_quoted_words_come_back_unchanged
+
+test result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test command_split`
+```
+
+**Step 3, after `split` is written:**
+
+```
+> cargo test -p steplet-core --offline --test command_split
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.30s
+     Running tests\command_split.rs (target\debug\deps\command_split-2df096c8ea86e630.exe)
+
+running 5 tests
+test other_reasons ... ok
+test plain_words_and_spaces ... ok
+test quotes_make_one_word ... ok
+test shell_symbols_are_not_read ... ok
+test single_quoted_words_come_back_unchanged ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+```
+
+**Step 4, the vectors made by bash** (the script stops if bash and the script disagree on any line; it did not):
+
+```
+> python -I crates/steplet-core/tests/vectors/make_command_vectors.py
+wrote 2000 command lines to C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core\tests\vectors\commands.txt; bash made the same words for every one
+```
+
+The first five lines of `commands.txt`, with the unit separator (U+001F) shown as `␟`. Each line is the command as written, then each word bash made of it. Line 4 ends in an empty word (the closing `""`), and line 5 is one empty word:
+
+```
+ b "y8=xY"-Bc/",'B}C"  '-;~<\|'   'Az=#}'␟b␟y8=xY-Bc/,'B}C␟-;~<\|␟Az=#}
+_b'_)z8''x' ␟_b_)z8x
+ 9zY1z"?0&"c._ zB  '#_b' 1.aB"BxYbC0"␟9zY1z?0&c._␟zB␟#_b␟1.aBBxYbC0
+  "Z)"@_1C'X}:'  = "'"  "#Y,; *"'!,=c:'x1zB8 ""␟Z)@_1CX}:␟=␟'␟#Y,; *!,=c:x1zB8␟
+""␟
+```
+
+`wc -l` gives `2000`; the file is 109,248 bytes; `git check-attr` shows `binary: set`, so its bytes never change on checkout.
+
+**Step 5, with the vector test** (expected 6 passing):
+
+```
+> cargo test -p steplet-core --offline --test command_split
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.88s
+     Running tests\command_split.rs (target\debug\deps\command_split-2df096c8ea86e630.exe)
+
+running 6 tests
+test other_reasons ... ok
+test quotes_make_one_word ... ok
+test plain_words_and_spaces ... ok
+test shell_symbols_are_not_read ... ok
+test split_gives_the_words_bash_gave_for_every_vector ... ok
+test single_quoted_words_come_back_unchanged ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.51s
+```
+
+**Verdict:** done. 6 tests pass in `command_split`, including 2,000 bash-made vectors matched word for word; clippy is clean. Not run in this task: the full workspace test (`cargo test --workspace`), since only a new module and a new test file were added; it runs again in Task 14 and at every task that touches existing code.
