@@ -1207,3 +1207,439 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 5 of 5 limit tests pass; 44 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`. One change from the plan, layout only: the plan said "add to `limits.rs`", which would put the `use` lines below the constants; they were moved to the top of the file, where Rust code normally keeps them. The code itself is the plan's.
+
+## Task 6: the differential test against `saphyr-parser` (yes: B1)
+
+**B1:** the user said yes on 11 Oct 2026, in this session, after Tasks 1 to 5 and 7 were committed. This task tests code that already exists (the reader from Task 4), so the plan has no failing step for it.
+
+**Step 3, first run** (cargo downloads B1 here):
+
+```
+> cargo test -p steplet-core --test differential
+    Updating crates.io index
+     Locking 44 packages to latest Rust 1.98 compatible versions
+      Adding arraydeque v0.5.1
+      Adding autocfg v1.5.1
+      Adding bit-set v0.8.0
+      Adding bit-vec v0.8.0
+      Adding bitflags v2.13.2
+      Adding cfg-if v1.0.5
+      Adding errno v0.3.14
+      Adding fastrand v2.5.0
+      Adding fnv v1.0.7
+      Adding getrandom v0.3.4
+      Adding getrandom v0.4.3
+      Adding libc v0.2.190
+      Adding linux-raw-sys v0.12.1
+      Adding num-traits v0.2.19
+      Adding once_cell v1.21.4
+      Adding ppv-lite86 v0.2.21
+      Adding proc-macro2 v1.0.107
+      Adding proptest v1.11.0 (available: v1.12.0)
+      Adding quick-error v1.2.3
+      Adding quote v1.0.47
+      Adding r-efi v5.3.0
+      Adding r-efi v6.0.0
+      Adding rand v0.9.5
+      Adding rand_chacha v0.9.0
+      Adding rand_core v0.9.5
+      Adding rand_xorshift v0.4.0
+      Adding regex-syntax v0.8.11
+      Adding rustix v1.1.5
+      Adding rusty-fork v0.3.1
+      Adding saphyr-parser v0.1.0
+      Adding syn v2.0.119
+      Adding syn v3.0.7
+      Adding tempfile v3.27.0
+      Adding thiserror v2.0.21
+      Adding thiserror-impl v2.0.21
+      Adding unarray v0.1.4
+      Adding unicode-ident v1.0.26
+      Adding wait-timeout v0.2.1
+      Adding wasip2 v1.0.4+wasi-0.2.12
+      Adding windows-link v0.2.1
+      Adding windows-sys v0.61.2
+      Adding wit-bindgen v0.57.1
+      Adding zerocopy v0.8.62
+      Adding zerocopy-derive v0.8.62
+ Downloading crates ...
+  Downloaded unarray v0.1.4
+  Downloaded wait-timeout v0.2.1
+  Downloaded rand_chacha v0.9.0
+  Downloaded arraydeque v0.5.1
+  Downloaded rand_core v0.9.5
+  Downloaded rand_xorshift v0.4.0
+  Downloaded rusty-fork v0.3.1
+  Downloaded rand v0.9.5
+  Downloaded saphyr-parser v0.1.0
+  Downloaded proptest v1.11.0
+  Downloaded syn v3.0.7
+  Downloaded zerocopy v0.8.62
+   Compiling cfg-if v1.0.5
+   Compiling proc-macro2 v1.0.107
+   Compiling getrandom v0.3.4
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling getrandom v0.4.3
+   Compiling zerocopy v0.8.62
+   Compiling windows-link v0.2.1
+   Compiling autocfg v1.5.1
+   Compiling fastrand v2.5.0
+   Compiling once_cell v1.21.4
+   Compiling thiserror v2.0.21
+   Compiling wait-timeout v0.2.1
+   Compiling quick-error v1.2.3
+   Compiling bit-vec v0.8.0
+   Compiling fnv v1.0.7
+   Compiling windows-sys v0.61.2
+   Compiling bit-set v0.8.0
+   Compiling bitflags v2.13.2
+   Compiling regex-syntax v0.8.11
+   Compiling arraydeque v0.5.1
+   Compiling unarray v0.1.4
+   Compiling num-traits v0.2.19
+   Compiling tempfile v3.27.0
+   Compiling rand_core v0.9.5
+   Compiling rand v0.9.5
+   Compiling rand_xorshift v0.4.0
+   Compiling rusty-fork v0.3.1
+   Compiling syn v3.0.7
+   Compiling thiserror-impl v2.0.21
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling saphyr-parser v0.1.0
+   Compiling proptest v1.11.0
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.98s
+     Running tests\differential.rs (target\debug\deps\differential-7f13b114595f3f8a.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+(exit code 0)
+```
+
+3 of 3 pass on the first run: no disagreement between our reader and `saphyr-parser` was found, so `CORPUS` and the reader are unchanged. `saphyr-parser`'s names (`Event`, `Parser::new_from_str`, the `Event` fields) matched the plan; nothing was renamed.
+
+**A problem found after the run: two downloaded crates broke the 14-day rule.** The plan pins `proptest` and `saphyr-parser` by hand, each at least 14 days old. Cargo then picked the newest versions of the libraries those two use. Publish dates of the 12 crates cargo downloaded, read from crates.io:
+
+```
+> python -I ages.py unarray@0.1.4 wait-timeout@0.2.1 rand_chacha@0.9.0 arraydeque@0.5.1 rand_core@0.9.5 rand_xorshift@0.4.0 rusty-fork@0.3.1 rand@0.9.5 saphyr-parser@0.1.0 proptest@1.11.0 syn@3.0.7 zerocopy@0.8.62
+unarray          0.1.4      published 2022-11-30   1411 days old
+wait-timeout     0.2.1      published 2025-02-03    615 days old
+rand_chacha      0.9.0      published 2025-01-27    622 days old
+arraydeque       0.5.1      published 2023-02-05   1344 days old
+rand_core        0.9.5      published 2026-01-13    271 days old
+rand_xorshift    0.4.0      published 2025-01-27    622 days old
+rusty-fork       0.3.1      published 2025-10-04    372 days old
+rand             0.9.5      published 2026-07-11     92 days old
+saphyr-parser    0.1.0      published 2026-09-19     22 days old
+proptest         1.11.0     published 2026-03-24    201 days old
+syn              3.0.7      published 2026-10-10      1 days old  <-- under 14 days
+zerocopy         0.8.62     published 2026-10-08      3 days old  <-- under 14 days
+(exit code 0)
+```
+
+Both had already been compiled by the first run. `syn` is a library that runs code on this laptop while the build happens. Where they come from:
+
+```
+> cargo tree -p steplet-core -e normal,build,dev --offline -i syn@3.0.7
+syn v3.0.7
+└── thiserror-impl v2.0.21 (proc-macro)
+    └── thiserror v2.0.21
+        └── saphyr-parser v0.1.0
+            [dev-dependencies]
+            └── steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+> cargo tree -p steplet-core -e normal,build,dev --offline -i zerocopy
+zerocopy v0.8.62
+└── ppv-lite86 v0.2.21
+    └── rand_chacha v0.9.0
+        └── proptest v1.11.0
+            [dev-dependencies]
+            └── steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+```
+
+Older versions of both were already in cargo's cache from earlier work (`syn` 3.0.4 and 3.0.6, `zerocopy` 0.8.58). Their ages:
+
+```
+> python -I ages.py syn@3.0.4 syn@3.0.6 zerocopy@0.8.58 thiserror@2.0.21 thiserror-impl@2.0.21 thiserror@2.0.20
+syn              3.0.4      published 2026-08-24     48 days old
+syn              3.0.6      published 2026-09-16     25 days old
+zerocopy         0.8.58     published 2026-09-24     17 days old
+thiserror        2.0.21     published 2026-09-23     18 days old
+thiserror-impl   2.0.21     published 2026-09-23     18 days old
+thiserror        2.0.20     published 2026-08-08     64 days old
+(exit code 0)
+```
+
+So the lock file was pinned to the cached older versions, with cargo told not to use the network (`--offline`), so nothing more was downloaded:
+
+```
+> cargo update -p syn@3.0.7 --precise 3.0.6 --offline
+ Downgrading syn v3.0.7 -> v3.0.6
+(exit code 0)
+```
+
+```
+> cargo update -p zerocopy --precise 0.8.58 --offline
+ Downgrading zerocopy v0.8.62 -> v0.8.58
+ Downgrading zerocopy-derive v0.8.62 -> v0.8.58 (available: v0.8.62)
+note: pass `--verbose` to see 1 unchanged dependencies behind latest
+(exit code 0)
+```
+
+Then every crates.io package in the lock file was checked, not only the downloaded ones:
+
+```
+> python -I lock_ages.py Cargo.lock
+arraydeque         0.5.1                  published 2023-02-05  1344 days old
+autocfg            1.5.1                  published 2026-05-22   142 days old
+bit-set            0.8.0                  published 2024-07-16   817 days old
+bit-vec            0.8.0                  published 2024-07-16   817 days old
+bitflags           2.13.2                 published 2026-09-10    31 days old
+cfg-if             1.0.5                  published 2026-09-16    25 days old
+errno              0.3.14                 published 2025-09-09   397 days old
+fastrand           2.5.0                  published 2026-07-19    84 days old
+fnv                1.0.7                  published 2020-05-14  2341 days old
+getrandom          0.3.4                  published 2025-10-14   362 days old
+getrandom          0.4.3                  published 2026-06-17   116 days old
+libc               0.2.190                published 2026-10-02     9 days old  <-- under 14 days
+linux-raw-sys      0.12.1                 published 2025-12-23   292 days old
+num-traits         0.2.19                 published 2024-05-03   891 days old
+once_cell          1.21.4                 published 2026-03-12   213 days old
+ppv-lite86         0.2.21                 published 2025-03-09   581 days old
+proc-macro2        1.0.107                published 2026-07-19    84 days old
+proptest           1.11.0                 published 2026-03-24   201 days old
+quick-error        1.2.3                  published 2020-01-02  2474 days old
+quote              1.0.47                 published 2026-07-19    84 days old
+r-efi              5.3.0                  published 2025-06-17   481 days old
+r-efi              6.0.0                  published 2026-02-03   250 days old
+rand               0.9.5                  published 2026-07-11    92 days old
+rand_chacha        0.9.0                  published 2025-01-27   622 days old
+rand_core          0.9.5                  published 2026-01-13   271 days old
+rand_xorshift      0.4.0                  published 2025-01-27   622 days old
+regex-syntax       0.8.11                 published 2026-06-09   124 days old
+rustix             1.1.5                  published 2026-09-16    25 days old
+rusty-fork         0.3.1                  published 2025-10-04   372 days old
+saphyr-parser      0.1.0                  published 2026-09-19    22 days old
+syn                2.0.119                published 2026-07-15    88 days old
+syn                3.0.6                  published 2026-09-16    25 days old
+tempfile           3.27.0                 published 2026-03-11   214 days old
+thiserror          2.0.21                 published 2026-09-23    18 days old
+thiserror-impl     2.0.21                 published 2026-09-23    18 days old
+unarray            0.1.4                  published 2022-11-30  1411 days old
+unicode-ident      1.0.26                 published 2026-09-17    24 days old
+wait-timeout       0.2.1                  published 2025-02-03   615 days old
+wasip2             1.0.4+wasi-0.2.12      published 2026-06-12   121 days old
+windows-link       0.2.1                  published 2025-10-06   370 days old
+windows-sys        0.61.2                 published 2025-10-06   370 days old
+wit-bindgen        0.57.1                 published 2026-04-17   177 days old
+zerocopy           0.8.58                 published 2026-09-24    17 days old
+zerocopy-derive    0.8.58                 published 2026-09-24    17 days old
+44 crates.io packages in the lock file; 1 under 14 days old
+(exit code 0)
+```
+
+`libc` 0.2.190 is used only when building for Linux or macOS; on this laptop it was not downloaded or compiled. It was pinned back too, to the cached 0.2.189 (published 2026-07-21, 82 days old), so the committed lock file meets the rule on every platform:
+
+```
+> cargo update -p libc --precise 0.2.189 --offline
+ Downgrading libc v0.2.190 -> v0.2.189
+note: pass `--verbose` to see 3 unchanged dependencies behind latest
+(exit code 0)
+```
+
+```
+> python -I lock_ages.py Cargo.lock
+arraydeque         0.5.1                  published 2023-02-05  1344 days old
+autocfg            1.5.1                  published 2026-05-22   142 days old
+bit-set            0.8.0                  published 2024-07-16   817 days old
+bit-vec            0.8.0                  published 2024-07-16   817 days old
+bitflags           2.13.2                 published 2026-09-10    31 days old
+cfg-if             1.0.5                  published 2026-09-16    25 days old
+errno              0.3.14                 published 2025-09-09   397 days old
+fastrand           2.5.0                  published 2026-07-19    84 days old
+fnv                1.0.7                  published 2020-05-14  2341 days old
+getrandom          0.3.4                  published 2025-10-14   362 days old
+getrandom          0.4.3                  published 2026-06-17   116 days old
+libc               0.2.189                published 2026-07-21    82 days old
+linux-raw-sys      0.12.1                 published 2025-12-23   292 days old
+num-traits         0.2.19                 published 2024-05-03   891 days old
+once_cell          1.21.4                 published 2026-03-12   213 days old
+ppv-lite86         0.2.21                 published 2025-03-09   581 days old
+proc-macro2        1.0.107                published 2026-07-19    84 days old
+proptest           1.11.0                 published 2026-03-24   201 days old
+quick-error        1.2.3                  published 2020-01-02  2474 days old
+quote              1.0.47                 published 2026-07-19    84 days old
+r-efi              5.3.0                  published 2025-06-17   481 days old
+r-efi              6.0.0                  published 2026-02-03   250 days old
+rand               0.9.5                  published 2026-07-11    92 days old
+rand_chacha        0.9.0                  published 2025-01-27   622 days old
+rand_core          0.9.5                  published 2026-01-13   271 days old
+rand_xorshift      0.4.0                  published 2025-01-27   622 days old
+regex-syntax       0.8.11                 published 2026-06-09   124 days old
+rustix             1.1.5                  published 2026-09-16    25 days old
+rusty-fork         0.3.1                  published 2025-10-04   372 days old
+saphyr-parser      0.1.0                  published 2026-09-19    22 days old
+syn                2.0.119                published 2026-07-15    88 days old
+syn                3.0.6                  published 2026-09-16    25 days old
+tempfile           3.27.0                 published 2026-03-11   214 days old
+thiserror          2.0.21                 published 2026-09-23    18 days old
+thiserror-impl     2.0.21                 published 2026-09-23    18 days old
+unarray            0.1.4                  published 2022-11-30  1411 days old
+unicode-ident      1.0.26                 published 2026-09-17    24 days old
+wait-timeout       0.2.1                  published 2025-02-03   615 days old
+wasip2             1.0.4+wasi-0.2.12      published 2026-06-12   121 days old
+windows-link       0.2.1                  published 2025-10-06   370 days old
+windows-sys        0.61.2                 published 2025-10-06   370 days old
+wit-bindgen        0.57.1                 published 2026-04-17   177 days old
+zerocopy           0.8.58                 published 2026-09-24    17 days old
+zerocopy-derive    0.8.58                 published 2026-09-24    17 days old
+44 crates.io packages in the lock file; 0 under 14 days old
+(exit code 0)
+```
+
+**The test again, with the pinned versions:**
+
+```
+> cargo test -p steplet-core --test differential --offline
+   Compiling zerocopy v0.8.58
+   Compiling syn v3.0.6
+   Compiling thiserror-impl v2.0.21
+   Compiling thiserror v2.0.21
+   Compiling saphyr-parser v0.1.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.18s
+     Running tests\differential.rs (target\debug\deps\differential-3bb24f948dd3a47c.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+(exit code 0)
+```
+
+**Check before committing:**
+
+```
+> cargo test --workspace --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.76s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-8cd4bc4b16d7439d.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-4c6e6c7e98b733b2.exe)
+
+running 12 tests
+test a_lone_carriage_return_is_refused ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test every_error_has_words_and_help ... ok
+test bad_utf8_names_its_line ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test no_unicode_normalisation ... ok
+test exactly_one_final_newline ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test windows_line_endings_become_unix_ones ... ok
+test leading_and_inner_spaces_stay ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-d30cc554b5de1acd.exe)
+
+running 10 tests
+test the_block_is_split_off ... ok
+test block_in_the_body ... ok
+test the_key_line_must_be_exact ... ok
+test block_lines_must_be_indented_base64 ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test end_marker_missing ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+test block_not_last_in_the_header ... ok
+test two_blocks ... ok
+test markers_without_the_key_line ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-dbf9024d7237e3f5.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test adds_days_across_months_and_years ... ok
+test counts_days_from_1970 ... ok
+test reads_and_writes_dates ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential.rs (target\debug\deps\differential-3bb24f948dd3a47c.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.24s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-98056bd6b17d32c2.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test reads_every_field_with_its_line ... ok
+test the_example_file_reads ... ok
+test the_version_comes_first_and_is_1 ... ok
+test wrong_shapes ... ok
+test unknown_and_missing_fields ... ok
+test every_field_error_has_words_and_help ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-c32e58672202eb9b.exe)
+
+running 4 tests
+test every_refusal_has_words_and_help ... ok
+test maps_lists_and_values ... ok
+test values_yaml_reads_as_written ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-a3a9da96a156aa91.exe)
+
+running 5 tests
+test words_and_help ... ok
+test domains_and_folders ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release --offline
+    Finished `release` profile [optimized] target(s) in 0.04s
+(exit code 0)
+```
+
+**Verdict: done.** 3 of 3 differential tests pass (thousands of generated headers compared with `saphyr-parser`, 5,000 cases per property); 47 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`, and the two new libraries are test-only, so they are not part of it. All 44 crates.io packages in `Cargo.lock` are now at least 14 days old. **Not undone:** `syn` 3.0.7 and `zerocopy` 0.8.62 were compiled once, by the first run, before the pinning; they are still in cargo's cache (`%USERPROFILE%\.cargo\registry`) and in `target\`. Nothing in this repository uses them any more.
