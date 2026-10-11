@@ -103,6 +103,13 @@ pub fn is_invisible(c: char) -> bool {
         .is_ok()
 }
 
+/// True for the space separators (Unicode category Zs) other than the ordinary space: characters that look like
+/// a space. They get a badge like every invisible character, but the rating does not count them (G7): they are
+/// common in ordinary writing. Checked against icu_properties for every code point in tests/space_like.rs.
+pub fn is_space_like(c: char) -> bool {
+    matches!(c as u32, 0x00a0 | 0x1680 | 0x2000..=0x200a | 0x202f | 0x205f | 0x3000)
+}
+
 /// Sorted, non-overlapping ranges, both ends included.
 const INVISIBLE: &[(u32, u32)] = &[
     (0x0000, 0x001f), (0x007f, 0x00a0), (0x00ad, 0x00ad), (0x034f, 0x034f), (0x0600, 0x0605),

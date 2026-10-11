@@ -336,6 +336,8 @@ pub struct Steplet {
     pub never: Vec<Scalar>,
     /// The cleaned-up, signed body: what the agent is given.
     pub body: String,
+    /// The line of the file where the body starts (the line after the closing `---`). Signature lines count.
+    pub body_line: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -403,6 +405,7 @@ pub fn parse(c: &Canonical) -> Result<Steplet, ParseError> {
         allow,
         never: top.list("never")?,
         body: c.body().to_string(),
+        body_line: (c.text().lines().count() - c.body().lines().count()) as u32 + 1,
     })
 }
 
@@ -460,7 +463,7 @@ fn checked(items: Vec<Scalar>, ok: fn(&str) -> bool, kind: ParseErrorKind) -> Re
     }
 }
 
-fn is_domain(s: &str) -> bool {
+pub(crate) fn is_domain(s: &str) -> bool {
     let label_ok = |l: &str| {
         !l.is_empty()
             && l.len() <= 63
@@ -484,7 +487,7 @@ fn is_commit(s: &str) -> bool {
     (s.len() == 40 || s.len() == 64) && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-fn is_folder(s: &str) -> bool {
+pub(crate) fn is_folder(s: &str) -> bool {
     s == "."
         || s.split('/').all(|part| {
             !part.is_empty()

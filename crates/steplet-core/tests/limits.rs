@@ -74,3 +74,47 @@ fn words_and_help() {
     assert_eq!(b.to_string(), "line 10: this command is 300 characters long; it must be under 300");
     assert!(!b.help().allowed.is_empty());
 }
+
+#[test]
+fn long_title_sender_and_lines_name_their_line() {
+    let f = format!(
+        "---\nsteplet: 1\ntitle: {}\nsender: {}\nexpires: 2026-10-25\nsteps:\n  - {}\nnever:\n  - {}\n---\n",
+        "t".repeat(121),
+        "s".repeat(81),
+        "a".repeat(300),
+        "n".repeat(300)
+    );
+    let s = parse(&canonicalize(f.as_bytes()).unwrap()).unwrap();
+    assert_eq!(
+        check(&s),
+        vec![
+            LimitBreach { what: Limited::TitleLength, line: 3, found: 121, max: 120 },
+            LimitBreach { what: Limited::SenderLength, line: 4, found: 81, max: 80 },
+            LimitBreach { what: Limited::ValueLength, line: 7, found: 300, max: 299 },
+            LimitBreach { what: Limited::ValueLength, line: 9, found: 300, max: 299 },
+        ]
+    );
+}
+
+#[test]
+fn at_the_line_limits_nothing_is_reported() {
+    let f = format!(
+        "---\nsteplet: 1\ntitle: {}\nsender: {}\nexpires: 2026-10-25\nrepository:\n  url: https://github.com/{}\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d\nsteps:\n  - {}\nallow:\n  read:\n    - {}\n---\n",
+        "t".repeat(120),
+        "s".repeat(80),
+        "p".repeat(299 - "https://github.com/".len()),
+        "é".repeat(299),
+        "r".repeat(299)
+    );
+    let s = parse(&canonicalize(f.as_bytes()).unwrap()).unwrap();
+    assert_eq!(check(&s), vec![]);
+}
+
+#[test]
+fn words_for_line_limits() {
+    let b = LimitBreach { what: Limited::TitleLength, line: 3, found: 121, max: 120 };
+    assert_eq!(b.to_string(), "line 3: the title is 121 characters long; at most 120 are allowed");
+    let b = LimitBreach { what: Limited::ValueLength, line: 7, found: 300, max: 299 };
+    assert_eq!(b.to_string(), "line 7: this line is 300 characters long; it must be under 300");
+    assert!(b.help().allowed.contains("body"));
+}

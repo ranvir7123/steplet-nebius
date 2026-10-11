@@ -1,4 +1,5 @@
-//! Size limits (decision row 12). Starting values, to tune on the test corpus in phase 2. Over a limit is red.
+//! Size limits (decision row 12, and G5 for single lines). Starting values, tuned on the test corpus.
+//! Over a limit is blocked (R9).
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -16,6 +17,11 @@ pub const MAX_STEPS: usize = 30;
 pub const MAX_COMMAND_CHARS: usize = 299;
 /// Not in row 12. A starting value for the `never` list, equal to the command limit.
 pub const MAX_NEVER: usize = 25;
+/// G5: the longest title and sender, so each fits on one row of the preview.
+pub const MAX_TITLE_CHARS: usize = 120;
+pub const MAX_SENDER_CHARS: usize = 80;
+/// G5: any other one-line value (a step, a never line, the repository address, a folder) is under 300 characters.
+pub const MAX_VALUE_CHARS: usize = 299;
 /// The furthest an `expires` date may be from the day of signing (row 19).
 pub const MAX_EXPIRY_DAYS: i64 = 365;
 /// The expiry `steplet-sign` suggests (row 19).
@@ -30,12 +36,16 @@ pub enum Limited {
     WriteFolders,
     Never,
     CommandLength,
+    TitleLength,
+    SenderLength,
+    /// A step, a never line, the repository address or a folder.
+    ValueLength,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LimitBreach {
     pub what: Limited,
-    /// For a list: the line of the first item over the limit. For a command: its line.
+    /// For a list: the line of the first item over the limit. For a single value: its line.
     pub line: u32,
     pub found: usize,
     pub max: usize,
@@ -54,11 +64,20 @@ pub fn check(s: &Steplet) -> Vec<LimitBreach> {
     count(Limited::ReadFolders, &s.allow.read, MAX_FOLDERS_PER_LIST);
     count(Limited::WriteFolders, &s.allow.write, MAX_FOLDERS_PER_LIST);
     count(Limited::Never, &s.never, MAX_NEVER);
-    for c in &s.allow.commands {
-        let n = c.text.chars().count();
-        if n > MAX_COMMAND_CHARS {
-            out.push(LimitBreach { what: Limited::CommandLength, line: c.line, found: n, max: MAX_COMMAND_CHARS });
+    let mut long = |what, item: &Scalar, max: usize| {
+        let n = item.text.chars().count();
+        if n > max {
+            out.push(LimitBreach { what, line: item.line, found: n, max });
         }
+    };
+    for c in &s.allow.commands {
+        long(Limited::CommandLength, c, MAX_COMMAND_CHARS);
+    }
+    long(Limited::TitleLength, &s.title, MAX_TITLE_CHARS);
+    long(Limited::SenderLength, &s.sender, MAX_SENDER_CHARS);
+    let url = s.repository.as_ref().map(|r| &r.url);
+    for item in s.steps.iter().chain(&s.never).chain(url).chain(&s.allow.read).chain(&s.allow.write) {
+        long(Limited::ValueLength, item, MAX_VALUE_CHARS);
     }
     out
 }
@@ -76,6 +95,15 @@ impl fmt::Display for LimitBreach {
             Limited::CommandLength => {
                 return write!(f, "line {line}: this command is {found} characters long; it must be under {}", max + 1);
             }
+            Limited::TitleLength => {
+                return write!(f, "line {line}: the title is {found} characters long; at most {max} are allowed");
+            }
+            Limited::SenderLength => {
+                return write!(f, "line {line}: the sender is {found} characters long; at most {max} are allowed");
+            }
+            Limited::ValueLength => {
+                return write!(f, "line {line}: this line is {found} characters long; it must be under {}", max + 1);
+            }
         };
         write!(f, "line {line}: {found} {what}; at most {max} are allowed")
     }
@@ -85,6 +113,9 @@ impl LimitBreach {
     pub fn help(&self) -> Help {
         let allowed = match self.what {
             Limited::CommandLength => "a shorter command; put long scripts in the repository and run them by name",
+            Limited::TitleLength | Limited::SenderLength | Limited::ValueLength => {
+                "a shorter line; put the details in the body, which has no line limit"
+            }
             _ => "a shorter list; everything must fit on the receiver's screen, so split a bigger task into several files",
         };
         Help { allowed, example: "" }

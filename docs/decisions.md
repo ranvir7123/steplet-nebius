@@ -251,6 +251,27 @@ Added while the plan was run (11 Oct 2026); **confirmed by the user on 11 Oct 20
 | F11 | **One text per signature.** `sig::verify` writes the signature it read back out and requires that text to equal the block in the file exactly; otherwise the file is refused with the reason `NotCanonical` ("the signature block was edited after signing"). | The property tests found that `ssh-key` 0.6.7 ignores a wrong length inside a signature, so a signed file could be edited in its signature block and stay valid. OpenSSH's `ssh-keygen` refuses such a block; row 15 forbids two readers disagreeing. |
 | F12 | **The 14-day rule covers every crates.io package in every lock file** (`Cargo.lock` and `crates/steplet-core/fuzz/Cargo.lock`), not only the crates pinned by hand. A withdrawn (yanked) version is never used. Younger versions are pinned back with `cargo update --precise`, using versions already in cargo's cache where possible; a new download still gets its own yes. | Cargo picks the newest versions of indirect libraries: the first download brought `syn` and `zerocopy` at 1 and 3 days old, and the older `yoke-derive` in the cache had been yanked. |
 
+## Milestone 1, phase 2 choices (12 Oct 2026)
+
+Plan: `docs/plans/2026-10-12-milestone-1-phase-2.md`, approved by the user on 12 Oct 2026 with the recommended option (A) for each of G1 to G4. Rows G5 to G14 are the smaller choices from the plan's section 4, approved with it.
+
+| # | Decision | Why |
+|---|---|---|
+| G1 | **A line in `allow: commands` is an exact list of words.** Steplet splits it the way `bash` does, for plain words and simple quotes only; pipes, `;`, `&&`, `$`, redirections, wildcards and `~` make it "not understood" (amber; the agent asks each time). During a run, the agent's command runs without asking only if its words are exactly the same. [settles R8 for version 1] | The strictest form of R8's "argument constraints"; can be loosened later without breaking files. |
+| G2 | **A harmless reading command inside the repository runs without asking, even if the file did not declare it.** "Harmless" is Steplet's fixed list (`command::kind` = ReadOnly), never a path outside the repository. | Claude Code already runs most of them without asking the checker (E2); asking for the rest interrupts the receiver for nothing. |
+| G3 | **36 rules in version 1** (`docs/rules.md`), each with a hit and a near-miss in the corpus. [replaces row 23's "about 70"] | The strict reader (phase 1) already refuses most structure problems; no list of 70 exists. |
+| G4 | **Golden files are our own `.json` files next to each corpus file**, not `insta`. | No new download; the WASM parity check and the check page read the same files. |
+| G5 | Title at most 120 characters, sender at most 80, any other one-line value under 300. Over is blocked. | Phase 1 left single lines unbounded; one line must fit on one row of the preview. |
+| G6 | No `read` list: the whole repository may be read. A `read` list limits reading. No `write` list: the agent's file tools ask before every change. | Reading the task's own repository is what every task does. |
+| G7 | Invisible characters: blocked in the title, the sender and commands; red in steps, never lines and body, except space-like characters (Unicode "space separators"), which are badges only. | R9; space-like characters are common in ordinary writing. |
+| G8 | The always-blocked list counts only places outside the repository, named in commands, the title, steps or body; a `never` line does not count. | A fresh working copy cannot hold the receiver's keys; a `never` line is a warning to the agent. |
+| G9 | Known package registries give no finding; paste, tunnel and webhook sites are red; other sites are amber. | Most test tasks need a registry; data can leave to any other listed site. |
+| G10 | Expired, or expiring more than 365 days after the time of viewing: blocked. | Row 19's cap, checked on the receiver's side too. |
+| G11 | The report's JSON is written by `steplet-core` itself: ASCII only, one finding per line. | The app and the check page get byte-for-byte the same text. |
+| G12 | `steplet-sign check` shows the rating; blocked findings make it fail. | The sender sees what the receiver will see before sending. |
+| G13 | `Policy::from_steplet(s, work)` takes the working copy's absolute path; reasons are fixed Steplet texts. [amends the milestone plan's interface] | The checker must tell inside from outside the repository. |
+| G14 | `.git`, `.claude`, `.codex`, `.gemini`, `.cursor` and `.mcp.json`, at any depth, can never be written by a task. | D2, D3, D6. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`
