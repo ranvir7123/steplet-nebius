@@ -4573,3 +4573,7 @@ Also done: `steplet-sign check` and `sign` (Tasks 11 and 12), the sender's guide
 - **The cause of the linker locks (`LNK1104`):** most likely McAfee's scanning, not proven (Task 12).
 - **No independent review of the whole phase's changes:** only the signature fix (Task 8) was reviewed.
 - **Decisions F11 and F12** were made during the run and are waiting for the user's confirmation (`docs/decisions.md`).
+
+## After the summary (11 Oct 2026)
+
+The user confirmed decisions F11 and F12, and said yes to fast-forwarding `main` to this branch, pushing `main` to GitHub, and moving the two old worktrees (`steplet-phase0-live-checks-15666e`, `steplet-phase1-plan-15bade`) to the Recycle Bin.

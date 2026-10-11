@@ -244,7 +244,7 @@ Plan: `docs/plans/2026-10-11-milestone-1-phase-1.md`, approved by the user on 11
 | F9 | Invisible characters (shown as badges): Unicode's default-ignorable characters and the categories Cc, Cf, Zs, Zl, Zp, Co, except tab, newline and space. Hand-written table, checked against `icu_properties` for every code point. | No Unicode library in the core keeps the WASM small; the test keeps the table honest. |
 | F10 | `steplet-sign` exit codes: 0 fine, 1 problems found or signing failed, 2 wrong use or the file could not be read. | |
 
-Added while the plan was run (11 Oct 2026), **for the user to confirm**. Evidence: `docs/milestone-1-phase-1-results.md`, Tasks 6, 8, 10 and 13.
+Added while the plan was run (11 Oct 2026); **confirmed by the user on 11 Oct 2026**. Evidence: `docs/milestone-1-phase-1-results.md`, Tasks 6, 8, 10 and 13.
 
 | # | Decision | Why |
 |---|---|---|

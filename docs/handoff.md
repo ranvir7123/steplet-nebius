@@ -2,7 +2,7 @@
 
 Written 7 Oct 2026 at the end of the design sessions. Read this first in a new session, then the two files it points to. Nothing in the repository is code yet.
 
-**Update, 11 Oct 2026, later: phase 1 finished on 11 Oct 2026; results in `docs/milestone-1-phase-1-results.md`** (summary at its end: all five "done means" pass; the sender's guide is `docs/steplet-format.md`). The property tests found that `ssh-key` 0.6.7 accepts a signature whose inner lengths were edited; `sig::verify` now requires the exact text OpenSSH writes. Decisions F11 (that check) and F12 (the 14-day rule for every crate in every lock file) wait for the user's confirmation. Work is on branch `claude/steplet-phase1-task1-run-e26214`, not yet merged. Next: phase 2's build plan.
+**Update, 11 Oct 2026, later: phase 1 finished on 11 Oct 2026; results in `docs/milestone-1-phase-1-results.md`** (summary at its end: all five "done means" pass; the sender's guide is `docs/steplet-format.md`). The property tests found that `ssh-key` 0.6.7 accepts a signature whose inner lengths were edited; `sig::verify` now requires the exact text OpenSSH writes. Decisions F11 (that check) and F12 (the 14-day rule for every crate in every lock file) were confirmed by the user the same day. Phase 1 is merged into `main` by fast-forward. Next: phase 2's build plan.
 
 **Update, 11 Oct 2026: phase 1's build plan is approved** (`docs/plans/2026-10-11-milestone-1-phase-1.md`, F1 to F3 as recommended; decisions F1 to F10). The file's header fields are now fixed (decisions F1). Next: run the plan from Task 1, inline.
 
