@@ -22,3 +22,8 @@ sk.json
 
 # Personal agent settings
 .claude/settings.local.json
+
+# Fuzzing output (a crash input is copied into a test if one is found)
+crates/steplet-core/fuzz/corpus/
+crates/steplet-core/fuzz/artifacts/
+crates/steplet-core/fuzz/coverage/

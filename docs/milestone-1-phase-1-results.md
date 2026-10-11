@@ -3865,3 +3865,264 @@ steplet-sign folders in %TEMP% after: 0
 **Step 4, B3 (optional): not done.** It needs the user to type a passphrase in their own terminal, which this session cannot do. It is listed under "not verified".
 
 **Verdict: done, except optional B3.** 9 of 9 command-line tests pass, run against the real `steplet-sign` program and Windows' own `ssh-keygen`; 83 tests pass in the workspace; no compiler warnings. `ssh-keygen` accepts what `sign` writes, refuses it after an edit, and accepts a signature made in Rust. An RSA key, a bad expiry and a header problem each stop signing and leave the file unchanged. The plan's code compiled and passed as written; nothing was changed from the plan.
+
+## Task 13: the fuzz target and a recorded run (yes: B2 if a download is needed)
+
+**Step 1, is `libfuzzer-sys` 0.4.13 in cargo's cache?**
+
+```
+> Get-ChildItem "$env:USERPROFILE\.cargo\registry\src\*\libfuzzer-sys-0.4.13" -Directory -ErrorAction SilentlyContinue | Select-Object FullName
+﻿
+FullName                                                                                 
+--------                                                                                 
+C:\Users\RANVIR\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libfuzzer-sys-0.4.13
+(exit code 0)
+```
+
+It is, so B2 (downloading it) was not needed.
+
+### The fuzz project's lock file
+
+The fuzz project is its own small workspace with its own `Cargo.lock`. It was made with cargo offline (only versions already on this laptop), then checked against the 14-day rule like the main lock file:
+
+```
+> cargo generate-lockfile --manifest-path crates/steplet-core/fuzz/Cargo.toml --offline
+     Locking 41 packages to latest Rust 1.98.0 compatible versions
+(exit code 0)
+```
+
+```
+> python -I lock_ages.py crates/steplet-core/fuzz/Cargo.lock
+arbitrary          1.5.0                  published 2026-10-06     5 days old  <-- under 14 days
+base64ct           1.8.3                  published 2026-01-12   272 days old
+block-buffer       0.10.4                 published 2023-03-09  1312 days old
+cc                 1.6.0                  published 2026-10-03     8 days old  <-- under 14 days
+cfg-if             1.0.5                  published 2026-09-16    25 days old
+cipher             0.4.4                  published 2023-03-09  1312 days old
+cpufeatures        0.2.17                 published 2025-01-25   624 days old
+crypto-common      0.1.7                  published 2025-11-12   333 days old
+curve25519-dalek   4.1.3                  published 2024-06-18   845 days old
+curve25519-dalek-derive 0.1.1                  published 2023-10-31  1076 days old
+digest             0.10.7                 published 2023-05-19  1241 days old
+ed25519            2.2.3                  published 2023-10-15  1092 days old
+ed25519-dalek      2.2.0                  published 2025-07-09   459 days old
+fiat-crypto        0.2.9                  published 2024-05-12   882 days old
+find-msvc-tools    0.1.14                 published 2026-09-25    16 days old
+generic-array      0.14.7                 published 2023-03-28  1293 days old
+getrandom          0.4.3                  published 2026-06-17   116 days old
+inout              0.1.4                  published 2025-02-21   597 days old
+jobserver          0.1.35                 published 2026-07-06    97 days old
+libc               0.2.190                published 2026-10-02     9 days old  <-- under 14 days
+libfuzzer-sys      0.4.13                 published 2026-06-04   129 days old
+pem-rfc7468        0.7.0                  published 2023-02-26  1323 days old
+proc-macro2        1.0.107                published 2026-07-19    84 days old
+quote              1.0.47                 published 2026-07-19    84 days old
+r-efi              6.0.0                  published 2026-02-03   250 days old
+rand_core          0.6.4                  published 2022-09-15  1487 days old
+rustc_version      0.4.1                  published 2024-08-28   774 days old
+semver             1.0.28                 published 2026-04-04   190 days old
+sha2               0.10.9                 published 2025-04-30   529 days old
+shlex              2.0.1                  published 2026-05-17   147 days old
+signature          2.2.0                  published 2023-11-12  1064 days old
+ssh-cipher         0.2.0                  published 2023-08-12  1156 days old
+ssh-encoding       0.2.0                  published 2023-08-11  1157 days old
+ssh-key            0.6.7                  published 2024-10-15   726 days old
+subtle             2.6.1                  published 2024-06-24   839 days old
+syn                2.0.119                published 2026-07-15    88 days old
+typenum            1.20.1                 published 2026-05-29   135 days old
+unicode-ident      1.0.26                 published 2026-09-17    24 days old
+version_check      0.9.5                  published 2024-07-25   808 days old
+zeroize            1.9.1                  published 2026-10-06     5 days old  <-- under 14 days
+40 crates.io packages in the lock file; 4 under 14 days old; 0 yanked
+(exit code 0)
+```
+
+Four were under 14 days old. Older cached versions of three of them:
+
+```
+> python -I ages.py arbitrary@1.5.0 cc@1.4.4 cc@1.4.7 cc@1.6.0
+arbitrary        1.5.0      published 2026-10-06      5 days old  <-- under 14 days
+cc               1.4.4      published 2026-08-21     51 days old
+cc               1.4.7      published 2026-09-18     23 days old
+cc               1.6.0      published 2026-10-03      8 days old  <-- under 14 days
+(exit code 0)
+```
+
+```
+> cargo update --manifest-path crates/steplet-core/fuzz/Cargo.toml -p cc --precise 1.4.7 --offline && cargo update --manifest-path crates/steplet-core/fuzz/Cargo.toml -p libc --precise 0.2.189 --offline && cargo update --manifest-path crates/steplet-core/fuzz/Cargo.toml -p zeroize --precise 1.9.0 --offline
+ Downgrading cc v1.6.0 -> v1.4.7
+ Downgrading libc v0.2.190 -> v0.2.189
+note: pass `--verbose` to see 1 unchanged dependencies behind latest
+ Downgrading zeroize v1.9.1 -> v1.9.0
+note: pass `--verbose` to see 2 unchanged dependencies behind latest
+(exit code 0)
+```
+
+`arbitrary` had no older version on this laptop (phase 0's fuzz smoke test, `C:\dev\m1\fuzz-smoke\fuzz\Cargo.lock`, also used 1.5.0). `libfuzzer-sys` 0.4.13 asks for any `arbitrary` 1.x. **The user chose (11 Oct 2026, in this session) to download `arbitrary` 1.4.2** (published 14 Aug 2025, about 38 KB) rather than keep 1.5.0:
+
+```
+> cargo update --manifest-path crates/steplet-core/fuzz/Cargo.toml -p arbitrary --precise 1.4.2
+    Updating crates.io index
+ Downgrading arbitrary v1.5.0 -> v1.4.2
+note: pass `--verbose` to see 4 unchanged dependencies behind latest
+(exit code 0)
+```
+
+```
+> cargo fetch --manifest-path crates/steplet-core/fuzz/Cargo.toml
+ Downloading crates ...
+  Downloaded arbitrary v1.4.2
+  Downloaded r-efi v6.0.0
+  Downloaded fiat-crypto v0.2.9
+(exit code 0)
+```
+
+**More was downloaded than the user said yes to.** `cargo fetch` gets the libraries for every platform, so besides `arbitrary` 1.4.2 it also downloaded `r-efi` 6.0.0 and `fiat-crypto` 0.2.9, which are not used when building on this laptop. Both meet the 14-day rule (published 2026-02-03 and 2024-05-12). `cargo build` would have fetched only what this platform needs; that is what should have been used. They are in cargo's cache only, not in the repository.
+
+```
+> python -I lock_ages.py crates/steplet-core/fuzz/Cargo.lock
+arbitrary          1.4.2                  published 2025-08-14   423 days old
+base64ct           1.8.3                  published 2026-01-12   272 days old
+block-buffer       0.10.4                 published 2023-03-09  1312 days old
+cc                 1.4.7                  published 2026-09-18    23 days old
+cfg-if             1.0.5                  published 2026-09-16    25 days old
+cipher             0.4.4                  published 2023-03-09  1312 days old
+cpufeatures        0.2.17                 published 2025-01-25   624 days old
+crypto-common      0.1.7                  published 2025-11-12   333 days old
+curve25519-dalek   4.1.3                  published 2024-06-18   845 days old
+curve25519-dalek-derive 0.1.1                  published 2023-10-31  1076 days old
+digest             0.10.7                 published 2023-05-19  1241 days old
+ed25519            2.2.3                  published 2023-10-15  1092 days old
+ed25519-dalek      2.2.0                  published 2025-07-09   459 days old
+fiat-crypto        0.2.9                  published 2024-05-12   882 days old
+find-msvc-tools    0.1.14                 published 2026-09-25    16 days old
+generic-array      0.14.7                 published 2023-03-28  1293 days old
+getrandom          0.4.3                  published 2026-06-17   116 days old
+inout              0.1.4                  published 2025-02-21   597 days old
+jobserver          0.1.35                 published 2026-07-06    97 days old
+libc               0.2.189                published 2026-07-21    82 days old
+libfuzzer-sys      0.4.13                 published 2026-06-04   129 days old
+pem-rfc7468        0.7.0                  published 2023-02-26  1323 days old
+proc-macro2        1.0.107                published 2026-07-19    84 days old
+quote              1.0.47                 published 2026-07-19    84 days old
+r-efi              6.0.0                  published 2026-02-03   250 days old
+rand_core          0.6.4                  published 2022-09-15  1487 days old
+rustc_version      0.4.1                  published 2024-08-28   774 days old
+semver             1.0.28                 published 2026-04-04   190 days old
+sha2               0.10.9                 published 2025-04-30   529 days old
+shlex              2.0.1                  published 2026-05-17   147 days old
+signature          2.2.0                  published 2023-11-12  1064 days old
+ssh-cipher         0.2.0                  published 2023-08-12  1156 days old
+ssh-encoding       0.2.0                  published 2023-08-11  1157 days old
+ssh-key            0.6.7                  published 2024-10-15   726 days old
+subtle             2.6.1                  published 2024-06-24   839 days old
+syn                2.0.119                published 2026-07-15    88 days old
+typenum            1.20.1                 published 2026-05-29   135 days old
+unicode-ident      1.0.26                 published 2026-09-17    24 days old
+version_check      0.9.5                  published 2024-07-25   808 days old
+zeroize            1.9.0                  published 2026-06-12   121 days old
+40 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+(exit code 0)
+```
+
+### The run
+
+Built first, with cargo kept offline (`CARGO_NET_OFFLINE=true`) and the AddressSanitizer folder on `PATH` for this command only; 12 seed files (the vectors and the example):
+
+```
+> cargo +nightly fuzz build --fuzz-dir crates/steplet-core/fuzz read_file
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling cfg-if v1.0.5
+   Compiling cpufeatures v0.2.17
+   Compiling semver v1.0.28
+   Compiling getrandom v0.4.3
+   Compiling base64ct v1.8.3
+   Compiling signature v2.2.0
+   Compiling shlex v2.0.1
+   Compiling subtle v2.6.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling rand_core v0.6.4
+   Compiling zeroize v1.9.0
+   Compiling ed25519 v2.2.3
+   Compiling rustc_version v0.4.1
+   Compiling arbitrary v1.4.2
+   Compiling pem-rfc7468 v0.7.0
+   Compiling generic-array v0.14.7
+   Compiling curve25519-dalek v4.1.3
+   Compiling jobserver v0.1.35
+   Compiling cc v1.4.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling syn v2.0.119
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling libfuzzer-sys v0.4.13
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+   Compiling steplet-core-fuzz v0.0.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core\fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 18.76s
+(exit code 0)
+```
+
+Then the plan's command, unchanged (output to `C:\dev\m1\p1\fuzz.txt`):
+
+```
+> cmd /c "cargo +nightly fuzz run --fuzz-dir crates/steplet-core/fuzz read_file crates/steplet-core/fuzz/corpus/read_file -- -max_total_time=900 -max_len=65536 > C:\dev\m1\p1\fuzz.txt 2>&1"; Get-Content C:\dev\m1\p1\fuzz.txt -Tail 25
+﻿exit code: 0
+started 10/11/2026 15:07:37, ended 10/11/2026 15:22:40
+",\000\000\000" # Uses: 173
+"'\000\000\000\000\000\000\000" # Uses: 149
+"un" # Uses: 114
+"\035\000\000\000" # Uses: 105
+"\001\000\000:" # Uses: 102
+"\001\000\000a" # Uses: 92
+"\000G" # Uses: 81
+"\001\000\000\000\000\000\0005" # Uses: 81
+"2-" # Uses: 78
+"\001\000\0008" # Uses: 85
+"tl: ht https://gistepl" # Uses: 66
+"stet: '.3teplet: \357\273\270H " # Uses: 68
+"  - Coun -" # Uses: 57
+"n\000" # Uses: 53
+"xthe    - wc -l README" # Uses: 53
+"- Check that the README " # Uses: 54
+"ur" # Uses: 63
+"- Couitl: Col: https://g" # Uses: 38
+"https://githo\357\273\277 com/oct" # Uses: 52
+"hThTeEhThTmsteple: '2El_" # Uses: 46
+"j\000\000\000" # Uses: 27
+"\\\000\000\000\000\000\000\000" # Uses: 4
+"\000\000\000\000\000\000\000&" # Uses: 1
+###### End of recommended dictionary. ######
+Done 4768065 runs in 901 second(s)
+(exit code 0)
+```
+
+(The first two lines are printed by the PowerShell wrapper: the exit code and the start and end times. The rest is the last 25 lines of `fuzz.txt`: libFuzzer's suggested word list, then its last line.)
+
+The summary lines from the whole log (19,455 lines), picked out with `Select-String -Pattern 'INITED|DONE|Done |deadly signal|panicked|ERROR: AddressSanitizer|crash-'`; no crash line matched:
+
+```
+> Select-String -Path C:\dev\m1\p1\fuzz.txt -Pattern 'INITED|DONE|Done |deadly signal|panicked|ERROR: AddressSanitizer|crash-' -CaseSensitive
+﻿10:#13	INITED cov: 1857 ft: 2192 corp: 12/9653b exec/s: 0 rss: 44Mb
+18955:#4768065	DONE   cov: 2818 ft: 7857 corp: 1527/851Kb lim: 7201 exec/s: 5291 rss: 647Mb
+19455:Done 4768065 runs in 901 second(s)
+(exit code 0)
+```
+
+```
+> Get-ChildItem crates\steplet-core\fuzz\artifacts -Recurse -File   (where a crash input would be saved)
+files in artifacts: 0
+```
+
+**Verdict: done.** 4,768,065 inputs in 901 seconds (about 5,300 per second), exit code 0, no crash, no failed check: the core never panicked, cleaning up twice never changed anything, and display pieces always joined back into the original text. The corpus grew from 12 seed files to 1,527 inputs (851 KB); coverage from 1,857 to 2,818 points. The corpus and artifacts folders are ignored by git (new `.gitignore` lines); `crates/steplet-core/fuzz/Cargo.lock` is committed. Changes from the plan: the fuzz lock file is pinned for the 14-day rule (above), and cargo ran offline. A 15-minute run is a sample, not a proof.
