@@ -9,5 +9,6 @@ publish.workspace = true
 ssh-key = { version = "=0.6.7", default-features = false, features = ["alloc", "ed25519"] }
 
 [dev-dependencies]
+icu_properties = "=2.3.0"
 proptest = "=1.11.0"
 saphyr-parser = "=0.1.0"
