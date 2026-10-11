@@ -4126,3 +4126,450 @@ files in artifacts: 0
 ```
 
 **Verdict: done.** 4,768,065 inputs in 901 seconds (about 5,300 per second), exit code 0, no crash, no failed check: the core never panicked, cleaning up twice never changed anything, and display pieces always joined back into the original text. The corpus grew from 12 seed files to 1,527 inputs (851 KB); coverage from 1,857 to 2,818 points. The corpus and artifacts folders are ignored by git (new `.gitignore` lines); `crates/steplet-core/fuzz/Cargo.lock` is committed. Changes from the plan: the fuzz lock file is pinned for the 14-day rule (above), and cargo ran offline. A 15-minute run is a sample, not a proof.
+
+## Task 14: the sender's guide, the full checks, and wrap-up
+
+**Step 1:** `docs/steplet-format.md` written, in the plan's seven parts. While checking its claims against the code, one mismatch turned up (next part).
+
+### Exit code 2 for a file `sign` cannot read (decision F10)
+
+F10 says exit code 2 when "the file could not be read". `check` did that; the plan's `sign` returned 1, because its read error came back as an ordinary signing failure. A test first (`a_file_that_cannot_be_read_is_exit_code_2` in `crates/steplet-sign/tests/cli.rs`, for both commands):
+
+```
+> cargo test -p steplet-sign --test cli --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests\cli.rs (target\debug\deps\cli-dd89b904ca1b9d81.exe)
+
+running 10 tests
+test wrong_use_prints_how_to_use_it ... ok
+test a_file_that_cannot_be_read_is_exit_code_2 ... FAILED
+Good "steplet-v1" signature with ED25519 key SHA256:zbv/nU7iZdO0fB0DalMI70dP6/yFD8sctXvvW4+OokY
+test ssh_keygen_accepts_a_signature_made_in_rust ... ok
+test header_problems_stop_signing ... ok
+test expiry_must_be_from_today_to_365_days_ahead ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:SaMtQiX2cebnZICcvedTo1k6wFZ2JT1ypyhcSgOEPdw
+test windows_line_endings_are_written_back_as_unix_ones_and_still_verify ... ok
+test sign_then_check_shows_ssh_keygens_fingerprint ... ok
+Signature verification failed: incorrect signature
+Could not verify signature.
+test ssh_keygen_accepts_what_we_signed_and_what_we_cut_out ... ok
+test signing_again_after_an_edit_replaces_the_signature ... ok
+test an_rsa_key_is_refused_and_the_file_is_left_alone ... ok
+
+failures:
+
+---- a_file_that_cannot_be_read_is_exit_code_2 stdout ----
+
+thread 'a_file_that_cannot_be_read_is_exit_code_2' (12836) panicked at crates\steplet-sign\tests\cli.rs:181:5:
+assertion `left == right` failed: cannot read C:\Users\RANVIR\AppData\Local\Temp\steplet-sign-test-missing-40540\no-such-file.steplet: The system cannot find the file specified. (os error 2)
+
+  left: 1
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_file_that_cannot_be_read_is_exit_code_2
+
+test result: FAILED. 9 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+error: test failed, to rerun pass `-p steplet-sign --test cli`
+(exit code 101)
+```
+
+The fix, in `crates/steplet-sign/src/main.rs`: before signing, the program opens the file; if it cannot, it prints `cannot read <file>: <reason>` and ends with exit code 2.
+
+```
+> cargo test -p steplet-sign --test cli --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests\cli.rs (target\debug\deps\cli-dd89b904ca1b9d81.exe)
+
+running 10 tests
+test wrong_use_prints_how_to_use_it ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:zbv/nU7iZdO0fB0DalMI70dP6/yFD8sctXvvW4+OokY
+test ssh_keygen_accepts_a_signature_made_in_rust ... ok
+test a_file_that_cannot_be_read_is_exit_code_2 ... ok
+test header_problems_stop_signing ... ok
+test expiry_must_be_from_today_to_365_days_ahead ... ok
+test windows_line_endings_are_written_back_as_unix_ones_and_still_verify ... ok
+Good "steplet-v1" signature with ED25519 key SHA256:dU3GaP9ReL5i1xPVYarHjktP4sI6GxvPkB/1MLa00kw
+test sign_then_check_shows_ssh_keygens_fingerprint ... ok
+Signature verification failed: incorrect signature
+Could not verify signature.
+test ssh_keygen_accepts_what_we_signed_and_what_we_cut_out ... ok
+test signing_again_after_an_edit_replaces_the_signature ... ok
+test an_rsa_key_is_refused_and_the_file_is_left_alone ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
+(exit code 0)
+```
+
+### Clippy (yes: B4)
+
+B4: the user said yes on 11 Oct 2026, in this session.
+
+```
+> rustup component add clippy
+info: downloading component clippy
+(exit code 0)
+```
+
+First run:
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking cfg-if v1.0.5
+    Checking typenum v1.20.1
+    Checking cpufeatures v0.2.17
+    Checking base64ct v1.8.3
+    Checking signature v2.2.0
+    Checking subtle v2.6.1
+    Checking stable_deref_trait v1.2.1
+    Checking zeroize v1.9.0
+    Checking rand_core v0.6.4
+    Checking windows-link v0.2.1
+    Checking fastrand v2.5.0
+    Checking zerocopy v0.8.58
+    Checking litemap v0.8.3
+    Checking zerofrom v0.1.8
+    Checking writeable v0.6.4
+    Checking once_cell v1.21.4
+    Checking getrandom v0.3.4
+    Checking getrandom v0.4.3
+    Checking ed25519 v2.2.3
+    Checking fnv v1.0.7
+    Checking windows-sys v0.61.2
+    Checking utf8_iter v1.0.4
+    Checking quick-error v1.2.3
+    Checking wait-timeout v0.2.1
+    Checking pem-rfc7468 v0.7.0
+    Checking yoke v0.8.3
+    Checking bit-vec v0.8.0
+    Checking num-traits v0.2.19
+    Checking rand_core v0.9.5
+    Checking thiserror v2.0.21
+    Checking icu_properties_data v2.3.0
+    Checking unarray v0.1.4
+    Checking arraydeque v0.5.1
+    Checking regex-syntax v0.8.11
+    Checking bitflags v2.13.2
+    Checking zerovec v0.11.8
+    Checking zerotrie v0.2.5
+    Checking generic-array v0.14.7
+    Checking bit-set v0.8.0
+    Checking rand v0.9.5
+    Checking rand_xorshift v0.4.0
+    Checking saphyr-parser v0.1.0
+    Checking tinystr v0.8.4
+    Checking potential_utf v0.1.6
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking inout v0.1.4
+    Checking tempfile v3.27.0
+    Checking icu_collections v2.3.0
+    Checking digest v0.10.7
+    Checking icu_locale_core v2.3.0
+    Checking cipher v0.4.4
+    Checking sha2 v0.10.9
+    Checking curve25519-dalek v4.1.3
+    Checking rusty-fork v0.3.1
+    Checking ssh-encoding v0.2.0
+    Checking ssh-cipher v0.2.0
+    Checking ed25519-dalek v2.2.0
+    Checking icu_provider v2.3.1
+    Checking ssh-key v0.6.7
+    Checking icu_properties v2.3.0
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+error: manual implementation of `.is_multiple_of()`
+  --> crates\steplet-core\src\date.rs:78:6
+   |
+78 |     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+   |      ^^^^^^^^^^ help: replace with: `y.is_multiple_of(4)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_is_multiple_of
+   = note: `-D clippy::manual-is-multiple-of` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::manual_is_multiple_of)]`
+
+error: manual implementation of `.is_multiple_of()`
+  --> crates\steplet-core\src\date.rs:78:20
+   |
+78 |     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+   |                    ^^^^^^^^^^^^ help: replace with: `!y.is_multiple_of(100)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_is_multiple_of
+
+error: manual implementation of `.is_multiple_of()`
+  --> crates\steplet-core\src\date.rs:78:37
+   |
+78 |     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+   |                                     ^^^^^^^^^^^^ help: replace with: `y.is_multiple_of(400)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_is_multiple_of
+
+error: this manual char comparison can be written more succinctly
+  --> crates\steplet-core\src\display.rs:56:28
+   |
+56 |     let close = inner.find(|c: char| c == ']' || c == '[' || c == '\n')?;
+   |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using an array of `char`: `[']', '[', '\n']`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#manual_pattern_char_comparison
+   = note: `-D clippy::manual-pattern-char-comparison` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::manual_pattern_char_comparison)]`
+
+error: could not compile `steplet-core` (lib) due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+Fixed as clippy suggests, same meaning: `date.rs` uses `is_multiple_of` for leap years; `display.rs` searches with a list of characters (`inner.find([']', '[', '\n'])`). Second run:
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking ppv-lite86 v0.2.21
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Checking rand_chacha v0.9.0
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Checking proptest v1.11.0
+error: for loop over a single element
+   --> crates\steplet-core\tests\differential.rs:110:5
+    |
+110 | /     for file in [include_str!("../../../examples/run-tests.steplet")] {
+111 | |         let c = steplet_core::canon::canonicalize(file.as_bytes()).unwrap();
+112 | |         assert!(agree(c.header()));
+113 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#single_element_loop
+    = note: `-D clippy::single-element-loop` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::single_element_loop)]`
+help: try
+    |
+110 ~     {
+111 +         let file = ---
+112 + steplet: 1
+113 + title: Count the lines of the README in Hello-World
+114 + sender: Ana Lee
+115 + expires: 2027-09-30
+116 + repository:
+117 +   url: https://github.com/octocat/Hello-World.git
+118 +   commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+119 + steps:
+120 +   - Check that the README file is there.
+121 +   - Count the lines in the README file.
+122 +   - Report the count.
+123 + allow:
+124 +   commands:
+125 +     - wc -l README
+126 + never:
+127 +   - Do not change any file.
+128 +   - Do not use the network.
+129 + ---
+130 + # Count the README lines
+131 + 
+132 + The repository is already checked out at the commit above.
+133 + 
+134 + 1. Check that `README` exists.
+135 + 2. Run `wc -l README`.
+136 + 3. Report the number it prints, and nothing else.
+137 + ;
+138 +         let c = steplet_core::canon::canonicalize(file.as_bytes()).unwrap();
+139 +         assert!(agree(c.header()));
+140 +     }
+    |
+
+error: could not compile `steplet-core` (test "differential") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+`tests/differential.rs`: the loop over one file became two plain lines (clippy's own suggestion would have pasted the whole example file into the test). Then, with the main files of both crates marked as changed so that every part is checked again from scratch:
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.76s
+(exit code 0)
+```
+
+### Step 2: every check
+
+The tests were built first, trying up to three times because of the McAfee lock (Task 12); the first try succeeded. The plan's filter applied to the full output:
+
+```
+> cargo test --workspace --offline | Select-String -Pattern "^running|^test result|FAILED|panicked"
+﻿running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 12 tests
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 100.77s
+running 9 tests
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 10 tests
+Signature verification failed: incorrect signature
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+(`Signature verification failed: incorrect signature` is `ssh-keygen`'s own refusal inside a passing test. It shows up because `Select-String` ignores letter case, so `failed` matches `FAILED`. Every `test result` line says `ok`.)
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 1.14s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32-unknown-unknown --release --offline
+   Compiling typenum v1.20.1
+   Compiling cfg-if v1.0.5
+   Compiling base64ct v1.8.3
+   Compiling subtle v2.6.1
+   Compiling signature v2.2.0
+   Compiling rand_core v0.6.4
+   Compiling zeroize v1.9.0
+   Compiling generic-array v0.14.7
+   Compiling curve25519-dalek v4.1.3
+   Compiling ed25519 v2.2.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 3.86s
+(exit code 0)
+```
+
+```
+> cargo tree -p steplet-core -e normal --prefix none --offline | Sort-Object -Unique
+﻿base64ct v1.8.3
+block-buffer v0.10.4
+cfg-if v1.0.5
+cipher v0.4.4
+cpufeatures v0.2.17
+crypto-common v0.1.7
+crypto-common v0.1.7 (*)
+curve25519-dalek v4.1.3
+curve25519-dalek-derive v0.1.1 (proc-macro)
+digest v0.10.7
+digest v0.10.7 (*)
+ed25519 v2.2.3
+ed25519-dalek v2.2.0
+generic-array v0.14.7
+generic-array v0.14.7 (*)
+inout v0.1.4
+pem-rfc7468 v0.7.0
+proc-macro2 v1.0.107
+proc-macro2 v1.0.107 (*)
+quote v1.0.47
+quote v1.0.47 (*)
+rand_core v0.6.4
+sha2 v0.10.9
+sha2 v0.10.9 (*)
+signature v2.2.0
+ssh-cipher v0.2.0
+ssh-encoding v0.2.0
+ssh-encoding v0.2.0 (*)
+ssh-key v0.6.7
+steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+subtle v2.6.1
+syn v2.0.119
+typenum v1.20.1
+unicode-ident v1.0.26
+zeroize v1.9.0
+(exit code 0)
+```
+
+No crate in the list needs an operating system; it is `ssh-key` 0.6.7 and the RustCrypto crates under it, as in phase 0's S9. `proc-macro2`, `quote`, `syn` and `unicode-ident` run only while compiling (for `curve25519-dalek-derive`).
+
+```
+> rustc --version & cargo --version & cargo clippy --version & cargo +nightly --version
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+clippy 0.1.98 (88d9e12ae1 2026-08-18)
+cargo 1.101.0-nightly (f3865b2a4 2026-09-29)
+(exit code 0)
+```
+
+```
+> C:\Windows\System32\OpenSSH\ssh.exe -V
+OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2
+(exit code 0)
+```
+
+**Verdict: done.** 84 tests pass (69 in `steplet-core`, 15 in `steplet-sign`); clippy reports nothing with every warning treated as an error; both WASM builds finish.
+
+---
+
+## Summary of phase 1
+
+Run on 11 Oct 2026, in the worktree `.claude\worktrees\steplet-phase1-task1-run-e26214` (branch `claude/steplet-phase1-task1-run-e26214`), from `93c9fe1`. Tasks in the order 1, 2, 3, 4, 5, 7, 6, 8, 9, 10, 11, 12, 13, 14 (Task 7 moved ahead of Task 6 while download B1 waited for the user's yes).
+
+| Done means (milestone plan, phase 1) | Result | Evidence |
+|---|---|---|
+| Windows `ssh-keygen` vectors verify in our core: valid, tampered, wrong name space, sha256, RSA, block missing / doubled / moved, Windows line endings | **PASS** | Task 9: 5 of 5 `vectors` tests; vectors made by `C:\Windows\System32\OpenSSH\ssh-keygen.exe` (OpenSSH 9.5p2) |
+| Ours verify in `ssh-keygen` | **PASS** | Task 12: `ssh_keygen_accepts_what_we_signed_and_what_we_cut_out`, `ssh_keygen_accepts_a_signature_made_in_rust` |
+| Cleaning up twice gives the same result; Windows and Unix line endings sign the same; any non-whitespace edit breaks the signature | **PASS, after a fix** | Task 8, `properties.rs` (2,000 cases each). The third property found a real hole in `ssh-key`'s reading of signatures; fixed in `sig.rs` (decision F11, for the user to confirm) |
+| The differential test against `saphyr-parser` agrees on every file we accept | **PASS** | Task 6: 3 of 3, 5,000 generated headers per property, no disagreement |
+| The parser fuzz target runs for a recorded time without a crash | **PASS** | Task 13: 4,768,065 inputs in 901 seconds, exit code 0, no crash |
+
+Also done: `steplet-sign check` and `sign` (Tasks 11 and 12), the sender's guide (`docs/steplet-format.md`), size limits (Task 7), display pieces with the invisible-character table matching Unicode data for all 1,114,112 code points (Task 10), and both WASM builds (Task 14).
+
+**Changes from the plan**, each recorded in its task:
+1. Task 7 ran before Task 6, and its imports moved to the top of `limits.rs` (layout only).
+2. Task 8: an explicit message on one `prop_assert!` so it compiles; **the exact re-encoding check in `sig::verify` with the new reason `NotCanonical`** (F11), three tests for it, and the committed proptest regressions file. Reviewed by the `code-reviewer` agent before committing; its two points (words and tests) were done.
+3. Every lock file pinned so that each crates.io package is at least 14 days old and none is yanked (F12): `syn` 3.0.6, `zerocopy` 0.8.58, `libc` 0.2.189, `zeroize` 1.9.0, `yoke-derive` 0.8.2 in `Cargo.lock`; `arbitrary` 1.4.2 (downloaded with the user's yes), `cc` 1.4.7, `libc` 0.2.189, `zeroize` 1.9.0 in the fuzz lock file. From Task 8 on, cargo ran with `--offline` or `CARGO_NET_OFFLINE=true`.
+4. Task 14: `sign` gives exit code 2 for a file it cannot read (F10), with a test; clippy's fixes in `date.rs`, `display.rs` and `tests/differential.rs`.
+
+**Downloads:** B1 (`proptest`, `saphyr-parser` and 10 libraries under them; user's yes), `arbitrary` 1.4.2 (user's yes), B4 clippy (user's yes). Not asked for: `cargo fetch` in Task 13 also downloaded `r-efi` 6.0.0 and `fiat-crypto` 0.2.9, which this laptop's builds do not use (both older than 14 days). B2 was not needed; B3 was not done.
+
+## What phase 1 did not verify
+
+- **A passphrase-protected key** (B3): it needs the user to type a passphrase in their own terminal.
+- **Hardware security keys (`ed25519-sk`) and keys held only in the Windows SSH agent:** not tested. `sk` keys make a different signature type, which our core refuses as "not an Ed25519 key"; whether to accept them is a later decision.
+- **Other `ssh-keygen` builds:** the vectors and the command-line tests use Windows' OpenSSH 9.5p2 only. Since F11, a signature must be exactly the text OpenSSH writes (lines of 70 characters); a tool that wraps differently would be refused.
+- **Which Unicode version** `icu_properties` 2.3.0's data uses; the invisible table matches that data, whatever version it is.
+- **`saphyr-parser` 0.1.0 is three weeks old**; the differential test trusts it as the reference without checking it.
+- **The transit test through WhatsApp, Gmail and Outlook** (R13): a launch blocker, not part of this phase.
+- **How the preview draws the pieces** (phase 4), **the rating** (phase 2), and **the WASM build's results matching the native ones** (phase 2's parity test). This phase only shows the core builds for WASM.
+- **A fuzz run is a sample:** 15 minutes without a crash says nothing about inputs it did not try.
+- **No cap on the length of a single `title`, `sender`, step or `never` line:** one step could come close to the 32 KiB header limit. Phase 2's rating decides whether that needs a limit.
+- **macOS and Linux:** `steplet-sign`'s command-line tests run on Windows only.
+- **The cause of the linker locks (`LNK1104`):** most likely McAfee's scanning, not proven (Task 12).
+- **No independent review of the whole phase's changes:** only the signature fix (Task 8) was reviewed.
+- **Decisions F11 and F12** were made during the run and are waiting for the user's confirmation (`docs/decisions.md`).

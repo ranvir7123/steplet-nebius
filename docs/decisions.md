@@ -244,6 +244,13 @@ Plan: `docs/plans/2026-10-11-milestone-1-phase-1.md`, approved by the user on 11
 | F9 | Invisible characters (shown as badges): Unicode's default-ignorable characters and the categories Cc, Cf, Zs, Zl, Zp, Co, except tab, newline and space. Hand-written table, checked against `icu_properties` for every code point. | No Unicode library in the core keeps the WASM small; the test keeps the table honest. |
 | F10 | `steplet-sign` exit codes: 0 fine, 1 problems found or signing failed, 2 wrong use or the file could not be read. | |
 
+Added while the plan was run (11 Oct 2026), **for the user to confirm**. Evidence: `docs/milestone-1-phase-1-results.md`, Tasks 6, 8, 10 and 13.
+
+| # | Decision | Why |
+|---|---|---|
+| F11 | **One text per signature.** `sig::verify` writes the signature it read back out and requires that text to equal the block in the file exactly; otherwise the file is refused with the reason `NotCanonical` ("the signature block was edited after signing"). | The property tests found that `ssh-key` 0.6.7 ignores a wrong length inside a signature, so a signed file could be edited in its signature block and stay valid. OpenSSH's `ssh-keygen` refuses such a block; row 15 forbids two readers disagreeing. |
+| F12 | **The 14-day rule covers every crates.io package in every lock file** (`Cargo.lock` and `crates/steplet-core/fuzz/Cargo.lock`), not only the crates pinned by hand. A withdrawn (yanked) version is never used. Younger versions are pinned back with `cargo update --precise`, using versions already in cargo's cache where possible; a new download still gets its own yes. | Cargo picks the newest versions of indirect libraries: the first download brought `syn` and `zerocopy` at 1 and 3 days old, and the older `yoke-derive` in the cache had been yanked. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`

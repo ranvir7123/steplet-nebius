@@ -53,7 +53,7 @@ fn pieces(s: &str) -> Vec<Segment> {
 /// `[shown](real)` at the start of `s`: (length, shown, real).
 fn markdown_link(s: &str) -> Option<(usize, &str, &str)> {
     let inner = s.strip_prefix('[')?;
-    let close = inner.find(|c: char| c == ']' || c == '[' || c == '\n')?;
+    let close = inner.find([']', '[', '\n'])?;
     if !inner[close..].starts_with(']') || close == 0 {
         return None;
     }

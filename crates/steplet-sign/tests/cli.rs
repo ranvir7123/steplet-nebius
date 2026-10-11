@@ -172,6 +172,19 @@ fn header_problems_stop_signing() {
     assert_eq!(fs::read_to_string(&file).unwrap(), text);
 }
 
+/// Decision F10: a file that cannot be read is exit code 2, for `sign` as for `check`.
+#[test]
+fn a_file_that_cannot_be_read_is_exit_code_2() {
+    let d = Scratch::new("missing");
+    let missing = d.0.join("no-such-file.steplet");
+    let (code, out) = sign(&missing, &d.0.join("no-such-key"));
+    assert_eq!(code, 2, "{out}");
+    assert!(out.contains("cannot read"), "{out}");
+    let (code, out) = check(&missing);
+    assert_eq!(code, 2, "{out}");
+    assert!(out.contains("cannot read"), "{out}");
+}
+
 #[test]
 fn wrong_use_prints_how_to_use_it() {
     let (code, out) = run(&["sign".as_ref(), "x.steplet".as_ref()]);

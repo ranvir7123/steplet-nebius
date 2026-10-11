@@ -12,6 +12,11 @@ fn main() -> ExitCode {
         Some("check") if args.len() == 2 => check(PathBuf::from(&args[1])),
         Some("sign") => match sign_args(&args[1..]) {
             Some((file, key, keygen)) => {
+                // Decision F10: a file that cannot be read is exit code 2, as for `check`.
+                if let Err(e) = std::fs::File::open(&file) {
+                    eprintln!("cannot read {}: {e}", file.display());
+                    return ExitCode::from(2);
+                }
                 let req = steplet_sign::sign::SignRequest { file: &file, key: &key, ssh_keygen: &keygen, today: steplet_sign::today() };
                 match steplet_sign::sign::sign(&req) {
                     Ok(msg) => {

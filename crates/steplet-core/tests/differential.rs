@@ -107,10 +107,9 @@ const CORPUS: &[&str] = &[
 fn every_accepted_corpus_header_reads_the_same() {
     let accepted = CORPUS.iter().filter(|h| agree(h)).count();
     assert_eq!(accepted, 14, "the first 14 corpus entries are accepted, the last 9 refused");
-    for file in [include_str!("../../../examples/run-tests.steplet")] {
-        let c = steplet_core::canon::canonicalize(file.as_bytes()).unwrap();
-        assert!(agree(c.header()));
-    }
+    let example = include_str!("../../../examples/run-tests.steplet");
+    let c = steplet_core::canon::canonicalize(example.as_bytes()).unwrap();
+    assert!(agree(c.header()));
 }
 
 #[derive(Clone, Debug)]
