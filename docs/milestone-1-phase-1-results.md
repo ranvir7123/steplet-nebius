@@ -1643,3 +1643,686 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict: done.** 3 of 3 differential tests pass (thousands of generated headers compared with `saphyr-parser`, 5,000 cases per property); 47 tests pass in the workspace; no compiler warnings; the core still builds for `wasm32v1-none`, and the two new libraries are test-only, so they are not part of it. All 44 crates.io packages in `Cargo.lock` are now at least 14 days old. **Not undone:** `syn` 3.0.7 and `zerocopy` 0.8.62 were compiled once, by the first run, before the pinning; they are still in cargo's cache (`%USERPROFILE%\.cargo\registry`) and in `target\`. Nothing in this repository uses them any more.
+
+## Task 8: the signature check, and the property tests
+
+`ssh-key` 0.6.7 was added as the core's one normal dependency. It and everything it uses were already in cargo's cache, and every cargo command from here on runs with `--offline`, so cargo could only pick versions already on this laptop: nothing was downloaded.
+
+**Step 2, the failing state, first try: the plan's test code did not compile.**
+
+```
+> cargo test -p steplet-core --test sig --test properties --offline
+     Locking 26 packages to latest Rust 1.98 compatible versions
+      Adding base64ct v1.8.3
+      Adding block-buffer v0.10.4
+      Adding cipher v0.4.4
+      Adding cpufeatures v0.2.17
+      Adding crypto-common v0.1.7
+      Adding curve25519-dalek v4.1.3
+      Adding curve25519-dalek-derive v0.1.1
+      Adding digest v0.10.7
+      Adding ed25519 v2.2.3
+      Adding ed25519-dalek v2.2.0
+      Adding fiat-crypto v0.2.9
+      Adding generic-array v0.14.7
+      Adding inout v0.1.4
+      Adding pem-rfc7468 v0.7.0
+      Adding rand_core v0.6.4
+      Adding rustc_version v0.4.1
+      Adding semver v1.0.28
+      Adding sha2 v0.10.9
+      Adding signature v2.2.0
+      Adding ssh-cipher v0.2.0
+      Adding ssh-encoding v0.2.0
+      Adding ssh-key v0.6.7
+      Adding subtle v2.6.1
+      Adding typenum v1.20.1
+      Adding version_check v0.9.5
+      Adding zeroize v1.9.1
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling cpufeatures v0.2.17
+   Compiling semver v1.0.28
+   Compiling base64ct v1.8.3
+   Compiling subtle v2.6.1
+   Compiling signature v2.2.0
+   Compiling rand_core v0.6.4
+   Compiling zeroize v1.9.1
+   Compiling syn v2.0.119
+   Compiling ed25519 v2.2.3
+   Compiling generic-array v0.14.7
+   Compiling rustc_version v0.4.1
+   Compiling pem-rfc7468 v0.7.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+error: invalid format string: expected `}`, found `.`
+  --> crates\steplet-core\tests\properties.rs:56:9
+   |
+56 |         prop_assert!(matches!(verify(&unix, NAMESPACE), SigStatus::Valid { .. }));
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `}` in format string
+   |
+   = note: if you intended to print `{`, you can escape it using `{{`
+   = note: this error originates in the macro `::core::concat` which comes from the expansion of the macro `prop_assert` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: could not compile `steplet-core` (test "properties") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+(exit code 101)
+```
+
+Without a message, `prop_assert!` puts the checked expression into a format string, where `{ .. }` is read as a placeholder. Fix, in `tests/properties.rs`: that one assertion got an explicit message (`"the Unix version does not verify"`). What it checks did not change.
+
+**Step 2, the failing state** (stub `verify` always answers "unsigned"). `--no-fail-fast` makes cargo run the second test file even after the first one fails:
+
+```
+> cargo test -p steplet-core --test sig --test properties --offline --no-fail-fast
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running tests\properties.rs (target\debug\deps\properties-bac0f9351251acff.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test windows_and_unix_line_endings_sign_the_same ... FAILED
+test any_edit_to_non_whitespace_breaks_the_signature has been running for over 60 seconds
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+
+failures:
+
+---- windows_and_unix_line_endings_sign_the_same stdout ----
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+
+thread 'windows_and_unix_line_endings_sign_the_same' (34412) panicked at crates\steplet-core\tests\properties.rs:39:1:
+Test failed: the Unix version does not verify at crates\steplet-core\tests\properties.rs:58.
+minimal failing input: f = "---\nsteplet: 1\ntitle: \"Run\"\nsender: Test\nexpires: 2026-12-31\nsteps:\n  - \"Run\"\n---\n", spaces = 0
+	successes: 0
+	local rejects: 0
+	global rejects: 0
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    windows_and_unix_line_endings_sign_the_same
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.96s
+
+error: test failed, to rerun pass `-p steplet-core --test properties`
+     Running tests\sig.rs (target\debug\deps\sig-b2a9950fe3901a40.exe)
+
+running 6 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... FAILED
+test wrong_name_space_and_wrong_hash ... FAILED
+test changed_body ... FAILED
+test valid_with_the_keys_fingerprint ... FAILED
+
+failures:
+
+---- not_a_signature stdout ----
+
+thread 'not_a_signature' (37684) panicked at crates\steplet-core\tests\sig.rs:45:5:
+assertion `left == right` failed
+  left: Unsigned
+ right: Invalid { reason: NotASignature }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- wrong_name_space_and_wrong_hash stdout ----
+
+thread 'wrong_name_space_and_wrong_hash' (41852) panicked at crates\steplet-core\tests\sig.rs:36:5:
+assertion `left == right` failed
+  left: Unsigned
+ right: Invalid { reason: WrongNamespace { found: "runfile-v1" } }
+
+---- changed_body stdout ----
+
+thread 'changed_body' (22380) panicked at crates\steplet-core\tests\sig.rs:29:5:
+assertion `left == right` failed
+  left: Unsigned
+ right: Invalid { reason: DoesNotVerify }
+
+---- valid_with_the_keys_fingerprint stdout ----
+
+thread 'valid_with_the_keys_fingerprint' (24624) panicked at crates\steplet-core\tests\sig.rs:23:5:
+assertion `left == right` failed
+  left: Unsigned
+ right: Valid { fingerprint: "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8" }
+
+
+failures:
+    changed_body
+    not_a_signature
+    valid_with_the_keys_fingerprint
+    wrong_name_space_and_wrong_hash
+
+test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p steplet-core --test sig`
+error: 2 targets failed:
+    `-p steplet-core --test properties`
+    `-p steplet-core --test sig`
+(exit code 101)
+```
+
+As the plan predicts: `sig` 4 of 6 fail (`unsigned` and `reasons_in_words` pass on the stub); `properties` 1 of 3 fails. Proptest saved the stub's failing case to `tests/properties.proptest-regressions`; that file recorded a stub failure, not a real one, so it was moved to the Recycle Bin before the real code was written.
+
+### A finding: a signature could be edited and stay valid
+
+**Step 4, first run with the plan's `sig.rs`:**
+
+```
+> cargo test -p steplet-core --test sig --test properties --offline --no-fail-fast
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.60s
+     Running tests\properties.rs (target\debug\deps\properties-bac0f9351251acff.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature ... FAILED
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+failures:
+
+---- any_edit_to_non_whitespace_breaks_the_signature stdout ----
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: FileFailurePersistence::SourceParallel set, but failed to find lib.rs or main.rs
+proptest: Saving this and future failures in C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core\tests\properties.proptest-regressions
+proptest: If this test was run on a CI system, you may wish to add the following line to your copy of the file. (You may need to create it.)
+cc dfd2ad03981c841886be5a0adf7784a281d790348d2ec3a1a1b728c6339f4404
+
+thread 'any_edit_to_non_whitespace_breaks_the_signature' (8884) panicked at crates\steplet-core\tests\properties.rs:39:1:
+Test failed: still valid after an edit at byte 170:
+---
+steplet: 1
+title: "Run Run Run"
+sender: Test
+expires: 2026-12-31
+steps:
+  - "Run tests"
+  - "#1 café"
+signature: |
+  -----BEGIN SSH SIGNATURE-----
+  U1NIU0lHAAAAAQAAxDMAAAALc3NoLWVkMjU1MTkAAAAg/RckOFqgx1tk+3jNYC+h2ZH96/
+  drE8WO1wLqyDXp9hgAAAAKc3RlcGxldC12MQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt
+  ZWQyNTUxOQAAAEDguK2WRvaDY2eIlstoGlJqMCuhzNzIT8YAS4Nhe6O3tDnN9HGgM9br7u
+  PWPRFo7P5I+e3/gLEK1m+UTEDRtUMO
+  -----END SSH SIGNATURE-----
+---
+ at crates\steplet-core\tests\properties.rs:80.
+minimal failing input: f = "---\nsteplet: 1\ntitle: \"Run Run Run\"\nsender: Test\nexpires: 2026-12-31\nsteps:\n  - \"Run tests\"\n  - \"#1 café\"\n---\n", pick = Index(
+    6527309441466456726,
+), op = 0, ch = 'x'
+	successes: 67
+	local rejects: 0
+	global rejects: 0
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    any_edit_to_non_whitespace_breaks_the_signature
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 103.23s
+
+error: test failed, to rerun pass `-p steplet-core --test properties`
+     Running tests\sig.rs (target\debug\deps\sig-b2a9950fe3901a40.exe)
+
+running 6 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: 1 target failed:
+    `-p steplet-core --test properties`
+(exit code 101)
+```
+
+The third property found a file that still counts as valid after one character was changed. The changed character is inside the signature block, not in the signed text: the 17th base64 character of the first signature line, `A`, became `x`. (The `cafÃ©` above is how PowerShell displayed `café` when the output was first shown; the saved bytes are UTF-8 `caf\xc3\xa9`.)
+
+**Why.** Every Ed25519 signature starts with the same bytes; those characters encode the length written before the public key (`00 00 00 33`, 51 bytes). After the edit the length reads 50,227. `ssh-key` reads a length-prefixed field like this (cached source, `ssh-encoding` 0.2.0, `src/reader.rs`):
+
+```
+36:    fn read_prefixed<'r, T, E, F>(&'r mut self, f: F) -> core::result::Result<T, E>
+...
+41:        let len = usize::decode(self)?;
+42:
+43:        f(&mut NestedReader {
+44:            inner: self,
+45:            remaining_len: len,
+46:        })
+47:    }
+```
+
+It never checks that the field used exactly `len` bytes. So the 51-byte key is read, the claimed 50,227 is ignored, and the rest of the signature reads as before. The same holds for the length before the signature bytes. The signed text cannot be changed this way, but one signed file has many different texts that all pass.
+
+**A test that reproduces it,** added to `tests/sig.rs` (`an_edited_length_inside_the_signature_is_refused`), before any fix:
+
+```
+> cargo test -p steplet-core --test sig --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.40s
+     Running tests\sig.rs (target\debug\deps\sig-b2a9950fe3901a40.exe)
+
+running 7 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test changed_body ... ok
+test an_edited_length_inside_the_signature_is_refused ... FAILED
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+failures:
+
+---- an_edited_length_inside_the_signature_is_refused stdout ----
+
+thread 'an_edited_length_inside_the_signature_is_refused' (7408) panicked at crates\steplet-core\tests\sig.rs:58:5:
+assertion `left == right` failed
+  left: Valid { fingerprint: "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8" }
+ right: Invalid { reason: DoesNotVerify }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    an_edited_length_inside_the_signature_is_refused
+
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p steplet-core --test sig`
+(exit code 101)
+```
+
+**What OpenSSH does with the same two signatures.** A throwaway test file (moved to the Recycle Bin straight after, not committed) wrote the signed text and both signatures to a scratch folder; then Windows' own `ssh-keygen` checked each:
+
+```
+> C:\Windows\System32\OpenSSH\ssh-keygen.exe -Y check-novalidate -n steplet-v1 -s original.sig < msg.txt
+Good "steplet-v1" signature with ED25519 key SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8
+(exit code 0)
+```
+
+```
+> C:\Windows\System32\OpenSSH\ssh-keygen.exe -Y check-novalidate -n steplet-v1 -s edited.sig < msg.txt
+sshsig_peek_hashalg: parse signature object: incomplete message
+Could not verify signature.
+(exit code -1)
+```
+
+So before the fix, our check accepted a signature that OpenSSH refuses: two readers disagreeing, which decision row 15 forbids.
+
+**The fix, in `src/sig.rs`.** After the version, name space, hash and key-type checks, `verify` writes the signature it read back out (`to_pem`) and requires that text to equal the block in the file exactly; otherwise the file is refused (first as `DoesNotVerify`; after the review, as its own reason `NotCanonical`, below). This refuses every non-standard encoding, not only this one. It sits after the key-type check, so an RSA signature still gets `WrongKeyType`, as Task 9 expects. The test was not narrowed.
+
+**After this first version of the fix:**
+
+```
+> cargo test -p steplet-core --test sig --test properties --offline --no-fail-fast
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.26s
+     Running tests\properties.rs (target\debug\deps\properties-bac0f9351251acff.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 112.03s
+
+     Running tests\sig.rs (target\debug\deps\sig-b2a9950fe3901a40.exe)
+
+running 7 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test an_edited_length_inside_the_signature_is_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+(exit code 0)
+```
+
+The saved failing case (`tests/properties.proptest-regressions`, committed) is re-run first on every run from now on.
+
+**Review before committing.** The `code-reviewer` agent checked the staged fix against the cached `ssh-key` and `ssh-encoding` source. No blockers: the check closes the hole for both length fields (before the public key and before the signature bytes), and any other non-standard text fails the comparison too. Two points to fix, both done:
+1. The words were wrong for this case ("the file was changed after it was signed"). It now has its own reason, `InvalidReason::NotCanonical`: "the signature block was edited after signing; it must stay exactly as it was written".
+2. Only one of the two length fields had a test. Added `an_edited_length_before_the_signature_bytes_is_refused` (length 83 changed to 339) and `re_wrapped_signature_lines_are_refused`; the first test was renamed `an_edited_length_before_the_public_key_is_refused`.
+
+**Mutation check:** the new check switched off (`if false && …`) in a copy of `sig.rs`, the `sig` tests run, then the file restored from the backup (hash compared: identical):
+
+```
+> cargo test -p steplet-core --test sig --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.39s
+     Running tests\sig.rs (target\debug\deps\sig-c4623a06b1aa6458.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test not_a_signature ... ok
+test unsigned ... ok
+test changed_body ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... FAILED
+test an_edited_length_before_the_public_key_is_refused ... FAILED
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+
+failures:
+
+---- an_edited_length_before_the_signature_bytes_is_refused stdout ----
+
+thread 'an_edited_length_before_the_signature_bytes_is_refused' (15224) panicked at crates\steplet-core\tests\sig.rs:89:5:
+assertion `left == right` failed
+  left: Valid { fingerprint: "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8" }
+ right: Invalid { reason: NotCanonical }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- an_edited_length_before_the_public_key_is_refused stdout ----
+
+thread 'an_edited_length_before_the_public_key_is_refused' (22636) panicked at crates\steplet-core\tests\sig.rs:77:5:
+assertion `left == right` failed
+  left: Valid { fingerprint: "SHA256:fe85JkIjo8VPe+XqXJGH5Mau1EMFdK1OdKvJUFicyA8" }
+ right: Invalid { reason: NotCanonical }
+
+
+failures:
+    an_edited_length_before_the_public_key_is_refused
+    an_edited_length_before_the_signature_bytes_is_refused
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p steplet-core --test sig`
+(exit code 101)
+```
+
+Both length tests fail without the check (the edited signatures read as `Valid`), so both holes were real and both tests catch them. The re-wrap test passed even without the check: `ssh-key` already refuses lines that are not 70 characters while reading. So the re-wrap test now pins that exact answer (`NotASignature`), and the words of `NotCanonical` no longer mention re-wrapping.
+
+**The `sig` tests on the final code:**
+
+```
+> cargo test -p steplet-core --test sig --offline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests\sig.rs (target\debug\deps\sig-c4623a06b1aa6458.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test not_a_signature ... ok
+test unsigned ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+test an_edited_length_before_the_public_key_is_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+(exit code 0)
+```
+
+### One more young crate
+
+`ssh-key` brought 26 crates into the lock file, all from the cache. Their ages:
+
+```
+> python -I lock_ages.py Cargo.lock
+arraydeque         0.5.1                  published 2023-02-05  1344 days old
+autocfg            1.5.1                  published 2026-05-22   142 days old
+base64ct           1.8.3                  published 2026-01-12   272 days old
+bit-set            0.8.0                  published 2024-07-16   817 days old
+bit-vec            0.8.0                  published 2024-07-16   817 days old
+bitflags           2.13.2                 published 2026-09-10    31 days old
+block-buffer       0.10.4                 published 2023-03-09  1312 days old
+cfg-if             1.0.5                  published 2026-09-16    25 days old
+cipher             0.4.4                  published 2023-03-09  1312 days old
+cpufeatures        0.2.17                 published 2025-01-25   624 days old
+crypto-common      0.1.7                  published 2025-11-12   333 days old
+curve25519-dalek   4.1.3                  published 2024-06-18   845 days old
+curve25519-dalek-derive 0.1.1                  published 2023-10-31  1076 days old
+digest             0.10.7                 published 2023-05-19  1241 days old
+ed25519            2.2.3                  published 2023-10-15  1092 days old
+ed25519-dalek      2.2.0                  published 2025-07-09   459 days old
+errno              0.3.14                 published 2025-09-09   397 days old
+fastrand           2.5.0                  published 2026-07-19    84 days old
+fiat-crypto        0.2.9                  published 2024-05-12   882 days old
+fnv                1.0.7                  published 2020-05-14  2341 days old
+generic-array      0.14.7                 published 2023-03-28  1293 days old
+getrandom          0.3.4                  published 2025-10-14   362 days old
+getrandom          0.4.3                  published 2026-06-17   116 days old
+inout              0.1.4                  published 2025-02-21   597 days old
+libc               0.2.189                published 2026-07-21    82 days old
+linux-raw-sys      0.12.1                 published 2025-12-23   292 days old
+num-traits         0.2.19                 published 2024-05-03   891 days old
+once_cell          1.21.4                 published 2026-03-12   213 days old
+pem-rfc7468        0.7.0                  published 2023-02-26  1323 days old
+ppv-lite86         0.2.21                 published 2025-03-09   581 days old
+proc-macro2        1.0.107                published 2026-07-19    84 days old
+proptest           1.11.0                 published 2026-03-24   201 days old
+quick-error        1.2.3                  published 2020-01-02  2474 days old
+quote              1.0.47                 published 2026-07-19    84 days old
+r-efi              5.3.0                  published 2025-06-17   481 days old
+r-efi              6.0.0                  published 2026-02-03   250 days old
+rand               0.9.5                  published 2026-07-11    92 days old
+rand_chacha        0.9.0                  published 2025-01-27   622 days old
+rand_core          0.6.4                  published 2022-09-15  1487 days old
+rand_core          0.9.5                  published 2026-01-13   271 days old
+rand_xorshift      0.4.0                  published 2025-01-27   622 days old
+regex-syntax       0.8.11                 published 2026-06-09   124 days old
+rustc_version      0.4.1                  published 2024-08-28   774 days old
+rustix             1.1.5                  published 2026-09-16    25 days old
+rusty-fork         0.3.1                  published 2025-10-04   372 days old
+saphyr-parser      0.1.0                  published 2026-09-19    22 days old
+semver             1.0.28                 published 2026-04-04   190 days old
+sha2               0.10.9                 published 2025-04-30   529 days old
+signature          2.2.0                  published 2023-11-12  1064 days old
+ssh-cipher         0.2.0                  published 2023-08-12  1156 days old
+ssh-encoding       0.2.0                  published 2023-08-11  1157 days old
+ssh-key            0.6.7                  published 2024-10-15   726 days old
+subtle             2.6.1                  published 2024-06-24   839 days old
+syn                2.0.119                published 2026-07-15    88 days old
+syn                3.0.6                  published 2026-09-16    25 days old
+tempfile           3.27.0                 published 2026-03-11   214 days old
+thiserror          2.0.21                 published 2026-09-23    18 days old
+thiserror-impl     2.0.21                 published 2026-09-23    18 days old
+typenum            1.20.1                 published 2026-05-29   135 days old
+unarray            0.1.4                  published 2022-11-30  1411 days old
+unicode-ident      1.0.26                 published 2026-09-17    24 days old
+version_check      0.9.5                  published 2024-07-25   808 days old
+wait-timeout       0.2.1                  published 2025-02-03   615 days old
+wasip2             1.0.4+wasi-0.2.12      published 2026-06-12   121 days old
+windows-link       0.2.1                  published 2025-10-06   370 days old
+windows-sys        0.61.2                 published 2025-10-06   370 days old
+wit-bindgen        0.57.1                 published 2026-04-17   177 days old
+zerocopy           0.8.58                 published 2026-09-24    17 days old
+zerocopy-derive    0.8.58                 published 2026-09-24    17 days old
+zeroize            1.9.1                  published 2026-10-06     5 days old  <-- under 14 days
+70 crates.io packages in the lock file; 1 under 14 days old
+(exit code 0)
+```
+
+`zeroize` 1.9.1 (5 days old) came from the cache: phase 0's `spikes/Cargo.lock` uses it. The cache also holds 1.9.0:
+
+```
+> python -I ages.py zeroize@1.9.0
+zeroize          1.9.0      published 2026-06-12    121 days old
+(exit code 0)
+```
+
+```
+> cargo update -p zeroize --precise 1.9.0 --offline
+ Downgrading zeroize v1.9.1 -> v1.9.0
+note: pass `--verbose` to see 4 unchanged dependencies behind latest
+(exit code 0)
+```
+
+```
+> python -I lock_ages.py Cargo.lock   (last two lines)
+zeroize            1.9.0                  published 2026-06-12   121 days old
+70 crates.io packages in the lock file; 0 under 14 days old
+```
+
+### Check before committing (final code, final lock file)
+
+```
+> cargo test --workspace --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.23s
+     Running unittests src\lib.rs (target\debug\deps\steplet_core-9cadb7b7c5e7a274.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon.rs (target\debug\deps\canon-accea582b118f23b.exe)
+
+running 12 tests
+test bad_utf8_names_its_line ... ok
+test a_lone_carriage_return_is_refused ... ok
+test every_error_has_words_and_help ... ok
+test exactly_one_final_newline ... ok
+test windows_line_endings_become_unix_ones ... ok
+test no_unicode_normalisation ... ok
+test one_byte_order_mark_is_dropped_and_only_one ... ok
+test header_and_body_are_split_at_the_first_closing_line ... ok
+test spaces_and_tabs_at_line_ends_go ... ok
+test the_header_opens_on_line_one_and_closes ... ok
+test leading_and_inner_spaces_stay ... ok
+test size_limits ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\canon_signature.rs (target\debug\deps\canon_signature-b59b9cc975aad58c.exe)
+
+running 10 tests
+test block_in_the_body ... ok
+test end_marker_missing ... ok
+test block_not_last_in_the_header ... ok
+test block_lines_must_be_indented_base64 ... ok
+test markers_without_the_key_line ... ok
+test the_block_is_split_off ... ok
+test the_key_line_must_be_exact ... ok
+test two_blocks ... ok
+test windows_line_endings_and_trailing_spaces_in_the_block_are_cleaned ... ok
+test with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\date.rs (target\debug\deps\date-4eab5dc7b8e842f7.exe)
+
+running 5 tests
+test a_day_ends_at_midnight_utc ... ok
+test reads_and_writes_dates ... ok
+test counts_days_from_1970 ... ok
+test adds_days_across_months_and_years ... ok
+test refuses_anything_else ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\differential.rs (target\debug\deps\differential-7eb12dda76371c10.exe)
+
+running 3 tests
+test every_accepted_corpus_header_reads_the_same ... ok
+test whatever_we_accept_saphyr_reads_the_same ... ok
+test anything_quoted_is_accepted_and_agrees ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests\header_fields.rs (target\debug\deps\header_fields-ae1973f54db25e03.exe)
+
+running 8 tests
+test optional_parts_may_be_left_out ... ok
+test reads_every_field_with_its_line ... ok
+test the_example_file_reads ... ok
+test the_version_comes_first_and_is_1 ... ok
+test wrong_shapes ... ok
+test every_field_error_has_words_and_help ... ok
+test unknown_and_missing_fields ... ok
+test typed_values ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\header_tree.rs (target\debug\deps\header_tree-6b7e71545926ed04.exe)
+
+running 4 tests
+test maps_lists_and_values ... ok
+test every_refusal_has_words_and_help ... ok
+test values_yaml_reads_as_written ... ok
+test refusals_name_the_line ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\limits.rs (target\debug\deps\limits-54439d63506cdf51.exe)
+
+running 5 tests
+test words_and_help ... ok
+test a_command_of_300_characters_is_too_long_counted_in_characters ... ok
+test domains_and_folders ... ok
+test one_over_each_limit_names_the_first_line_over ... ok
+test at_the_limits_nothing_is_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\properties.rs (target\debug\deps\properties-711abe513802300a.exe)
+
+running 3 tests
+test cleaning_up_twice_changes_nothing ... ok
+test any_edit_to_non_whitespace_breaks_the_signature has been running for over 60 seconds
+test windows_and_unix_line_endings_sign_the_same has been running for over 60 seconds
+test any_edit_to_non_whitespace_breaks_the_signature ... ok
+test windows_and_unix_line_endings_sign_the_same ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 122.14s
+
+     Running tests\sig.rs (target\debug\deps\sig-c4623a06b1aa6458.exe)
+
+running 9 tests
+test reasons_in_words ... ok
+test unsigned ... ok
+test not_a_signature ... ok
+test an_edited_length_before_the_public_key_is_refused ... ok
+test re_wrapped_signature_lines_are_refused ... ok
+test an_edited_length_before_the_signature_bytes_is_refused ... ok
+test changed_body ... ok
+test valid_with_the_keys_fingerprint ... ok
+test wrong_name_space_and_wrong_hash ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Doc-tests steplet_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+(exit code 0)
+```
+
+```
+> cargo build -p steplet-core --target wasm32v1-none --release --offline
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase1-task1-run-e26214\crates\steplet-core)
+    Finished `release` profile [optimized] target(s) in 1.03s
+(exit code 0)
+```
+
+**Verdict: done, with one security fix beyond the plan.** `sig` 9 of 9 (the plan's 6, plus 3 for the finding); `properties` 3 of 3; 59 tests pass in the workspace; no compiler warnings; the core, now with `ssh-key` and the new check, builds for `wasm32v1-none`. All 70 crates.io packages in `Cargo.lock` are at least 14 days old. Changes from the plan:
+1. `tests/properties.rs`: an explicit message on one `prop_assert!`, so it compiles.
+2. `src/sig.rs`: the exact re-encoding check above, and a new reason `InvalidReason::NotCanonical`. **For the user to look at:** this makes Steplet stricter than `ssh-key` alone, and as strict as OpenSSH on this point. Later tasks only print reasons as words and never list them all, so the new reason does not affect them.
+3. `tests/sig.rs`: three tests for the finding, and `NotCanonical` added to `reasons_in_words`.
+4. `tests/properties.proptest-regressions`: committed, as proptest advises, so the found case is always re-run.
+5. `Cargo.lock`: `zeroize` pinned to 1.9.0.
+
+**Not verified here:** that the re-encoding check accepts real `ssh-keygen` signatures inside a `.steplet` file; Task 9's `valid.steplet` and `crlf.steplet` test exactly that, and must pass. The property tests take about 100 to 120 seconds per run (debug build, 2,000 signatures each).

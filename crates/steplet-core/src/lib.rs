@@ -7,6 +7,7 @@ pub mod canon;
 pub mod date;
 pub mod header;
 pub mod limits;
+pub mod sig;
 
 /// The signature name space (decision P4).
 pub const NAMESPACE: &str = "steplet-v1";

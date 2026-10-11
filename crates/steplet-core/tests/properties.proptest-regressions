@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc dfd2ad03981c841886be5a0adf7784a281d790348d2ec3a1a1b728c6339f4404 # shrinks to f = "---\nsteplet: 1\ntitle: \"Run Run Run\"\nsender: Test\nexpires: 2026-12-31\nsteps:\n  - \"Run tests\"\n  - \"#1 café\"\n---\n", pick = Index(6527309441466456726), op = 0, ch = 'x'
