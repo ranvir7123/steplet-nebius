@@ -1195,3 +1195,90 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 3 tests pass in `policy` (commands; files to read and write; web addresses and bad working-copy paths); clippy is clean. Not run in this task: the full workspace test (only a new module and test were added; clippy compiled every test target).
+
+## Task 9: one call for a whole file, and its JSON
+
+Run 12 Oct 2026, same worktree, starting from `d5c12e3`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written.
+
+**Step 1, the failing state** (`report.rs` returns an empty green report and an empty JSON text):
+
+```
+> cargo test -p steplet-core --offline --test report
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.11s
+     Running tests\report.rs (target\debug\deps\report-b6613a71fd1ec6dc.exe)
+
+running 4 tests
+test json_is_plain_ascii ... FAILED
+test json_of_an_amber_file ... FAILED
+test json_of_signed_files ... FAILED
+test json_of_a_green_file_and_of_files_steplet_cannot_read ... FAILED
+
+failures:
+
+---- json_is_plain_ascii stdout ----
+
+thread 'json_is_plain_ascii' (38556) panicked at crates\steplet-core\tests\report.rs:40:5:
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- json_of_an_amber_file stdout ----
+
+thread 'json_of_an_amber_file' (35176) panicked at crates\steplet-core\tests\report.rs:13:5:
+assertion `left == right` failed
+  left: ""
+ right: "{\n  \"outcome\": \"amber\",\n  \"signature\": {\"status\": \"unsigned\"},\n  \"findings\": [\n    {\"rule\": \"cap.runs-code\", \"severity\": \"amber\", \"line\": 13, \"title\": \"A command runs the repository's own code\", \"detail\": null, \"advice\": \"Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.\", \"quote\": \"cargo test\"}\n  ]\n}\n"
+
+---- json_of_signed_files stdout ----
+
+thread 'json_of_signed_files' (22420) panicked at crates\steplet-core\tests\report.rs:48:5:
+
+
+---- json_of_a_green_file_and_of_files_steplet_cannot_read stdout ----
+
+thread 'json_of_a_green_file_and_of_files_steplet_cannot_read' (27208) panicked at crates\steplet-core\tests\report.rs:19:5:
+assertion `left == right` failed
+  left: ""
+ right: "{\n  \"outcome\": \"green\",\n  \"signature\": {\"status\": \"unsigned\"},\n  \"findings\": []\n}\n"
+
+
+failures:
+    json_is_plain_ascii
+    json_of_a_green_file_and_of_files_steplet_cannot_read
+    json_of_an_amber_file
+    json_of_signed_files
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test report`
+```
+
+**Step 3, after `report.rs` is written** (expected 4 passing):
+
+```
+> cargo test -p steplet-core --offline --test report
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.26s
+     Running tests\report.rs (target\debug\deps\report-b6613a71fd1ec6dc.exe)
+
+running 4 tests
+test json_of_a_green_file_and_of_files_steplet_cannot_read ... ok
+test json_of_an_amber_file ... ok
+test json_is_plain_ascii ... ok
+test json_of_signed_files ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.20s
+```
+
+**Verdict:** done. 4 tests pass in `report`, including the exact JSON text of an amber file, plain-ASCII escaping of characters above U+FFFF, and the signed test vectors; clippy is clean. Not run in this task: the full workspace test (only a new module, a new test and a doc line changed; clippy compiled every test target).

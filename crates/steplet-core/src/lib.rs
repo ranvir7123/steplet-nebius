@@ -1,4 +1,5 @@
-//! Steplet's file core: the clean-up, the header reader, signature checks, size limits and display pieces.
+//! Steplet's file core: the clean-up, the header reader, signature checks, size limits, display pieces, the rating,
+//! and the checker for a run.
 //! It uses no operating system at all (`no_std`), so the desktop app and the browser check page run the same code.
 #![no_std]
 extern crate alloc;
@@ -13,6 +14,7 @@ pub mod limits;
 pub mod paths;
 pub mod policy;
 pub mod prose;
+pub mod report;
 pub mod rules;
 pub mod sig;
 
