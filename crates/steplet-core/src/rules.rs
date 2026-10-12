@@ -15,7 +15,7 @@ use crate::header::{Scalar, Steplet};
 use crate::hosts;
 use crate::limits::{self, Limited};
 use crate::paths;
-use crate::prose;
+use crate::prose::{self, Phrase};
 use crate::sig::{InvalidReason, SigStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -374,8 +374,189 @@ fn joined(segments: &[Segment]) -> String {
     s
 }
 
-/// Rules on the words a person reads: filled in by Task 7.
-fn text_rules(_out: &mut Out, _s: &Steplet) {}
+/// A run of this many base64 or hex characters is an encoded block: more than a SHA-512 written in hex (128).
+const ENCODED_RUN: usize = 160;
+/// This many empty lines in a row in the body.
+const BLANK_RUN: u32 = 20;
 
-/// The steps and body against what the file allows: filled in by Task 7.
-fn consistency(_out: &mut Out, _s: &Steplet) {}
+/// Rules on the words a person reads: the title, steps, never lines and body (and commands, for encoded blocks).
+fn text_rules(out: &mut Out, s: &Steplet) {
+    for (part, line, text) in readable(s) {
+        let mut add = |rule: &'static Rule, detail: Option<String>| out.add(rule, Some(line), detail, Some(text));
+        if part != Part::Title && prose::hides(text) {
+            add(HIDE_INVISIBLE_IN_TEXT, None);
+        }
+        if text.contains("<!--") {
+            add(HIDE_HTML_COMMENT, None);
+        }
+        if prose::longest_encoded_run(text) >= ENCODED_RUN {
+            add(HIDE_ENCODED_BLOCK, None);
+        }
+        if links(text).iter().any(|(shown, real)| shown.as_deref().is_some_and(|shown| mismatch(shown, real))) {
+            add(HIDE_LINK_MISMATCH, None);
+        }
+        for (rule, phrases) in [
+            (SOCIAL_OVERRIDE, OVERRIDE),
+            (SOCIAL_CONCEAL, CONCEAL),
+            (SOCIAL_DISABLE_SAFETY, DISABLE_SAFETY),
+            (SOCIAL_CLAIMS_APPROVAL, CLAIMS_APPROVAL),
+        ] {
+            if prose::has_phrase(text, phrases, false) {
+                add(rule, None);
+            }
+        }
+        // A never line warns the agent, so naming a danger there is the right thing to do (G8).
+        if part != Part::Never {
+            if let Some(secret) = paths::secret_in(text) {
+                add(BLOCK_SECRET_PATH, Some(format!("it names a place that holds {}", secret.what)));
+            }
+            if command::downloads_into_shell(text) {
+                add(BLOCK_DOWNLOAD_INTO_SHELL, None);
+            }
+            for (rule, phrases) in [
+                (SOCIAL_ASKS_SECRETS, ASKS_SECRETS),
+                (SOCIAL_ASKS_ADMIN, ASKS_ADMIN),
+                (SOCIAL_DISABLE_PROTECTION, DISABLE_PROTECTION),
+            ] {
+                if prose::has_phrase(text, phrases, true) {
+                    add(rule, None);
+                }
+            }
+        }
+    }
+    for c in &s.allow.commands {
+        if prose::longest_encoded_run(&c.text) >= ENCODED_RUN {
+            out.add(HIDE_ENCODED_BLOCK, Some(c.line), None, Some(&c.text));
+        }
+    }
+    let mut run = 0;
+    for (line, text) in body_lines(s) {
+        // A line of only space-like characters looks blank too (clean-up trims only ASCII spaces and tabs).
+        if !text.chars().all(|c| c.is_whitespace() || display::is_space_like(c)) {
+            run = 0;
+            continue;
+        }
+        run += 1;
+        if run == BLANK_RUN {
+            out.add(HIDE_BLANK_RUN, Some(line + 1 - BLANK_RUN), None, None);
+        }
+    }
+}
+
+/// True when a link's shown text is, or contains, a web address (or starts with `www.`) naming another host than
+/// the address the link really opens. A leading `www.` is not a difference.
+fn mismatch(shown: &str, real: &str) -> bool {
+    let shown = shown.trim();
+    let shown_host = if shown.as_bytes().get(..4).is_some_and(|b| b.eq_ignore_ascii_case(b"www.")) {
+        hosts::host_of(&format!("https://{shown}"))
+    } else {
+        shown.split_whitespace().find_map(hosts::host_of)
+    };
+    let bare = |h: &str| String::from(h.strip_prefix("www.").unwrap_or(h));
+    match (shown_host, hosts::host_of(real)) {
+        (Some(a), Some(b)) => bare(&a) != bare(&b),
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+/// Steps and body against what the file allows (row 27, R11): commands in code that the file does not allow
+/// (only programs Steplet knows, and not the harmless ones of G2), and sites in the steps' links.
+fn consistency(out: &mut Out, s: &Steplet) {
+    let allowed: Vec<Vec<String>> = s.allow.commands.iter().filter_map(|c| command::split(&c.text).ok()).collect();
+    let mut code: Vec<(u32, &str)> = Vec::new();
+    for x in &s.steps {
+        code.extend(prose::code_spans(&x.text).into_iter().map(|span| (x.line, span)));
+    }
+    for (line, text) in body_lines(s) {
+        code.extend(prose::code_spans(text).into_iter().map(|span| (line, span)));
+    }
+    code.extend(prose::fenced_lines(&s.body).into_iter().map(|(i, text)| (s.body_line + i as u32, text)));
+    let mut flagged: Vec<u32> = Vec::new();
+    for (line, text) in code {
+        let Assessment::Words { words, kind, .. } = command::assess(text) else { continue };
+        if matches!(kind, Kind::RunsCode | Kind::Installs) && !allowed.contains(&words) && !flagged.contains(&line) {
+            flagged.push(line);
+            out.add(CONSIST_UNDECLARED_COMMAND, Some(line), None, Some(text));
+        }
+    }
+    let mut sites: Vec<String> = s.allow.domains.iter().map(|d| d.text.clone()).collect();
+    if let Some(r) = &s.repository {
+        sites.extend(hosts::host_of(&r.url.text));
+    }
+    for x in &s.steps {
+        if links(&x.text).iter().filter_map(|(_, real)| hosts::host_of(real)).any(|h| !sites.contains(&h)) {
+            out.add(CONSIST_UNDECLARED_HOST, Some(x.line), None, Some(&x.text));
+        }
+    }
+}
+
+// Phrase lists (G3). Ideas from Cisco's skill-scanner (Apache-2.0): its prompt-injection, concealment and
+// policy-bypass signatures, rewritten as word slots. An empty word makes a slot optional.
+const OVERRIDE: &[Phrase] = &[&[
+    &["ignore", "disregard", "forget", "override"],
+    &["all", ""],
+    &["of", ""],
+    &["the", "your", ""],
+    &["previous", "prior", "earlier", "above", "preceding", "former", "system"],
+    &["instructions", "instruction", "rules", "prompts", "prompt", "guidelines", "directions", "context"],
+]];
+const TELL: &[&str] = &["tell", "inform", "mention", "notify", "show", "alert", "warn"];
+const WHO: &[&str] = &["user", "receiver", "reviewer", "human", "person", "owner", "operator"];
+const CONCEAL: &[Phrase] = &[
+    &[&["do"], &["not"], TELL, &["the", "your", ""], WHO],
+    &[&["don't", "dont", "never"], TELL, &["the", "your", ""], WHO],
+    &[&["without"], &["telling", "informing", "notifying", "asking", "alerting"], &["the", "your", ""], WHO],
+    &[
+        &["hide", "conceal"],
+        &["this", "that", "it", "these", "the", "your"],
+        &["action", "actions", "step", "steps", "command", "commands", "change", "changes", "output", ""],
+        &["from"],
+        &["the", "your", ""],
+        WHO,
+    ],
+    &[&["keep"], &["this", "that", "it"], &["secret", "hidden"]],
+];
+const SAFETY: &[&str] = &["safety", "security", "content", "ethical"];
+const CHECKS: &[&str] = &["filters", "filter", "checks", "guidelines", "rules", "restrictions", "policy", "policies", "limits"];
+const DISABLE_SAFETY: &[Phrase] = &[
+    &[&["you"], &["are"], &["now"], &["in", ""], &["unrestricted", "developer", "debug", "admin", "god", "jailbreak", "dan"], &["mode"]],
+    &[&["enter", "enable", "activate"], &["unrestricted", "jailbreak", "god"], &["mode"]],
+    &[&["disable", "ignore", "bypass", "override", "skip"], &["all", ""], &["your", "the", ""], SAFETY, CHECKS],
+    &[&["turn", "switch"], &["off"], &["all", ""], &["your", "the", ""], SAFETY, CHECKS],
+];
+const CLAIMS_APPROVAL: &[Phrase] = &[
+    &[&["already", "pre"], &["approved", "authorized", "authorised", "confirmed", "allowed"]],
+    &[
+        &["user", "receiver", "owner", "admin", "administrator", "you"],
+        &["has", "have"],
+        &["already", ""],
+        &["approved", "agreed", "consented", "authorized", "authorised", "confirmed", "allowed"],
+    ],
+];
+const SHARE: &[&str] =
+    &["send", "paste", "share", "upload", "include", "print", "post", "copy", "reveal", "give", "enter", "type", "email", "provide"];
+const ASKS_SECRETS: &[Phrase] = &[
+    &[SHARE, &["me", "us", ""], &["your", "the", "any", "all", ""], &["password", "passwords", "passphrase", "token", "tokens", "secret", "secrets", "credentials", "cookies"]],
+    &[SHARE, &["me", "us", ""], &["your", "the", "any", "all", ""], &["api", "private", "ssh", "access", "secret", "signing"], &["key", "keys"]],
+    &[SHARE, &["me", "us", ""], &["your", "the", "any", ""], &["seed", "recovery"], &["phrase", "words"]],
+];
+const ASKS_ADMIN: &[Phrase] = &[
+    &[&["sudo", "doas", "runas", "gsudo"]],
+    &[
+        &["run", "start", "open", "launch"],
+        &["it", "this", "the", "a", "an", ""],
+        &["terminal", "shell", "command", "script", "powershell", "program", "prompt", "app", ""],
+        &["as"],
+        &["an", "the", ""],
+        &["administrator", "admin", "root", "superuser"],
+    ],
+    &[&["with"], &["administrator", "admin", "root", "elevated", "superuser"], &["rights", "privileges", "permissions", "access"]],
+];
+const OFF: &[&str] = &["disable", "deactivate", "uninstall", "remove", "stop", "pause", "kill"];
+const PROTECTION: &[&str] =
+    &["defender", "antivirus", "firewall", "smartscreen", "uac", "edr", "mcafee", "norton", "protection"];
+const DISABLE_PROTECTION: &[Phrase] = &[
+    &[OFF, &["the", "your", ""], &["windows", "microsoft", ""], PROTECTION],
+    &[&["turn", "switch"], &["off"], &["the", "your", ""], &["windows", "microsoft", ""], PROTECTION],
+];
