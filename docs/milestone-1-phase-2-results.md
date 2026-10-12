@@ -1532,3 +1532,142 @@ Exactly the plan's hand trace. 59 of 62 are amber only because every test comman
 **Extra: clippy with warnings as errors** (exit code 0, last line): `Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.63s`
 
 **Verdict:** done. 5 tests pass in `corpus` and 1 in `rules_doc`; 134 expected answers and `docs/rules.md` written by the tests and stable across runs; clippy is clean. Not run in this task: the full workspace test.
+
+## Task 11: `steplet-wasm`, and the native and WASM builds giving the same answer
+
+Run 13 Oct 2026, same worktree, starting from `de2de0d`.
+
+Changes from the plan while running it: none. Y3 was not needed: cargo found every package in its cache.
+
+**Step 2, the native build** (cargo adds exactly the six packages the plan names, plus nothing else):
+
+```
+> cargo build -p steplet-wasm --offline
+     Locking 6 packages to latest Rust 1.98 compatible versions
+      Adding bumpalo v3.20.3
+      Adding rustversion v1.0.23
+      Adding wasm-bindgen v0.2.129
+      Adding wasm-bindgen-macro v0.2.129
+      Adding wasm-bindgen-macro-support v0.2.129
+      Adding wasm-bindgen-shared v0.2.129
+   Compiling unicode-ident v1.0.26
+   Compiling wasm-bindgen-shared v0.2.129
+   Compiling rustversion v1.0.23
+   Compiling bumpalo v3.20.3
+   Compiling once_cell v1.21.4
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling wasm-bindgen v0.2.129
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling wasm-bindgen-macro-support v0.2.129
+   Compiling curve25519-dalek v4.1.3
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-key v0.6.7
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+   Compiling wasm-bindgen-macro v0.2.129
+   Compiling steplet-wasm v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-wasm)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.41s
+```
+
+**Step 2, the WASM build:**
+
+```
+> cargo build -p steplet-wasm --target wasm32-unknown-unknown --release --offline
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling cfg-if v1.0.5
+   Compiling wasm-bindgen-shared v0.2.129
+   Compiling semver v1.0.28
+   Compiling unicode-ident v1.0.26
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling base64ct v1.8.3
+   Compiling rustversion v1.0.23
+   Compiling signature v2.2.0
+   Compiling subtle v2.6.1
+   Compiling bumpalo v3.20.3
+   Compiling zeroize v1.9.0
+   Compiling rand_core v0.6.4
+   Compiling once_cell v1.21.4
+   Compiling rustc_version v0.4.1
+   Compiling generic-array v0.14.7
+   Compiling ed25519 v2.2.3
+   Compiling pem-rfc7468 v0.7.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling wasm-bindgen v0.2.129
+   Compiling syn v3.0.6
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling sha2 v0.10.9
+   Compiling ssh-encoding v0.2.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling ssh-cipher v0.2.0
+   Compiling ssh-key v0.6.7
+   Compiling wasm-bindgen-macro-support v0.2.129
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+   Compiling wasm-bindgen-macro v0.2.129
+   Compiling steplet-wasm v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-wasm)
+    Finished `release` profile [optimized] target(s) in 13.30s
+```
+
+**Step 3, F12 on the lock file** (last lines of the table, then the total):
+
+```
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py Cargo.lock
+writeable          0.6.4                  published 2026-08-13    59 days old
+yoke               0.8.3                  published 2026-06-03   130 days old
+yoke-derive        0.8.2                  published 2026-04-01   193 days old
+zerocopy           0.8.58                 published 2026-09-24    17 days old
+zerocopy-derive    0.8.58                 published 2026-09-24    17 days old
+zerofrom           0.1.8                  published 2026-05-12   152 days old
+zerofrom-derive    0.1.8                  published 2026-09-15    26 days old
+zeroize            1.9.0                  published 2026-06-12   121 days old
+zerotrie           0.2.5                  published 2026-08-13    59 days old
+zerovec            0.11.8                 published 2026-08-19    53 days old
+zerovec-derive     0.11.6                 published 2026-08-20    52 days old
+97 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+```
+
+**Step 4, the JavaScript wrapper and the comparison** (`wasm-bindgen` printed nothing and exited 0; it wrote `steplet_wasm.js` 2,451 bytes, `steplet_wasm_bg.wasm` 366,918 bytes and two `.d.ts` files):
+
+```
+> wasm-bindgen --target nodejs --out-dir target/steplet-wasm-node target/wasm32-unknown-unknown/release/steplet_wasm.wasm
+> node crates/steplet-wasm/parity.cjs target/steplet-wasm-node corpus
+134 files; 134 identical; 0 different
+exit code: 0
+```
+
+**Step 5, the comparison can fail** (one expected answer changed on a copy):
+
+```
+> node crates/steplet-wasm/parity.cjs target/steplet-wasm-node target/parity-broken
+different: ordinary/rust-minimal.steplet
+134 files; 133 identical; 1 different
+exit code: 1
+```
+
+**Step 6, sizes:**
+
+```
+> Get-Item target\wasm32-unknown-unknown\release\steplet_wasm.wasm, target\steplet-wasm-node\steplet_wasm_bg.wasm | Select-Object Name, Length
+
+Name                 Length
+----                 ------
+steplet_wasm.wasm    385345
+steplet_wasm_bg.wasm 366918
+```
+
+**Extra: clippy with warnings as errors, all three crates** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-wasm v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-wasm)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.39s
+```
+
+**Verdict:** done. The WASM build gives byte-for-byte the expected JSON on all 134 corpus files (and the native tests of Task 10 give the same expected JSON), so native = WASM; the comparison is shown to fail on a changed answer; the lock file has 97 crates.io packages, none under 14 days old, none yanked. The WASM file is about 367 KB after `wasm-bindgen`.
