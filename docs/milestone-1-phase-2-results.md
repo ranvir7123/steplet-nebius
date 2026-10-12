@@ -878,3 +878,116 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 2 tests pass in `hosts` and 3 in `prose`; clippy is clean. Not run in this task: the full workspace test (only new modules and tests were added; clippy compiled every test target).
+
+## Task 6: the rating; the 36 rules, and the rules on fields, commands, time and sites
+
+Run 12 Oct 2026, same worktree, starting from `ed74983`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written.
+
+**Step 1, the failing state** (`rules.rs` holds the types, an empty rule list and a `rate` that finds nothing; expected 1 passing, 6 failing):
+
+```
+> cargo test -p steplet-core --offline --test rules
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.98s
+     Running tests\rules.rs (target\debug\deps\rules-6c2f30f54f94d059.exe)
+
+running 7 tests
+test the_base_file_is_green_with_no_findings ... ok
+test fields_folders_and_sites ... FAILED
+test the_outcome_is_the_worst_finding_and_notes_stay_green ... FAILED
+test every_rule_is_listed_once_in_plain_ascii ... FAILED
+test each_command_gets_its_worst_finding ... FAILED
+test limits_are_blocked ... FAILED
+test signature_and_time ... FAILED
+
+failures:
+
+---- fields_folders_and_sites stdout ----
+
+thread 'fields_folders_and_sites' (45144) panicked at crates\steplet-core\tests\rules.rs:132:5:
+assertion `left == right` failed
+  left: []
+ right: [("block.invisible-in-field", Some(3), Some("Count the README\u{200b}lines")), ("block.write-protected", Some(22), Some(".git/hooks")), ("social.lookalike-host", Some(7), Some("githuh.invalid")), ("net.exfil-domain", Some(18), Some("webhook.site")), ("hide.punycode", Some(19), Some("xn--80ak6aa92e.invalid")), ("net.other-domain", Some(17), Some("example.org")), ("net.other-domain", Some(19), Some("xn--80ak6aa92e.invalid"))]
+
+---- the_outcome_is_the_worst_finding_and_notes_stay_green stdout ----
+
+thread 'the_outcome_is_the_worst_finding_and_notes_stay_green' (18420) panicked at crates\steplet-core\tests\rules.rs:154:5:
+assertion `left == right` failed
+  left: []
+ right: [("note.no-repository", None, None)]
+
+---- every_rule_is_listed_once_in_plain_ascii stdout ----
+
+thread 'every_rule_is_listed_once_in_plain_ascii' (2104) panicked at crates\steplet-core\tests\rules.rs:162:5:
+assertion `left == right` failed
+  left: 0
+ right: 36
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- each_command_gets_its_worst_finding stdout ----
+
+thread 'each_command_gets_its_worst_finding' (31704) panicked at crates\steplet-core\tests\rules.rs:103:5:
+assertion `left == right` failed
+  left: Green
+ right: Blocked
+
+---- limits_are_blocked stdout ----
+
+thread 'limits_are_blocked' (1452) panicked at crates\steplet-core\tests\rules.rs:87:5:
+assertion `left == right` failed
+  left: []
+ right: [("read.too-large", Some(40), None)]
+
+---- signature_and_time stdout ----
+
+thread 'signature_and_time' (2520) panicked at crates\steplet-core\tests\rules.rs:64:5:
+assertion `left == right` failed
+  left: Green
+ right: Blocked
+
+
+failures:
+    each_command_gets_its_worst_finding
+    every_rule_is_listed_once_in_plain_ascii
+    fields_folders_and_sites
+    limits_are_blocked
+    signature_and_time
+    the_outcome_is_the_worst_finding_and_notes_stay_green
+
+test result: FAILED. 1 passed; 6 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test rules`
+```
+
+**Step 3, after `rules.rs` is written** (expected 7 passing):
+
+```
+> cargo test -p steplet-core --offline --test rules
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.98s
+     Running tests\rules.rs (target\debug\deps\rules-6c2f30f54f94d059.exe)
+
+running 7 tests
+test the_outcome_is_the_worst_finding_and_notes_stay_green ... ok
+test the_base_file_is_green_with_no_findings ... ok
+test fields_folders_and_sites ... ok
+test every_rule_is_listed_once_in_plain_ascii ... ok
+test limits_are_blocked ... ok
+test each_command_gets_its_worst_finding ... ok
+test signature_and_time ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.79s
+```
+
+**Verdict:** done. 7 tests pass in `rules`, including the check that all 36 rule ids are distinct and that every title and advice is plain ASCII without quote, backslash or bar; clippy is clean. Not run in this task: the full workspace test (only a new module and test were added; clippy compiled every test target).

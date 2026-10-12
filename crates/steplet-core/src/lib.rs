@@ -12,6 +12,7 @@ pub mod hosts;
 pub mod limits;
 pub mod paths;
 pub mod prose;
+pub mod rules;
 pub mod sig;
 
 /// The signature name space (decision P4).
