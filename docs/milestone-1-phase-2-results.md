@@ -806,3 +806,75 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 4 tests pass in `command_kind` and the 6 in `command_split` still pass; clippy is clean. Not run in this task: the full workspace test (no code outside `command.rs` changed; clippy compiled every test target).
+
+## Task 5: web addresses, and the words a person reads
+
+Run 12 Oct 2026, same worktree, starting from `89c12e4`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written. The failing state shows one error the plan did not list (a mismatched array size in the test's `const P`): it comes from the `Phrase` type being unknown while the module is missing, and it went away once `prose.rs` existed.
+
+**Step 1, the failing state** (`hosts` and `prose` do not exist yet):
+
+```
+> cargo test -p steplet-core --offline --test hosts --test prose
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+error[E0432]: unresolved import `steplet_core::prose`
+ --> crates\steplet-core\tests\prose.rs:1:19
+  |
+1 | use steplet_core::prose::{Phrase, code_spans, fenced_lines, has_phrase, hides, is_hiding, longest_encoded_run, words};
+  |                   ^^^^^ could not find `prose` in `steplet_core`
+
+error[E0432]: unresolved import `steplet_core::hosts`
+ --> crates\steplet-core\tests\hosts.rs:1:19
+  |
+1 | use steplet_core::hosts::{host_of, https_host, imitates, is_exfil_site, is_known_registry, is_punycode};
+  |                   ^^^^^ could not find `hosts` in `steplet_core`
+
+error[E0308]: mismatched types
+ --> crates\steplet-core\tests\prose.rs:3:39
+  |
+3 | const P: &[Phrase] = &[&[&["ignore"], &["all", ""], &["previous"], &["instructions"]]];
+  |                                       ^^^^^^^^^^^^ expected an array with a size of 1, found one with a size of 2
+
+For more information about this error, try `rustc --explain E0432`.
+Some errors have detailed explanations: E0308, E0432.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `steplet-core` (test "hosts") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `steplet-core` (test "prose") due to 2 previous errors
+```
+
+**Step 4, after `hosts.rs` and `prose.rs`** (expected 2 and 3 passing):
+
+```
+> cargo test -p steplet-core --offline --test hosts --test prose
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.83s
+     Running tests\hosts.rs (target\debug\deps\hosts-cd363a7554f3462e.exe)
+
+running 2 tests
+test lists_and_look_alikes ... ok
+test the_host_of_an_address ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\prose.rs (target\debug\deps\prose-2345842268109791.exe)
+
+running 3 tests
+test code_and_encoded_runs ... ok
+test hiding_characters ... ok
+test words_and_phrases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.74s
+```
+
+**Verdict:** done. 2 tests pass in `hosts` and 3 in `prose`; clippy is clean. Not run in this task: the full workspace test (only new modules and tests were added; clippy compiled every test target).
