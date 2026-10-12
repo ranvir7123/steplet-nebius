@@ -737,3 +737,72 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 5 tests pass in `paths`; clippy is clean. Not run in this task: the full workspace test (no existing code changed; clippy compiled every test target).
+
+## Task 4: what a command does, what it must never do, and one reading for the rating and the checker
+
+Run 12 Oct 2026, same worktree, starting from `0d6a2e7`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written.
+
+**Step 1, the failing state** (`command.rs` has only `split`):
+
+```
+> cargo test -p steplet-core --offline --test command_kind
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+error[E0432]: unresolved imports `steplet_core::command::Assessment`, `steplet_core::command::Blocked`, `steplet_core::command::Danger`, `steplet_core::command::Kind`, `steplet_core::command::assess`, `steplet_core::command::danger`, `steplet_core::command::downloads_into_shell`, `steplet_core::command::kind`
+ --> crates\steplet-core\tests\command_kind.rs:2:5
+  |
+2 |     Assessment, Blocked, Danger, Kind, NotUnderstood, assess, danger, downloads_into_shell, kind, split,
+  |     ^^^^^^^^^^  ^^^^^^^  ^^^^^^  ^^^^                 ^^^^^^  ^^^^^^  ^^^^^^^^^^^^^^^^^^^^  ^^^^ no `kind` in `command`
+  |     |           |        |       |                    |       |       |
+  |     |           |        |       |                    |       |       no `downloads_into_shell` in `command`
+  |     |           |        |       |                    |       no `danger` in `command`
+  |     |           |        |       |                    no `assess` in `command`
+  |     |           |        |       no `Kind` in `command`
+  |     |           |        no `Danger` in `command`
+  |     |           no `Blocked` in `command`
+  |     no `Assessment` in `command`
+
+For more information about this error, try `rustc --explain E0432`.
+error: could not compile `steplet-core` (test "command_kind") due to 1 previous error
+```
+
+**Step 3, after the code** (expected 4 and 6 passing):
+
+```
+> cargo test -p steplet-core --offline --test command_kind --test command_split
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.02s
+     Running tests\command_kind.rs (target\debug\deps\command_kind-abd565c10ccd07fc.exe)
+
+running 4 tests
+test downloads_run_straight_away_by_a_shell ... ok
+test what_commands_do ... ok
+test what_commands_must_never_do ... ok
+test one_reading_in_a_fixed_order ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\command_split.rs (target\debug\deps\command_split-2df096c8ea86e630.exe)
+
+running 6 tests
+test other_reasons ... ok
+test quotes_make_one_word ... ok
+test plain_words_and_spaces ... ok
+test shell_symbols_are_not_read ... ok
+test split_gives_the_words_bash_gave_for_every_vector ... ok
+test single_quoted_words_come_back_unchanged ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.71s
+```
+
+**Verdict:** done. 4 tests pass in `command_kind` and the 6 in `command_split` still pass; clippy is clean. Not run in this task: the full workspace test (no code outside `command.rs` changed; clippy compiled every test target).
