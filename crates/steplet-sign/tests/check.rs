@@ -1,4 +1,5 @@
 use steplet_core::date::Date;
+use steplet_core::rules::{BLOCK_ADMIN, CAP_RUNS_CODE};
 use steplet_sign::check::check;
 
 fn today() -> Date {
@@ -18,6 +19,7 @@ fn a_good_unsigned_file() {
   repository: https://github.com/octocat/Hello-World.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
   expires: 2027-09-30 (in 354 days)
   signature: not signed
+  rating: green
 "
     );
 }
@@ -67,4 +69,22 @@ fn limits_and_clean_up_errors() {
     assert!(!r.ok && r.text.contains("problem: line 40: 31 steps; at most 30 are allowed"), "{}", r.text);
     let r = check("t", b"title: x\n", today());
     assert!(!r.ok && r.text.contains("problem: line 1: the file must start with a line holding only `---`"), "{}", r.text);
+}
+
+#[test]
+fn the_rating_shows_what_to_do() {
+    let f = GOOD.replace("    - wc -l README\n", "    - wc -l README\n    - cargo test\n");
+    let r = check("t.steplet", f.as_bytes(), today());
+    assert!(r.ok, "{}", r.text);
+    let want = format!(
+        "  rating: amber\n    amber, line 16: {}\n      cargo test\n      {}\n",
+        CAP_RUNS_CODE.title, CAP_RUNS_CODE.advice
+    );
+    assert!(r.text.contains(&want), "{}", r.text);
+
+    let f = GOOD.replace("    - wc -l README\n", "    - sudo wc -l README\n");
+    let r = check("t.steplet", f.as_bytes(), today());
+    assert!(!r.ok && r.text.starts_with("t.steplet: 1 problem\n"), "{}", r.text);
+    let want = format!("  rating: blocked\n    blocked, line 15: {}\n      sudo wc -l README\n", BLOCK_ADMIN.title);
+    assert!(r.text.contains(&want), "{}", r.text);
 }

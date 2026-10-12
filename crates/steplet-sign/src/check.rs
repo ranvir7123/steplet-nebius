@@ -3,8 +3,10 @@
 use steplet_core::NAMESPACE;
 use steplet_core::canon::{Canonical, canonicalize};
 use steplet_core::date::Date;
+use steplet_core::display::is_invisible;
 use steplet_core::header::{self, Steplet};
 use steplet_core::limits::{self, DEFAULT_EXPIRY_DAYS, MAX_EXPIRY_DAYS};
+use steplet_core::rules::{self, Finding, Severity};
 use steplet_core::sig::{self, SigStatus};
 
 pub struct Report {
@@ -12,23 +14,30 @@ pub struct Report {
     pub ok: bool,
 }
 
+/// Rules whose findings `check` already reports as problems in its own words, so the rating does not repeat them.
+const ALREADY_REPORTED: &[&str] =
+    &["read.refused", "read.too-large", "read.line-too-long", "sig.invalid", "time.expired", "time.too-far"];
+
 pub fn check(name: &str, raw: &[u8], today: Date) -> Report {
     let mut info = Vec::new();
     let mut problems = Vec::new();
+    let mut rating = String::new();
+    let mut blocked = 0;
     match canonicalize(raw) {
         Err(e) => problems.push(problem(&e.to_string(), e.help().allowed, e.help().example)),
         Ok(c) => {
             let (steplet, found) = content(&c, today);
-            if let Some(s) = steplet {
-                info.push(summary(&s));
+            problems.extend(found);
+            let status = sig::verify(&c, NAMESPACE);
+            if let Some(s) = &steplet {
+                info.push(summary(s));
                 info.push(match &s.repository {
                     Some(r) => format!("repository: {} at {}", r.url.text, r.commit.text),
                     None => "repository: none".into(),
                 });
                 info.push(format!("expires: {} ({})", s.expires, days_text(s.expires, today)));
             }
-            problems.extend(found);
-            match sig::verify(&c, NAMESPACE) {
+            match &status {
                 SigStatus::Unsigned => info.push("signature: not signed".into()),
                 SigStatus::Valid { fingerprint } => info.push(format!("signature: valid, key {fingerprint}")),
                 SigStatus::Invalid { reason } => problems.push(problem(
@@ -37,19 +46,54 @@ pub fn check(name: &str, raw: &[u8], today: Date) -> Report {
                     "steplet-sign sign my-task.steplet --key C:\\Users\\you\\.ssh\\id_ed25519",
                 )),
             }
+            // G12: what the receiver will see. The time is the start of today, as for the expiry checks above.
+            if let Some(s) = &steplet {
+                let r = rules::rate(s, &status, today.days_since_epoch() * 86_400);
+                info.push(format!("rating: {}", r.outcome.name()));
+                for f in r.findings.iter().filter(|f| !ALREADY_REPORTED.contains(&f.rule.id)) {
+                    blocked += usize::from(f.rule.severity == Severity::Blocked);
+                    rating.push_str(&finding_text(f));
+                }
+            }
         }
     }
-    let ok = problems.is_empty();
-    let mut text = if ok { format!("{name}: ok\n") } else { format!("{name}: {}\n", count(problems.len(), "problem")) };
+    let ok = problems.is_empty() && blocked == 0;
+    let mut text =
+        if ok { format!("{name}: ok\n") } else { format!("{name}: {}\n", count(problems.len() + blocked, "problem")) };
     for line in info {
         text.push_str("  ");
         text.push_str(&line);
         text.push('\n');
     }
+    text.push_str(&rating);
     for p in problems {
         text.push_str(&p);
     }
     Report { text, ok }
+}
+
+/// One finding of the rating: severity, line and title; the file's own text, with invisible characters shown;
+/// and what to do.
+fn finding_text(f: &Finding) -> String {
+    let mut s = format!("    {}", f.rule.severity.name());
+    if let Some(line) = f.line {
+        s.push_str(&format!(", line {line}"));
+    }
+    s.push_str(&format!(": {}", f.rule.title));
+    if let Some(detail) = &f.detail {
+        s.push_str(&format!(" ({detail})"));
+    }
+    s.push('\n');
+    if let Some(quote) = &f.quote {
+        s.push_str(&format!("      {}\n", visible(quote)));
+    }
+    s.push_str(&format!("      {}\n", f.rule.advice));
+    s
+}
+
+/// `text` with every invisible character written as <U+XXXX>, so a terminal shows it.
+fn visible(text: &str) -> String {
+    text.chars().map(|c| if is_invisible(c) { format!("<U+{:04X}>", c as u32) } else { c.to_string() }).collect()
 }
 
 /// Header, limit and expiry problems of a cleaned-up file: everything except the signature.
