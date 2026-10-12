@@ -1,0 +1,34 @@
+---
+steplet: 1
+title: Find out why a test of tiny-rust-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-rust-lib.git
+  commit: 42cc55b9cac0ace7b9c5b34c96177d27d3ba3683
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-rust-lib where it helps.
+allow:
+  commands:
+    - cargo test
+  domains:
+    - crates.io
+    - index.crates.io
+    - static.crates.io
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `cargo test` once and read the output.
+The failing test is `parse::tests::rejects_tabs`; run it alone with `cargo test rejects_tabs` if that helps.
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

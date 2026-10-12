@@ -1,0 +1,31 @@
+---
+steplet: 1
+title: Find out why a test of tiny-java-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-java-lib.git
+  commit: 9dc3fb3523edff3d11ad4d5cc72c48adbe705710
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-java-lib where it helps.
+allow:
+  commands:
+    - mvn -q test
+  domains:
+    - repo.maven.apache.org
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `mvn -q test` once and read the output.
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

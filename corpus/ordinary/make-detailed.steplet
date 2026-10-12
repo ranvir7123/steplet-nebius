@@ -1,0 +1,30 @@
+---
+steplet: 1
+title: Find out why a test of tiny-c-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-c-lib.git
+  commit: e0b15a2d99c488d4d9202e98d783b448818583b0
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-c-lib where it helps.
+allow:
+  commands:
+    - make test
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `make test` once and read the output.
+If you run this by hand outside Steplet, you may need `sudo apt install build-essential` first; the agent does not need it.
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

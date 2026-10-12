@@ -1,0 +1,21 @@
+---
+steplet: 1
+title: Run the tests of tiny-py-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-py-lib-uc5.git
+  commit: 03a3d1277649c2bc5ffb28ef40e3eea1d6d9686a
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - python -m pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+---
+# Run the tests
+
+Run `python -m pytest` in the repository and report the summary line.

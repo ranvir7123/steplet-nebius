@@ -1282,3 +1282,253 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 4 tests pass in `report`, including the exact JSON text of an amber file, plain-ASCII escaping of characters above U+FFFF, and the signed test vectors; clippy is clean. Not run in this task: the full workspace test (only a new module, a new test and a doc line changed; clippy compiled every test target).
+
+## Task 10: the corpus, its expected answers, and `docs/rules.md`
+
+Run 12 Oct 2026, same worktree, starting from `fbed1ab`.
+
+Changes from the plan while running it: none. The generator, the tests and every corpus file worked as written; every hit and near-miss passed on the first run, before any expected answer existed.
+
+**Step 2, the generator:**
+
+```
+> python -I corpus/make_corpus.py
+wrote 72 hostile and 62 ordinary files under C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\corpus
+```
+
+`Get-ChildItem` counts: 72 files in `corpus/hostile`, 62 in `corpus/ordinary`.
+
+**Step 3, before the expected answers exist** (4 pass; the golden-file test fails and lists all 134 files; the list is cut here to its first and last lines; `rules_doc` did not run because cargo stops at the first failing test program):
+
+```
+> cargo test -p steplet-core --offline --test corpus --test rules_doc
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.59s
+     Running tests\corpus.rs (target\debug\deps\corpus-8220497a53785d57.exe)
+
+running 5 tests
+test every_hostile_file_belongs_to_a_rule ... ok
+test counts_of_the_ordinary_files ... ok
+test every_rule_has_a_hit_and_a_near_miss ... ok
+test list_every_file_with_its_findings ... ok
+test every_file_gives_its_expected_json ... FAILED
+
+failures:
+
+---- every_file_gives_its_expected_json stdout ----
+
+thread 'every_file_gives_its_expected_json' (15032) panicked at crates\steplet-core\tests\corpus.rs:47:5:
+    ... (122 more file names) ...
+    "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase2-task1-07fd4c\\crates\\steplet-core/../../corpus\\hostile\\time.expired.hit.steplet",
+    "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase2-task1-07fd4c\\crates\\steplet-core/../../corpus\\hostile\\time.expired.near.steplet",
+    "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase2-task1-07fd4c\\crates\\steplet-core/../../corpus\\hostile\\time.too-far.hit.steplet",
+    "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase2-task1-07fd4c\\crates\\steplet-core/../../corpus\\hostile\\time.too-far.near.steplet",
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    every_file_gives_its_expected_json
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p steplet-core --test corpus`
+```
+
+**Step 4, writing the expected answers and the rules page, then the list of every file:**
+
+```
+> $env:STEPLET_BLESS = "1"; cargo test -p steplet-core --offline --test corpus --test rules_doc; Remove-Item Env:STEPLET_BLESS
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running tests\corpus.rs (target\debug\deps\corpus-8220497a53785d57.exe)
+
+running 5 tests
+test every_hostile_file_belongs_to_a_rule ... ok
+test counts_of_the_ordinary_files ... ok
+test every_rule_has_a_hit_and_a_near_miss ... ok
+test list_every_file_with_its_findings ... ok
+test every_file_gives_its_expected_json ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests\rules_doc.rs (target\debug\deps\rules_doc-658b2949100a0f98.exe)
+
+running 1 test
+test docs_rules_md_lists_every_rule ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+```
+> cargo test -p steplet-core --offline --test corpus list_every_file_with_its_findings -- --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running tests\corpus.rs (target\debug\deps\corpus-8220497a53785d57.exe)
+
+running 1 test
+dotnet-detailed.steplet: amber: cap.runs-code
+dotnet-french.steplet: amber: cap.runs-code
+dotnet-install-and-test.steplet: amber: cap.installs cap.runs-code
+dotnet-minimal.steplet: amber: cap.runs-code
+dotnet-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+example-run-tests.steplet: green: 
+go-detailed.steplet: amber: cap.runs-code
+go-french.steplet: amber: cap.runs-code
+go-install-and-test.steplet: amber: cap.installs cap.runs-code
+go-minimal.steplet: amber: cap.runs-code
+go-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+gradle-detailed.steplet: amber: cap.runs-code
+gradle-french.steplet: amber: cap.runs-code
+gradle-install-and-test.steplet: amber: cap.runs-code
+gradle-minimal.steplet: amber: cap.runs-code
+gradle-with-links.steplet: amber: cap.runs-code
+make-detailed.steplet: red: social.asks-admin cap.runs-code
+make-french.steplet: amber: cap.runs-code
+make-install-and-test.steplet: amber: cap.runs-code
+make-minimal.steplet: amber: cap.runs-code
+make-with-links.steplet: amber: cap.runs-code
+maven-detailed.steplet: amber: cap.runs-code
+maven-french.steplet: amber: cap.runs-code
+maven-install-and-test.steplet: amber: cap.runs-code
+maven-minimal.steplet: amber: cap.runs-code
+maven-with-links.steplet: amber: cap.runs-code
+node-detailed.steplet: red: hide.html-comment cap.runs-code
+node-french.steplet: amber: cap.runs-code
+node-install-and-test.steplet: amber: cap.installs cap.runs-code
+node-minimal.steplet: amber: cap.runs-code
+node-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+php-detailed.steplet: amber: cap.runs-code
+php-french.steplet: amber: cap.runs-code
+php-install-and-test.steplet: amber: cap.installs cap.runs-code
+php-minimal.steplet: amber: cap.runs-code
+php-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+pytest-detailed.steplet: amber: cap.runs-code
+pytest-french.steplet: amber: cap.runs-code
+pytest-install-and-test.steplet: amber: cap.installs cap.runs-code
+pytest-minimal.steplet: amber: cap.runs-code
+pytest-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+repro-detailed.steplet: amber: cap.runs-code
+repro-french.steplet: amber: cap.runs-code
+repro-install-and-test.steplet: amber: cap.runs-code
+repro-minimal.steplet: amber: cap.runs-code
+repro-with-links.steplet: amber: cap.runs-code
+ruby-detailed.steplet: amber: cap.runs-code
+ruby-french.steplet: amber: cap.runs-code
+ruby-install-and-test.steplet: amber: cap.installs cap.runs-code
+ruby-minimal.steplet: amber: cap.runs-code
+ruby-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+rust-detailed.steplet: amber: cap.runs-code consist.undeclared-command
+rust-french.steplet: amber: cap.runs-code
+rust-install-and-test.steplet: amber: cap.installs cap.runs-code
+rust-minimal.steplet: amber: cap.runs-code
+rust-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+uc5-lookalike.steplet: amber: cap.runs-code
+uv-detailed.steplet: amber: cap.runs-code
+uv-french.steplet: amber: cap.runs-code
+uv-install-and-test.steplet: amber: cap.installs cap.runs-code
+uv-minimal.steplet: amber: cap.runs-code
+uv-with-links.steplet: amber: cap.runs-code consist.undeclared-command
+block.admin.hit.steplet: blocked: block.admin
+block.admin.near.steplet: green: 
+block.download-into-shell.hit.steplet: blocked: block.download-into-shell
+block.download-into-shell.near.steplet: green: 
+block.invisible-in-field.hit.steplet: blocked: block.invisible-in-field
+block.invisible-in-field.near.steplet: green: 
+block.registry.hit.steplet: blocked: block.registry
+block.registry.near.steplet: amber: cap.installs
+block.secret-path.hit.steplet: blocked: block.secret-path
+block.secret-path.near.steplet: green: 
+block.write-protected.hit.steplet: blocked: block.write-protected
+block.write-protected.near.steplet: green: 
+cap.installs.hit.steplet: amber: cap.installs
+cap.installs.near.steplet: amber: cap.runs-code
+cap.not-understood.hit.steplet: amber: cap.not-understood
+cap.not-understood.near.steplet: green: 
+cap.outside-path.hit.steplet: amber: cap.outside-path
+cap.outside-path.near.steplet: green: 
+cap.runs-code.hit.steplet: amber: cap.runs-code
+cap.runs-code.near.steplet: green: 
+cap.unknown-program.hit.steplet: amber: cap.unknown-program
+cap.unknown-program.near.steplet: green: 
+consist.undeclared-command.hit.steplet: amber: consist.undeclared-command
+consist.undeclared-command.near.steplet: green: 
+consist.undeclared-host.hit.steplet: amber: consist.undeclared-host
+consist.undeclared-host.near.steplet: green: 
+hide.blank-run.hit.steplet: red: hide.blank-run
+hide.blank-run.near.steplet: green: 
+hide.encoded-block.hit.steplet: red: hide.encoded-block
+hide.encoded-block.near.steplet: green: 
+hide.html-comment.hit.steplet: red: hide.html-comment
+hide.html-comment.near.steplet: green: 
+hide.invisible-in-text.hit.steplet: red: hide.invisible-in-text
+hide.invisible-in-text.near.steplet: green: 
+hide.link-mismatch.hit.steplet: red: hide.link-mismatch
+hide.link-mismatch.near.steplet: green: 
+hide.punycode.hit.steplet: red: hide.punycode net.other-domain
+hide.punycode.near.steplet: amber: net.other-domain
+net.exfil-domain.hit.steplet: red: net.exfil-domain
+net.exfil-domain.near.steplet: amber: net.other-domain
+net.other-domain.hit.steplet: amber: net.other-domain
+net.other-domain.near.steplet: green: 
+note.no-repository.hit.steplet: green: note.no-repository
+note.no-repository.near.steplet: green: 
+read.line-too-long.hit.steplet: blocked: read.line-too-long
+read.line-too-long.near.steplet: green: 
+read.refused.hit.steplet: blocked: read.refused
+read.refused.near.steplet: green: 
+read.too-large.hit.steplet: blocked: read.too-large
+read.too-large.near.steplet: green: 
+sig.invalid.hit.steplet: blocked: sig.invalid
+sig.invalid.near.steplet: green: 
+social.asks-admin.hit.steplet: red: social.asks-admin
+social.asks-admin.near.steplet: green: 
+social.asks-secrets.hit.steplet: red: social.asks-secrets
+social.asks-secrets.near.steplet: green: 
+social.claims-approval.hit.steplet: red: social.claims-approval
+social.claims-approval.near.steplet: green: 
+social.conceal.hit.steplet: red: social.conceal
+social.conceal.near.steplet: green: 
+social.disable-protection.hit.steplet: red: social.disable-protection
+social.disable-protection.near.steplet: green: 
+social.disable-safety.hit.steplet: red: social.disable-safety
+social.disable-safety.near.steplet: green: 
+social.lookalike-host.hit.steplet: red: social.lookalike-host
+social.lookalike-host.near.steplet: green: 
+social.override.hit.steplet: red: social.override
+social.override.near.steplet: green: 
+time.expired.hit.steplet: blocked: time.expired
+time.expired.near.steplet: green: 
+time.too-far.hit.steplet: blocked: time.too-far
+time.too-far.near.steplet: green: 
+test list_every_file_with_its_findings ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.13s
+```
+
+Read by eye: every `.hit` line names its own rule id and every `.near` line does not. `docs/rules.md` was read in full: 36 rows, in the order of `RULES`. 134 `.json` files exist; `tr -cd '' | wc -c` over `docs/rules.md` and all 134 `.json` files gives `0` (Unix line endings).
+
+The two red ordinary files, on purpose (realistic text that raises a finding): `make-detailed` says "you may need `sudo apt install build-essential` first; the agent does not need it" (`social.asks-admin`: the negation comes after the phrase, so it does not count), and `node-detailed` has an HTML comment. The 9 `with-links` files that name their install command in the body without allowing it get `consist.undeclared-command`, as planned.
+
+**Step 5, run again without writing** (`ordinary files:` line and totals; the full output is the same as Step 4's apart from timings):
+
+```
+> cargo test -p steplet-core --offline --test corpus --test rules_doc -- --nocapture
+     Running tests\corpus.rs (target\debug\deps\corpus-8220497a53785d57.exe)
+ordinary files: 1 green, 59 amber, 2 red, 0 blocked
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+     Running tests\rules_doc.rs (target\debug\deps\rules_doc-658b2949100a0f98.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+Run a second time: exit code 0 again; the two outputs differ only in the timings and in the order of one `test ... ok` line (the tests run in parallel threads), so the expected files are stable.
+
+**The first tuning numbers (milestone plan, phase 2 "done means"; rows 12 and 26):**
+
+| Ordinary files | green | amber | red | blocked |
+|---|---|---|---|---|
+| 62 | 1 | 59 | 2 | 0 |
+
+Exactly the plan's hand trace. 59 of 62 are amber only because every test command is `cap.runs-code`; this is the tuning question for the user (section 1 of the plan), recorded here and not changed in this phase.
+
+**Extra: clippy with warnings as errors** (exit code 0, last line): `Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.63s`
+
+**Verdict:** done. 5 tests pass in `corpus` and 1 in `rules_doc`; 134 expected answers and `docs/rules.md` written by the tests and stable across runs; clippy is clean. Not run in this task: the full workspace test.

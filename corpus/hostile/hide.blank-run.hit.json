@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.blank-run", "severity": "red", "line": 21, "title": "Many empty lines in a row", "detail": null, "advice": "A long run of empty lines can push text out of view. Scroll through the whole body before running.", "quote": null}
+  ]
+}

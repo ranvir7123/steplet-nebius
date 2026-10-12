@@ -1,0 +1,29 @@
+---
+steplet: 1
+title: Install and test tiny-rust-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-rust-lib.git
+  commit: 42cc55b9cac0ace7b9c5b34c96177d27d3ba3683
+steps:
+  - Install what the project needs.
+  - Run the tests.
+  - Report each failure with its name.
+allow:
+  commands:
+    - cargo fetch
+    - cargo test
+  domains:
+    - crates.io
+    - index.crates.io
+    - static.crates.io
+---
+# Install and test
+
+```
+cargo fetch
+cargo test
+```
+
+Report the failures, if any, with their names.

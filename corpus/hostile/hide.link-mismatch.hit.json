@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.link-mismatch", "severity": "red", "line": 22, "title": "A link shows one address but opens another", "detail": null, "advice": "The text of the link names a different site from the one it opens. Steplet shows the real address.", "quote": "See [https://github.com/octocat/Hello-World](https://example.invalid/hello)."}
+  ]
+}

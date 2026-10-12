@@ -1,0 +1,33 @@
+---
+steplet: 1
+title: Find out why a test of tiny-py-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-py-lib.git
+  commit: a250d6ceebeac2feb30cd5134696be2763a3ba16
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-py-lib where it helps.
+allow:
+  commands:
+    - python -m pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `python -m pytest` once and read the output.
+Checksum of the test data: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

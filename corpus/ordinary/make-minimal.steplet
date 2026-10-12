@@ -1,0 +1,18 @@
+---
+steplet: 1
+title: Run the tests of tiny-c-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-c-lib.git
+  commit: e0b15a2d99c488d4d9202e98d783b448818583b0
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - make test
+---
+# Run the tests
+
+Run `make test` in the repository and report the summary line.

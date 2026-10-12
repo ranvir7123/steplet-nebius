@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "time.expired", "severity": "blocked", "line": 5, "title": "The file has expired", "detail": "it expired at the end of 2026-10-10 (UTC)", "advice": "Ask the sender for a new file with a later expiry date.", "quote": null}
+  ]
+}

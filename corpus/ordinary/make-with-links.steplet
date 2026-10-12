@@ -1,0 +1,24 @@
+---
+steplet: 1
+title: Check tiny-c-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-c-lib.git
+  commit: e0b15a2d99c488d4d9202e98d783b448818583b0
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - make test
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-c-lib
+
+The tests run with `make test`.
+See the [testing guide](https://www.gnu.org/software/make/manual/) and the [contributing notes](https://github.com/steplet-corpus/tiny-c-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

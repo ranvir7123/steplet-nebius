@@ -1,0 +1,8 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.runs-code", "severity": "amber", "line": 14, "title": "A command runs the repository's own code", "detail": null, "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.", "quote": "cargo test"},
+    {"rule": "consist.undeclared-command", "severity": "amber", "line": 25, "title": "The instructions mention a command the file does not ask for", "detail": null, "advice": "The agent will have to ask you before running it. Senders: add it to allow: commands.", "quote": "cargo fetch"}
+  ]
+}

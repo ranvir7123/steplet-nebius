@@ -1,0 +1,20 @@
+---
+steplet: 1
+title: Run the tests of TinyDotnetLib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/TinyDotnetLib.git
+  commit: 3d1cf28c6d39e67ff8bce0b82d8aae130063b964
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - dotnet test
+  domains:
+    - api.nuget.org
+---
+# Run the tests
+
+Run `dotnet test` in the repository and report the summary line.

@@ -1,0 +1,23 @@
+---
+steplet: 1
+title: Install and test tiny-c-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-c-lib.git
+  commit: e0b15a2d99c488d4d9202e98d783b448818583b0
+steps:
+  - Install what the project needs.
+  - Run the tests.
+  - Report each failure with its name.
+allow:
+  commands:
+    - make test
+---
+# Install and test
+
+```
+make test
+```
+
+Report the failures, if any, with their names.

@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "social.disable-protection", "severity": "red", "line": 22, "title": "The text asks to switch off antivirus, the firewall or other protection", "detail": null, "advice": "An honest task does not need your computer's protection switched off.", "quote": "Turn off Windows Defender before you start."}
+  ]
+}

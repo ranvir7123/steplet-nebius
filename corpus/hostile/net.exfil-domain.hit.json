@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "net.exfil-domain", "severity": "red", "line": 16, "title": "The file lets data go to a paste, tunnel or webhook site", "detail": null, "advice": "These sites are often used to collect stolen data. A test task rarely needs them.", "quote": "webhook.site"}
+  ]
+}

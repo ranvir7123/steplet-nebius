@@ -1,0 +1,26 @@
+---
+steplet: 1
+title: Check tiny-php-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-php-lib.git
+  commit: 620a19a9727894af46c333fc7c197f1b26ccf345
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - ./vendor/bin/phpunit
+  domains:
+    - repo.packagist.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-php-lib
+
+Dependencies are installed with `composer install` and the tests run with `./vendor/bin/phpunit`.
+See the [testing guide](https://phpunit.de/) and the [contributing notes](https://github.com/steplet-corpus/tiny-php-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

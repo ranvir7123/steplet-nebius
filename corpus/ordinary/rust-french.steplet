@@ -1,0 +1,24 @@
+---
+steplet: 1
+title: Lancer les tests de tiny-rust-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-rust-lib.git
+  commit: 42cc55b9cac0ace7b9c5b34c96177d27d3ba3683
+steps:
+  - Lancez les tests.
+  - Indiquez le nombre de tests réussis.
+allow:
+  commands:
+    - cargo test
+  domains:
+    - crates.io
+    - index.crates.io
+    - static.crates.io
+---
+# Lancer les tests
+
+Lancez `cargo test` dans le dépôt ; puis indiquez le résultat.
+Le résumé tient en une ligne : recopiez-la telle quelle.
+Aucune modification de fichier !

@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.encoded-block", "severity": "red", "line": 22, "title": "A long block of encoded characters", "detail": null, "advice": "Encoded text (base64 or hex) can hide instructions or a program. Ask the sender what it is.", "quote": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB"}
+  ]
+}

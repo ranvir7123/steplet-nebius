@@ -1,0 +1,20 @@
+---
+steplet: 1
+title: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/octocat/Hello-World.git
+  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+steps:
+  - Count the lines in the README file.
+  - Report the count.
+allow:
+  commands:
+    - wc -l README
+never:
+  - Do not change any file.
+---
+# Count the README lines
+
+Run `wc -l README` and report the number.

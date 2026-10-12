@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "social.lookalike-host", "severity": "red", "line": 7, "title": "A web address that imitates a well-known site", "detail": "it looks like github", "advice": "The name is one letter away from a well-known site, or has a different ending. Check it carefully.", "quote": "githuh.invalid"}
+  ]
+}

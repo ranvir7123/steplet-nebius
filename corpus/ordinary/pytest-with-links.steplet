@@ -1,0 +1,27 @@
+---
+steplet: 1
+title: Check tiny-py-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-py-lib.git
+  commit: a250d6ceebeac2feb30cd5134696be2763a3ba16
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - python -m pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-py-lib
+
+Dependencies are installed with `pip install -r requirements.txt` and the tests run with `python -m pytest`.
+See the [testing guide](https://docs.pytest.org/) and the [contributing notes](https://github.com/steplet-corpus/tiny-py-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

@@ -1,0 +1,22 @@
+---
+steplet: 1
+title: Lancer les tests de tiny-java-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-java-lib.git
+  commit: 9dc3fb3523edff3d11ad4d5cc72c48adbe705710
+steps:
+  - Lancez les tests.
+  - Indiquez le nombre de tests réussis.
+allow:
+  commands:
+    - mvn -q test
+  domains:
+    - repo.maven.apache.org
+---
+# Lancer les tests
+
+Lancez `mvn -q test` dans le dépôt ; puis indiquez le résultat.
+Le résumé tient en une ligne : recopiez-la telle quelle.
+Aucune modification de fichier !

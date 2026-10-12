@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "block.invisible-in-field", "severity": "blocked", "line": 3, "title": "An invisible character in the title, the sender or a command", "detail": null, "advice": "Invisible characters can make a name or a command look different from what it is. Senders: remove them.", "quote": "Count the README\u200b lines"}
+  ]
+}

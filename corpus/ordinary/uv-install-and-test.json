@@ -1,0 +1,8 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.installs", "severity": "amber", "line": 15, "title": "A command downloads and installs packages", "detail": null, "advice": "Packages are other people's code and can run while they install. Steplet runs this only inside the fence.", "quote": "uv sync"},
+    {"rule": "cap.runs-code", "severity": "amber", "line": 16, "title": "A command runs the repository's own code", "detail": null, "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.", "quote": "uv run pytest"}
+  ]
+}

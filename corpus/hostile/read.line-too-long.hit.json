@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "read.line-too-long", "severity": "blocked", "line": 3, "title": "A line of the header is longer than Steplet allows", "detail": "the title is 121 characters long; at most 120 are allowed", "advice": "The sender can shorten it and put the details in the body.", "quote": null}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.outside-path", "severity": "amber", "line": 14, "title": "A command names a path outside the repository", "detail": null, "advice": "Programs inside the fence can still read some places outside the repository. Check that this one is needed.", "quote": "wc -l /etc/hostname"}
+  ]
+}

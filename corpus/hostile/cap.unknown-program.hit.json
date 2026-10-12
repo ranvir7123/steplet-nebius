@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.unknown-program", "severity": "amber", "line": 14, "title": "A command uses a program Steplet does not know", "detail": null, "advice": "Steplet treats it as able to run any code, so it runs only inside the fence.", "quote": "frobnicate --all"}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.runs-code", "severity": "amber", "line": 15, "title": "A command runs the repository's own code", "detail": null, "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.", "quote": "mvn -q test"}
+  ]
+}

@@ -1,0 +1,20 @@
+---
+steplet: 1
+title: Lancer les tests de issue-1234-repro
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/issue-1234-repro.git
+  commit: 7080523140687d2bff732548c1b08ae6eae97a01
+steps:
+  - Lancez les tests.
+  - Indiquez le nombre de tests réussis.
+allow:
+  commands:
+    - python scripts/repro.py
+---
+# Lancer les tests
+
+Lancez `python scripts/repro.py` dans le dépôt ; puis indiquez le résultat.
+Le résumé tient en une ligne : recopiez-la telle quelle.
+Aucune modification de fichier !

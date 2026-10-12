@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.installs", "severity": "amber", "line": 14, "title": "A command downloads and installs packages", "detail": null, "advice": "Packages are other people's code and can run while they install. Steplet runs this only inside the fence.", "quote": "npm install --save-dev registry-url"}
+  ]
+}

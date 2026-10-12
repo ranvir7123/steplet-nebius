@@ -1,0 +1,26 @@
+---
+steplet: 1
+title: Check TinyDotnetLib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/TinyDotnetLib.git
+  commit: 3d1cf28c6d39e67ff8bce0b82d8aae130063b964
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - dotnet test
+  domains:
+    - api.nuget.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for TinyDotnetLib
+
+Dependencies are installed with `dotnet restore` and the tests run with `dotnet test`.
+See the [testing guide](https://learn.microsoft.com/dotnet/core/testing/) and the [contributing notes](https://github.com/steplet-corpus/TinyDotnetLib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

@@ -1,0 +1,26 @@
+---
+steplet: 1
+title: Check tiny-java-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-java-lib.git
+  commit: 9dc3fb3523edff3d11ad4d5cc72c48adbe705710
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - mvn -q test
+  domains:
+    - repo.maven.apache.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-java-lib
+
+The tests run with `mvn -q test`.
+See the [testing guide](https://maven.apache.org/guides/) and the [contributing notes](https://github.com/steplet-corpus/tiny-java-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

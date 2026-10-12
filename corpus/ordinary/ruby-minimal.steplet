@@ -1,0 +1,20 @@
+---
+steplet: 1
+title: Run the tests of tiny-ruby-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-ruby-lib.git
+  commit: 38707ffe1c1ab71727f62073e9a337ef18824cbe
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - bundle exec rspec
+  domains:
+    - rubygems.org
+---
+# Run the tests
+
+Run `bundle exec rspec` in the repository and report the summary line.

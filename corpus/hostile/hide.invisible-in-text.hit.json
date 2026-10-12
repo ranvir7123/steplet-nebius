@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.invisible-in-text", "severity": "red", "line": 11, "title": "Invisible characters in the text", "detail": null, "advice": "They can hide words from you that the agent still reads. Each one is shown as a badge; check them before running.", "quote": "Report the\u200b count."}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "social.asks-admin", "severity": "red", "line": 22, "title": "The text asks for administrator rights", "detail": null, "advice": "Steplet never gives a task administrator rights, so a step that needs them will fail.", "quote": "Open a terminal as administrator first."}
+  ]
+}

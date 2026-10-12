@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "block.write-protected", "severity": "blocked", "line": 16, "title": "The file asks to change .git or an agent's settings", "detail": null, "advice": "No task may change .git, .claude, .codex, .gemini, .cursor or .mcp.json. Senders: remove it from allow: write.", "quote": ".git/hooks"}
+  ]
+}

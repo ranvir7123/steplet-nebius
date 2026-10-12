@@ -1,0 +1,24 @@
+---
+steplet: 1
+title: Lancer les tests de tiny-kotlin-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-kotlin-lib.git
+  commit: 9236ea60e92d06e387a47a493a795825179d36ad
+steps:
+  - Lancez les tests.
+  - Indiquez le nombre de tests réussis.
+allow:
+  commands:
+    - ./gradlew test
+  domains:
+    - services.gradle.org
+    - plugins.gradle.org
+    - repo.maven.apache.org
+---
+# Lancer les tests
+
+Lancez `./gradlew test` dans le dépôt ; puis indiquez le résultat.
+Le résumé tient en une ligne : recopiez-la telle quelle.
+Aucune modification de fichier !

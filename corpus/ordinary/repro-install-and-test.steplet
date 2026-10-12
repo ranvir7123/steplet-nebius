@@ -1,0 +1,23 @@
+---
+steplet: 1
+title: Install and test issue-1234-repro
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/issue-1234-repro.git
+  commit: 7080523140687d2bff732548c1b08ae6eae97a01
+steps:
+  - Install what the project needs.
+  - Run the tests.
+  - Report each failure with its name.
+allow:
+  commands:
+    - python scripts/repro.py
+---
+# Install and test
+
+```
+python scripts/repro.py
+```
+
+Report the failures, if any, with their names.

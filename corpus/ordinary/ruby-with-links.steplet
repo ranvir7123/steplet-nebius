@@ -1,0 +1,26 @@
+---
+steplet: 1
+title: Check tiny-ruby-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-ruby-lib.git
+  commit: 38707ffe1c1ab71727f62073e9a337ef18824cbe
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - bundle exec rspec
+  domains:
+    - rubygems.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-ruby-lib
+
+Dependencies are installed with `bundle install` and the tests run with `bundle exec rspec`.
+See the [testing guide](https://rspec.info/) and the [contributing notes](https://github.com/steplet-corpus/tiny-ruby-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

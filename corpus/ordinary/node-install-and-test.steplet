@@ -1,0 +1,27 @@
+---
+steplet: 1
+title: Install and test tiny-node-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-node-lib.git
+  commit: f712a80b7094d648eb0e0997154cd2d849c9ec26
+steps:
+  - Install what the project needs.
+  - Run the tests.
+  - Report each failure with its name.
+allow:
+  commands:
+    - npm ci
+    - npm test
+  domains:
+    - registry.npmjs.org
+---
+# Install and test
+
+```
+npm ci
+npm test
+```
+
+Report the failures, if any, with their names.

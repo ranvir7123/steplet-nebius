@@ -1,0 +1,23 @@
+---
+steplet: 1
+title: Check issue-1234-repro before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/issue-1234-repro.git
+  commit: 7080523140687d2bff732548c1b08ae6eae97a01
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - python scripts/repro.py
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for issue-1234-repro
+
+The tests run with `python scripts/repro.py`.
+
+Report the summary line exactly as printed.

@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "read.too-large", "severity": "blocked", "line": 40, "title": "The file is bigger than Steplet allows", "detail": "31 steps; at most 30 are allowed", "advice": "Everything must fit on your screen. The sender can split the task into several files.", "quote": null}
+  ]
+}

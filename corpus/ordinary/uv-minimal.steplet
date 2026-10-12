@@ -1,0 +1,21 @@
+---
+steplet: 1
+title: Run the tests of tiny-uv-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-uv-lib.git
+  commit: 0dec05172109cf05eaa1112b48fe326357b55100
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - uv run pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+---
+# Run the tests
+
+Run `uv run pytest` in the repository and report the summary line.

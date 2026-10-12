@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "cap.not-understood", "severity": "amber", "line": 14, "title": "Steplet cannot read a command exactly", "detail": null, "advice": "Commands are matched word for word, so the agent will have to ask you each time. Senders: write one plain command, without pipes, semicolons, &&, $, redirections or wildcards.", "quote": "wc -l README | sort"}
+  ]
+}

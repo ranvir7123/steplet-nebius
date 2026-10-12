@@ -1,0 +1,31 @@
+---
+steplet: 1
+title: Find out why a test of tiny-php-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-php-lib.git
+  commit: 620a19a9727894af46c333fc7c197f1b26ccf345
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-php-lib where it helps.
+allow:
+  commands:
+    - ./vendor/bin/phpunit
+  domains:
+    - repo.packagist.org
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `./vendor/bin/phpunit` once and read the output.
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

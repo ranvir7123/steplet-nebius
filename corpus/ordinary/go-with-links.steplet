@@ -1,0 +1,27 @@
+---
+steplet: 1
+title: Check tiny-go-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-go-lib.git
+  commit: 1a851c7a4ec39408e8600ede5df579e98e9072d7
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - go test ./...
+  domains:
+    - proxy.golang.org
+    - sum.golang.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-go-lib
+
+Dependencies are installed with `go mod download` and the tests run with `go test ./...`.
+See the [testing guide](https://go.dev/doc/) and the [contributing notes](https://github.com/steplet-corpus/tiny-go-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "block.admin", "severity": "blocked", "line": 14, "title": "A command needs administrator rights", "detail": null, "advice": "Steplet never gives a task administrator rights. Senders: remove sudo or similar from the command.", "quote": "sudo wc -l README"}
+  ]
+}

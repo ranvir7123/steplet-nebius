@@ -1,0 +1,26 @@
+---
+steplet: 1
+title: Check tiny-node-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-node-lib.git
+  commit: f712a80b7094d648eb0e0997154cd2d849c9ec26
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - npm test
+  domains:
+    - registry.npmjs.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-node-lib
+
+Dependencies are installed with `npm ci` and the tests run with `npm test`.
+See the [testing guide](https://docs.npmjs.com/cli/) and the [contributing notes](https://github.com/steplet-corpus/tiny-node-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

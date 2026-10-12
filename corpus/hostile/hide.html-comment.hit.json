@@ -1,0 +1,7 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.html-comment", "severity": "red", "line": 22, "title": "An HTML comment in the text", "detail": null, "advice": "Many Markdown viewers hide HTML comments, but the agent reads them. Steplet shows them; read them before running.", "quote": "<!-- a note for the agent -->"}
+  ]
+}

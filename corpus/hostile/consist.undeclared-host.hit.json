@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "consist.undeclared-host", "severity": "amber", "line": 11, "title": "A step mentions a web site the file does not ask for", "detail": null, "advice": "The agent will have to ask you before opening it. Senders: add it to allow: domains.", "quote": "Report the count at https://example.org/report."}
+  ]
+}

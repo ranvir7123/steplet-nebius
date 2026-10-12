@@ -1,0 +1,28 @@
+---
+steplet: 1
+title: Check tiny-rust-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-rust-lib.git
+  commit: 42cc55b9cac0ace7b9c5b34c96177d27d3ba3683
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - cargo test
+  domains:
+    - crates.io
+    - index.crates.io
+    - static.crates.io
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-rust-lib
+
+Dependencies are installed with `cargo fetch` and the tests run with `cargo test`.
+See the [testing guide](https://doc.rust-lang.org/cargo/) and the [contributing notes](https://github.com/steplet-corpus/tiny-rust-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

@@ -1,0 +1,8 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.html-comment", "severity": "red", "line": 30, "title": "An HTML comment in the text", "detail": null, "advice": "Many Markdown viewers hide HTML comments, but the agent reads them. Steplet shows them; read them before running.", "quote": "<!-- written from the issue template -->"},
+    {"rule": "cap.runs-code", "severity": "amber", "line": 17, "title": "A command runs the repository's own code", "detail": null, "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.", "quote": "npm test"}
+  ]
+}

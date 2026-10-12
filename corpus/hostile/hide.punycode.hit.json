@@ -1,0 +1,8 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "hide.punycode", "severity": "red", "line": 16, "title": "A web address written in another alphabet", "detail": null, "advice": "A name with xn-- stands for letters of another alphabet, which can imitate a well-known site.", "quote": "xn--80ak6aa92e.invalid"},
+    {"rule": "net.other-domain", "severity": "amber", "line": 16, "title": "The file lets the agent and its programs reach a web site", "detail": null, "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.", "quote": "xn--80ak6aa92e.invalid"}
+  ]
+}

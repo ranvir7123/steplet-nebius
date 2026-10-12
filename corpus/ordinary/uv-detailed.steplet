@@ -1,0 +1,32 @@
+---
+steplet: 1
+title: Find out why a test of tiny-uv-lib fails
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-uv-lib.git
+  commit: 0dec05172109cf05eaa1112b48fe326357b55100
+steps:
+  - Read the failing test and the code it calls.
+  - Run the tests once.
+  - Explain why the test fails.
+  - Suggest a fix in words; do not change files.
+  - Link to the code on https://github.com/steplet-corpus/tiny-uv-lib where it helps.
+allow:
+  commands:
+    - uv run pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+  read:
+    - .
+never:
+  - Do not change any file.
+  - Do not push to any remote.
+  - Do not install anything system-wide.
+---
+# Why does the test fail?
+
+Run `uv run pytest` once and read the output.
+
+Explain the cause in plain words and suggest a fix. Do not change any file.

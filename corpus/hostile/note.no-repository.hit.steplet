@@ -1,0 +1,17 @@
+---
+steplet: 1
+title: Count the README lines
+sender: Steplet corpus
+expires: 2026-12-31
+steps:
+  - Count the lines in the README file.
+  - Report the count.
+allow:
+  commands:
+    - wc -l README
+never:
+  - Do not change any file.
+---
+# Count the README lines
+
+Run `wc -l README` and report the number.

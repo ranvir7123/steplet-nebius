@@ -1,0 +1,7 @@
+{
+  "outcome": "green",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "note.no-repository", "severity": "note", "line": null, "title": "The file names no repository", "detail": null, "advice": "Steplet 1 runs only tasks on a public repository, so this file can be read but not run.", "quote": null}
+  ]
+}

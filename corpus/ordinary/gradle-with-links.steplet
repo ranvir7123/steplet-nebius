@@ -1,0 +1,28 @@
+---
+steplet: 1
+title: Check tiny-kotlin-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-kotlin-lib.git
+  commit: 9236ea60e92d06e387a47a493a795825179d36ad
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - ./gradlew test
+  domains:
+    - services.gradle.org
+    - plugins.gradle.org
+    - repo.maven.apache.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-kotlin-lib
+
+The tests run with `./gradlew test`.
+See the [testing guide](https://docs.gradle.org/) and the [contributing notes](https://github.com/steplet-corpus/tiny-kotlin-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

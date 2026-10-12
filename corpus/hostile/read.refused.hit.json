@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "read.refused", "severity": "blocked", "line": 3, "title": "Steplet cannot read this file", "detail": "a value with a colon then a space, or ending in a colon, must be in double quotes", "advice": "Ask the sender to fix the line named here; steplet-sign check shows them what is allowed.", "quote": null}
+  ]
+}

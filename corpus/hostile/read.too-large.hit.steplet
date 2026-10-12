@@ -1,0 +1,49 @@
+---
+steplet: 1
+title: Count the README lines
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/octocat/Hello-World.git
+  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
+steps:
+  - Step 1.
+  - Step 2.
+  - Step 3.
+  - Step 4.
+  - Step 5.
+  - Step 6.
+  - Step 7.
+  - Step 8.
+  - Step 9.
+  - Step 10.
+  - Step 11.
+  - Step 12.
+  - Step 13.
+  - Step 14.
+  - Step 15.
+  - Step 16.
+  - Step 17.
+  - Step 18.
+  - Step 19.
+  - Step 20.
+  - Step 21.
+  - Step 22.
+  - Step 23.
+  - Step 24.
+  - Step 25.
+  - Step 26.
+  - Step 27.
+  - Step 28.
+  - Step 29.
+  - Step 30.
+  - Step 31.
+allow:
+  commands:
+    - wc -l README
+never:
+  - Do not change any file.
+---
+# Count the README lines
+
+Run `wc -l README` and report the number.

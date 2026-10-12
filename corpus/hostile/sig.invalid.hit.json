@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "invalid"},
+  "findings": [
+    {"rule": "sig.invalid", "severity": "blocked", "line": null, "title": "The signature does not match this file", "detail": "the file was changed after it was signed, or the signature belongs to another file", "advice": "The file was changed after it was signed, or the signature was damaged. Ask the sender for a fresh copy.", "quote": null}
+  ]
+}

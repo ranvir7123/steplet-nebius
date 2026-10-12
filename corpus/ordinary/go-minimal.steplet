@@ -1,0 +1,21 @@
+---
+steplet: 1
+title: Run the tests of tiny-go-lib
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-go-lib.git
+  commit: 1a851c7a4ec39408e8600ede5df579e98e9072d7
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - go test ./...
+  domains:
+    - proxy.golang.org
+    - sum.golang.org
+---
+# Run the tests
+
+Run `go test ./...` in the repository and report the summary line.

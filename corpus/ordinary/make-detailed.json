@@ -1,0 +1,8 @@
+{
+  "outcome": "red",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "social.asks-admin", "severity": "red", "line": 28, "title": "The text asks for administrator rights", "detail": null, "advice": "Steplet never gives a task administrator rights, so a step that needs them will fail.", "quote": "If you run this by hand outside Steplet, you may need `sudo apt install build-essential` first; the agent does not need it."},
+    {"rule": "cap.runs-code", "severity": "amber", "line": 17, "title": "A command runs the repository's own code", "detail": null, "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.", "quote": "make test"}
+  ]
+}

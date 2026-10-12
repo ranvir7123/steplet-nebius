@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "time.too-far", "severity": "blocked", "line": 5, "title": "The file expires more than 365 days from today", "detail": "it expires on 2027-10-12, more than 365 days from today", "advice": "Files may be valid for at most 365 days. Ask the sender for a file with an earlier expiry date.", "quote": null}
+  ]
+}

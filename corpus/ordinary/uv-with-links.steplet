@@ -1,0 +1,27 @@
+---
+steplet: 1
+title: Check tiny-uv-lib before the release
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/tiny-uv-lib.git
+  commit: 0dec05172109cf05eaa1112b48fe326357b55100
+steps:
+  - Run the tests.
+  - Report the result.
+allow:
+  commands:
+    - uv run pytest
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+never:
+  - Do not push to any remote.
+  - Do not change files outside the repository.
+---
+# Release check for tiny-uv-lib
+
+Dependencies are installed with `uv sync` and the tests run with `uv run pytest`.
+See the [testing guide](https://docs.astral.sh/uv/) and the [contributing notes](https://github.com/steplet-corpus/tiny-uv-lib/blob/main/CONTRIBUTING.md).
+
+Report the summary line exactly as printed.

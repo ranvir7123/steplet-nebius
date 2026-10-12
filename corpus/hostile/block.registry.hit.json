@@ -1,0 +1,7 @@
+{
+  "outcome": "blocked",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "block.registry", "severity": "blocked", "line": 14, "title": "A command points a package manager at another source", "detail": null, "advice": "Steplet does not let a task change where packages come from. Senders: use the normal registry.", "quote": "npm install --registry https://example.invalid/npm"}
+  ]
+}

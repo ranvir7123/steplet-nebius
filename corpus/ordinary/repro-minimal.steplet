@@ -1,0 +1,18 @@
+---
+steplet: 1
+title: Run the tests of issue-1234-repro
+sender: Steplet corpus
+expires: 2026-12-31
+repository:
+  url: https://github.com/steplet-corpus/issue-1234-repro.git
+  commit: 7080523140687d2bff732548c1b08ae6eae97a01
+steps:
+  - Run the tests.
+  - Report how many passed and failed.
+allow:
+  commands:
+    - python scripts/repro.py
+---
+# Run the tests
+
+Run `python scripts/repro.py` in the repository and report the summary line.

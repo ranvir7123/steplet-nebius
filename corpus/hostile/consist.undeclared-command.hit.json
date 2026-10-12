@@ -1,0 +1,7 @@
+{
+  "outcome": "amber",
+  "signature": {"status": "unsigned"},
+  "findings": [
+    {"rule": "consist.undeclared-command", "severity": "amber", "line": 22, "title": "The instructions mention a command the file does not ask for", "detail": null, "advice": "The agent will have to ask you before running it. Senders: add it to allow: commands.", "quote": "cargo test"}
+  ]
+}
