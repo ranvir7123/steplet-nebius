@@ -1846,3 +1846,45 @@ exit code: 1
 ```
 
 **Verdict:** done. 6 tests pass in `check` and the 10 command-line tests (which call Windows' `ssh-keygen`) still pass; `check` shows `rating: green`, `amber` with two findings and what to do, and `blocked` with exit code 1, as G12 asks; clippy is clean.
+
+## Task 13: the fuzz target rates and checks too, and a recorded 15-minute run
+
+Run 13 Oct 2026, same worktree, starting from `764b014`.
+
+Changes from the plan while running it: none to the fuzz target. Phase 1's fuzz inputs are not in git (`crates/steplet-core/fuzz/corpus/` is ignored), so the 1,585 input files were copied from the phase 1 worktree `.claude\worktrees\steplet-phase1-task1-run-e26214` into this worktree's ignored folder before the run, as the plan's "starting from phase 1's fuzz inputs" asks. The run started with `CARGO_NET_OFFLINE=true` and the sanitizer runtime folder on `PATH`, as in phase 1.
+
+**Step 2, the 15-minute run** (the last 25 lines of `C:\dev\m1\p2\fuzz.txt`, which holds the fuzzer's whole output):
+
+```
+> cmd /c "cargo +nightly fuzz run --fuzz-dir crates/steplet-core/fuzz read_file crates/steplet-core/fuzz/corpus/read_file corpus/hostile corpus/ordinary -- -max_total_time=900 -max_len=65536 > C:\dev\m1\p2\fuzz.txt 2>&1"
+"\036\000" # Uses: 24
+"un" # Uses: 29
+"\000\000\000/" # Uses: 27
+"gradle" # Uses: 19
+"\377\377\377<" # Uses: 20
+"true" # Uses: 25
+"python" # Uses: 23
+"\000\000\000\000\000\000\0006" # Uses: 22
+"\335\231" # Uses: 30
+"\377r" # Uses: 28
+"\005\000\000\000\000\000\000\000" # Uses: 25
+"\000c" # Uses: 21
+"?\000\000\000\000\000\000\000" # Uses: 21
+"\001\000\000\000\000\000\000*" # Uses: 18
+"$env:userprofile" # Uses: 12
+"Y\001\000\000\000\000\000\000" # Uses: 7
+"make" # Uses: 6
+"steps" # Uses: 7
+"\013\000" # Uses: 5
+"\377\377\377\377\377\377\377\010" # Uses: 1
+"ea" # Uses: 1
+"aucun" # Uses: 2
+"\002\000\000\000\000\000\000\000" # Uses: 0
+###### End of recommended dictionary. ######
+Done 235062 runs in 901 second(s)
+exit code: 0
+```
+
+`Done` line(s): Done 235062 runs in 901 second(s). `git status --short` on the fuzz lock file and the artifacts folder: nothing, so the fuzz lock file is unchanged; the `artifacts/read_file` folder (which the fuzzer creates at start) is empty: no crash was saved. The run count is far below phase 1's 4.8 million because the new target also rates every parsed file and puts every item through the checker, and because Task 14's workspace tests ran at the same time for part of the 15 minutes.
+
+**Verdict:** done. The fuzzer ran the new target for the full time with exit code 0 and saved no crash. As in phase 1, a fuzz run is a sample.
