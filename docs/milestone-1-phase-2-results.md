@@ -1888,3 +1888,191 @@ exit code: 0
 `Done` line(s): Done 235062 runs in 901 second(s). `git status --short` on the fuzz lock file and the artifacts folder: nothing, so the fuzz lock file is unchanged; the `artifacts/read_file` folder (which the fuzzer creates at start) is empty: no crash was saved. The run count is far below phase 1's 4.8 million because the new target also rates every parsed file and puts every item through the checker, and because Task 14's workspace tests ran at the same time for part of the 15 minutes.
 
 **Verdict:** done. The fuzzer ran the new target for the full time with exit code 0 and saved no crash. As in phase 1, a fuzz run is a sample.
+
+## Task 14: the sender's guide, every check, and wrap-up
+
+Run 13 Oct 2026, same worktree, starting from the Task 13 commit. The checks ran while the fuzzer of Task 13 was still running (it builds in its own folder, `crates/steplet-core/fuzz/target`), so the two did not touch each other's files.
+
+Changes from the plan while running it: none. Step 1 made all eight edits to `docs/steplet-format.md` (the limits, what a command line means, the new section "How receivers will see your file", the two sample outputs captured on 13 Oct 2026, the invisible-characters bullet, step 3 and the exit codes, what a rating finding looks like, and that `sign` does not rate).
+
+**Step 2, every check.** Each command's whole output is in `C:\dev\m1\p2`; below is what the plan asks to show.
+
+```
+> cargo test --workspace --offline --no-run
+  Executable unittests src\lib.rs (target\debug\deps\steplet_wasm-e84a45ffca4313b5.exe)
+> cargo test --workspace --offline     (summary lines only; the whole output is test.txt, 327 lines)
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 12 tests
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 6 tests
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 105.16s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 12 tests
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 9 tests
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 6 tests
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.42s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+That is 31 `test result: ok` lines, 0 other, 136 tests passed in all.
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings     (last line; 0 warnings in the output)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+> cargo build -p steplet-core --target wasm32v1-none --release --offline
+    Finished `release` profile [optimized] target(s) in 5.69s
+> cargo build -p steplet-core --target wasm32-unknown-unknown --release --offline
+    Finished `release` profile [optimized] target(s) in 0.23s
+> cargo build -p steplet-wasm --target wasm32-unknown-unknown --release --offline
+    Finished `release` profile [optimized] target(s) in 0.15s
+> wasm-bindgen --target nodejs --out-dir target/steplet-wasm-node target/wasm32-unknown-unknown/release/steplet_wasm.wasm
+(no output, exit code 0)
+> node crates/steplet-wasm/parity.cjs target/steplet-wasm-node corpus
+134 files; 134 identical; 0 different
+exit code: 0
+> cargo tree -p steplet-core -e normal --prefix none --offline | Sort-Object -Unique
+base64ct v1.8.3
+block-buffer v0.10.4
+cfg-if v1.0.5
+cipher v0.4.4
+cpufeatures v0.2.17
+crypto-common v0.1.7
+crypto-common v0.1.7 (*)
+curve25519-dalek v4.1.3
+curve25519-dalek-derive v0.1.1 (proc-macro)
+digest v0.10.7
+digest v0.10.7 (*)
+ed25519 v2.2.3
+ed25519-dalek v2.2.0
+generic-array v0.14.7
+generic-array v0.14.7 (*)
+inout v0.1.4
+pem-rfc7468 v0.7.0
+proc-macro2 v1.0.107
+proc-macro2 v1.0.107 (*)
+quote v1.0.47
+quote v1.0.47 (*)
+rand_core v0.6.4
+sha2 v0.10.9
+sha2 v0.10.9 (*)
+signature v2.2.0
+ssh-cipher v0.2.0
+ssh-encoding v0.2.0
+ssh-encoding v0.2.0 (*)
+ssh-key v0.6.7
+steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+subtle v2.6.1
+syn v2.0.119
+typenum v1.20.1
+unicode-ident v1.0.26
+zeroize v1.9.0
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py Cargo.lock     (last line)
+97 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py crates/steplet-core/fuzz/Cargo.lock     (last line)
+40 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+> rustc --version; cargo --version
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+```
+
+The `cargo tree` list is the same as at the end of phase 1 (`docs/milestone-1-phase-1-results.md`, Task 14): `ssh-key` 0.6.7 and what it needs, plus `steplet-core` itself; only the worktree path in the `steplet-core` line differs. The core still has no other normal dependency.
+
+**Step 3, the summary**, is the next section.
+
+## Summary of phase 2
+
+Run on 12 and 13 Oct 2026, in the worktree `.claude\worktrees\steplet-phase2-task1-07fd4c` (branch `claude/steplet-phase2-task1-07fd4c`), from `800c549` (the plan), tasks in the order 1 to 14, one commit per task.
+
+| Done means (milestone plan, phase 2) | Result | Evidence |
+|---|---|---|
+| Every rule id has its hit and near-miss | **PASS** | Task 10: `every_rule_has_a_hit_and_a_near_miss` and `every_hostile_file_belongs_to_a_rule`, 36 rules, 72 files; all passed on the first run, before any expected answer existed |
+| The golden files are stable | **PASS** | Task 10 Step 5 (run twice, same answers), Task 14 Step 2 (`corpus` 5 of 5 again) |
+| The native and WASM builds give identical results on the whole corpus | **PASS** | Task 11 Step 4 and Task 14 Step 2: `134 files; 134 identical; 0 different`; Task 11 Step 5 shows the comparison fails on a changed answer |
+| The amber and red counts on the ordinary files are recorded | **PASS** | Task 10 Step 5: 62 ordinary files = 1 green, 59 amber, 2 red, 0 blocked |
+
+Also done: the seven new core modules with their tests (Tasks 1 to 9), `Policy::check` (Task 8), the JSON report (Task 9), `docs/rules.md` written by a test (Task 10), `steplet-sign check` showing the rating (Task 12), the fuzz target covering the rating and the checker with a 15-minute run (Task 13: Done 235062 runs in 901 second(s)), and the sender's guide (Task 14).
+
+**Changes from the plan**, each recorded in its task:
+1. Task 7: `rules::mismatch` used `.to_owned()` on a `&str`, which does not compile in the `no_std` crate (`ToOwned` not in scope); it is `String::from(...)`. The only compile error in the plan's code.
+2. Task 1: the fresh worktree was fast-forwarded onto the plan commit `800c549` first; `rustfmt` is not installed on the stable toolchain and was not installed (a download), so formatting was never checked.
+3. Task 2: proptest's regressions file from the stub's failure was deleted before the commit.
+4. Task 12: the first test build after the code change hit McAfee's file lock (`LNK1104`); the plan's `--no-run` retry worked at once.
+5. Task 13: phase 1's fuzz inputs are not in git; they were copied from the phase 1 worktree's ignored folder.
+
+**Downloads:** none. Every cargo command ran with `--offline`; Y3 was not needed. The one network use was `lock_ages.py` (read-only crates.io API).
+
+**The tuning question for the user** (not changed in this phase): 59 of 62 ordinary files are amber only because every test command is `cap.runs-code`. Section 1 of the plan says amber then tells the receiver little; a later phase decides whether running the repository's own tests inside the fence should stay amber.
+
+## What phase 2 did not verify
+
+- **The code was compiled only during the run**, as the plan said; one compile error was found and fixed (Task 7). No second reader has reviewed the code as built.
+- **How real senders write files.** The ordinary corpus is written by us; its counts are first data for tuning, not a measurement of real files.
+- **How often a real agent's commands match** under G1 (extra flags, `2>&1`, pipes go to the receiver): measured in phase 3 with the real Claude Code.
+- **That `bash` is the shell that runs the agent's commands.** The vectors prove agreement with `bash` 5.3.9 in the test distribution only.
+- **Paths on a real disk.** The checker reads path text only; links, junctions, short names and case-insensitive folders are the runner's job (row 30, R19, phase 3).
+- **The completeness of the lists** (programs, always-blocked places, registries, exfiltration sites, famous names, phrases): starting lists; a trick outside them is not caught by the rating.
+- **Phrases in other languages.** The social-trick rules read English only. (The French corpus files pass because they hold no English trigger phrase, not because French is understood.)
+- **Look-alike names with two-part endings** (`github.co.uk`): only the last part counts as the ending.
+- **The check page in a real browser.** Parity is shown in Node 24.15.0's WASM engine only; phase 6 runs it in browsers.
+- **Clippy on the code `wasm-bindgen` generates:** `cargo clippy --workspace --all-targets` checked `steplet-wasm` (0 warnings); the generated JavaScript was not linted.
+- **A panic inside the WASM build stops its instance for good**; nothing tests the page's recovery. The fuzz run is the only guard.
+- **`steplet-sign check` rates at the start of today; the app rates at the real time.** No test runs both on one file.
+- **`sign` does not rate.** The guide says to run `check` first (G12).
+- **Formatting with `rustfmt`:** not installed, never run.
+- **A false positive kept on purpose:** `make-detailed.steplet` is red (`social.asks-admin`) because its body mentions `sudo apt install` for people running it by hand; the negation comes after the phrase, so it does not count. Recorded, not tuned.
+- **Text that needs the zero-width non-joiner (U+200C)** gets a red `hide.invisible-in-text` finding; only the emoji joiner and selector are exempt (G7).
+- **Findings that depend on the receiver's computer** ("enforcement unsupported on this machine", "same sender, different key"): the app adds them in phase 4.
+- **Licence duties for Cisco's ideas** when Steplet is published: credited in `rules.rs` and `docs/rules.md`; the licence decision (P6) is still open.
+- **A fuzz run is a sample:** 15 minutes without a crash says nothing about inputs it did not try.
+- **Which Unicode version** `icu_properties` 2.3.0 uses; the space-like list matches that data, whatever version it is.
