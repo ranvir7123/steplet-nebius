@@ -22,7 +22,9 @@ fn lists_and_look_alikes() {
     assert_eq!(imitates("githb.com"), Some("github"));
     assert_eq!(imitates("gihtub.com"), Some("github"));
     assert_eq!(imitates("github.co"), Some("github"));
-    for real in ["github.com", "pages.github.io", "objects.githubusercontent.com", "gitlab.com", "example.org", "pypi.org"] {
+    for real in
+        ["github.com", "pages.github.io", "objects.githubusercontent.com", "gitlab.com", "example.org", "pypi.org"]
+    {
         assert_eq!(imitates(real), None, "{real}");
     }
 }

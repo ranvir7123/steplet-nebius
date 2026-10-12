@@ -48,7 +48,8 @@ fn a_command_of_300_characters_is_too_long_counted_in_characters() {
 
 #[test]
 fn domains_and_folders() {
-    let mut f = String::from("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-10-25\nsteps:\n  - a\nallow:\n  domains:\n");
+    let mut f =
+        String::from("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-10-25\nsteps:\n  - a\nallow:\n  domains:\n");
     for i in 0..16 {
         f.push_str(&format!("    - d{i}.example.org\n"));
     }

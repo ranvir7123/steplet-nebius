@@ -15,7 +15,8 @@ use steplet_core::sig::{self, SigStatus};
 use crate::check::{content, problem};
 
 /// Windows' own ssh-keygen. Called by full path: Git Bash's PATH finds a different one first.
-pub const DEFAULT_SSH_KEYGEN: &str = if cfg!(windows) { r"C:\Windows\System32\OpenSSH\ssh-keygen.exe" } else { "ssh-keygen" };
+pub const DEFAULT_SSH_KEYGEN: &str =
+    if cfg!(windows) { r"C:\Windows\System32\OpenSSH\ssh-keygen.exe" } else { "ssh-keygen" };
 
 pub struct SignRequest<'a> {
     pub file: &'a Path,
@@ -27,7 +28,8 @@ pub struct SignRequest<'a> {
 pub fn sign(req: &SignRequest) -> Result<String, String> {
     let name = req.file.display();
     let raw = fs::read(req.file).map_err(|e| format!("cannot read {name}: {e}"))?;
-    let c = canonicalize(&raw).map_err(|e| format!("{name}: not signed\n{}", problem(&e.to_string(), e.help().allowed, e.help().example)))?;
+    let c = canonicalize(&raw)
+        .map_err(|e| format!("{name}: not signed\n{}", problem(&e.to_string(), e.help().allowed, e.help().example)))?;
     let (steplet, problems) = content(&c, req.today);
     let steplet = match steplet {
         Some(s) if problems.is_empty() => s,
@@ -51,7 +53,8 @@ pub fn sign(req: &SignRequest) -> Result<String, String> {
             status.code().map_or("none".into(), |c| c.to_string())
         ));
     }
-    let pem = fs::read_to_string(work.0.join("payload.steplet.sig")).map_err(|e| format!("cannot read ssh-keygen's signature: {e}"))?;
+    let pem = fs::read_to_string(work.0.join("payload.steplet.sig"))
+        .map_err(|e| format!("cannot read ssh-keygen's signature: {e}"))?;
 
     let signed = c.with_signature(&pem);
     if signed.len() > MAX_FILE_BYTES {
@@ -64,9 +67,13 @@ pub fn sign(req: &SignRequest) -> Result<String, String> {
     let fingerprint = match sig::verify(&again, NAMESPACE) {
         SigStatus::Valid { fingerprint } => fingerprint,
         SigStatus::Invalid { reason } => {
-            return Err(format!("{name}: not signed; {reason}. Steplet needs an Ed25519 key; make one with: ssh-keygen -t ed25519"));
+            return Err(format!(
+                "{name}: not signed; {reason}. Steplet needs an Ed25519 key; make one with: ssh-keygen -t ed25519"
+            ));
         }
-        SigStatus::Unsigned => return Err(format!("{name}: not signed; internal error: the signature block went missing")),
+        SigStatus::Unsigned => {
+            return Err(format!("{name}: not signed; internal error: the signature block went missing"));
+        }
     };
 
     let tmp = req.file.with_extension("steplet-sign-tmp");

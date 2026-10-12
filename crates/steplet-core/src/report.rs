@@ -49,9 +49,9 @@ pub fn check(raw: &[u8], now_unix: i64) -> Report {
                 ParseErrorKind::UnsupportedVersion { .. } => {
                     String::from("a format version other than 1; this Steplet reads version 1 only")
                 }
-                ParseErrorKind::BadEscape { .. } => String::from(
-                    "a backslash inside double quotes before something other than a quote or a backslash",
-                ),
+                ParseErrorKind::BadEscape { .. } => {
+                    String::from("a backslash inside double quotes before something other than a quote or a backslash")
+                }
                 _ => rules::without_line(e.to_string()),
             };
             let found = refused(rules::READ_REFUSED, Some(e.line), detail);

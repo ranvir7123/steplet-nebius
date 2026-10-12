@@ -28,7 +28,10 @@ fn theirs(src: &str) -> Result<Yaml, String> {
     let mut events = Vec::new();
     for item in Parser::new_from_str(src) {
         let (ev, _span) = item.map_err(|e| format!("{e:?}"))?;
-        if !matches!(ev, Event::StreamStart | Event::StreamEnd | Event::DocumentStart(_) | Event::DocumentEnd | Event::Nothing) {
+        if !matches!(
+            ev,
+            Event::StreamStart | Event::StreamEnd | Event::DocumentStart(_) | Event::DocumentEnd | Event::Nothing
+        ) {
             events.push(ev);
         }
     }
@@ -122,8 +125,8 @@ enum Gen {
 fn scalar_text() -> impl Strategy<Value = String> {
     prop::collection::vec(
         prop::sample::select(vec![
-            "a", "Z", "0", " ", ":", "#", "-", "'", "\"", "\\", "[", "]", "{", "}", ",", "&", "*", "!", "|", ">",
-            "%", "@", "`", "?", "é", "\u{200b}", "...", "~", "null",
+            "a", "Z", "0", " ", ":", "#", "-", "'", "\"", "\\", "[", "]", "{", "}", ",", "&", "*", "!", "|", ">", "%",
+            "@", "`", "?", "é", "\u{200b}", "...", "~", "null",
         ]),
         1..8,
     )

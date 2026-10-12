@@ -47,5 +47,8 @@ fn json_of_signed_files() {
     let json = check(include_bytes!("vectors/valid.steplet"), NOW).to_json();
     assert!(json.contains(&format!("\"signature\": {{\"status\": \"valid\", \"key\": \"{fingerprint}\"}}")), "{json}");
     let json = check(include_bytes!("vectors/tampered.steplet"), NOW).to_json();
-    assert!(json.contains("\"signature\": {\"status\": \"invalid\"}") && json.contains("\"rule\": \"sig.invalid\""), "{json}");
+    assert!(
+        json.contains("\"signature\": {\"status\": \"invalid\"}") && json.contains("\"rule\": \"sig.invalid\""),
+        "{json}"
+    );
 }

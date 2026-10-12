@@ -111,9 +111,14 @@ pub fn kind(words: &[String]) -> Kind {
     let sub = args.iter().map(String::as_str).find(|a| !a.starts_with('-') && !a.starts_with('+')).unwrap_or("");
     let has_any = |names: &[&str]| args.iter().any(|a| names.contains(&a.as_str()));
     match program {
-        "ls" | "cat" | "head" | "tail" | "wc" | "grep" | "pwd" | "echo" | "stat" | "du" | "diff" | "cmp" | "sha256sum"
-        | "sha1sum" | "md5sum" | "basename" | "dirname" | "realpath" | "cut" | "nl" | "true" | "false" => ReadOnly,
-        "find" if !has_any(&["-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"]) => {
+        "ls" | "cat" | "head" | "tail" | "wc" | "grep" | "pwd" | "echo" | "stat" | "du" | "diff" | "cmp"
+        | "sha256sum" | "sha1sum" | "md5sum" | "basename" | "dirname" | "realpath" | "cut" | "nl" | "true"
+        | "false" => ReadOnly,
+        "find"
+            if !has_any(&[
+                "-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls",
+            ]) =>
+        {
             ReadOnly
         }
         "git" if git_reads_only(args) => ReadOnly,
@@ -160,9 +165,9 @@ pub fn kind(words: &[String]) -> Kind {
             "install" | "update" | "require" => Installs,
             _ => Unknown,
         },
-        "node" | "deno" | "pytest" | "tox" | "nox" | "make" | "cmake" | "ctest" | "ninja" | "meson" | "mvn" | "gradle"
-        | "ant" | "rake" | "ruby" | "rspec" | "php" | "phpunit" | "java" | "javac" | "rustc" | "gcc" | "g++" | "clang"
-        | "cc" | "bash" | "sh" | "zsh" | "dash" | "pwsh" | "jest" | "vitest" | "mocha" => RunsCode,
+        "node" | "deno" | "pytest" | "tox" | "nox" | "make" | "cmake" | "ctest" | "ninja" | "meson" | "mvn"
+        | "gradle" | "ant" | "rake" | "ruby" | "rspec" | "php" | "phpunit" | "java" | "javac" | "rustc" | "gcc"
+        | "g++" | "clang" | "cc" | "bash" | "sh" | "zsh" | "dash" | "pwsh" | "jest" | "vitest" | "mocha" => RunsCode,
         // A script in the repository, run by its path: ./gradlew, ./scripts/test.sh
         _ if program.strip_prefix("./").is_some_and(|rest| rest != "." && is_folder(rest)) => RunsCode,
         _ => Unknown,
@@ -179,8 +184,19 @@ fn pip(sub: &str) -> Kind {
 
 /// `git` commands that only read, without the options that write a file or start another program.
 fn git_reads_only(args: &[String]) -> bool {
-    const READS: &[&str] =
-        &["status", "log", "diff", "show", "rev-parse", "ls-files", "blame", "describe", "shortlog", "cat-file", "ls-tree"];
+    const READS: &[&str] = &[
+        "status",
+        "log",
+        "diff",
+        "show",
+        "rev-parse",
+        "ls-files",
+        "blame",
+        "describe",
+        "shortlog",
+        "cat-file",
+        "ls-tree",
+    ];
     args.first().is_some_and(|s| READS.contains(&s.as_str()))
         && !args.iter().any(|a| a == "--ext-diff" || a == "--output" || a.starts_with("--output="))
 }
@@ -295,7 +311,11 @@ pub enum Assessment {
     Blocked(Blocked),
     NotUnderstood(NotUnderstood),
     /// `outside`: a word after the program is a path outside the repository, or `--option=` such a path.
-    Words { words: Vec<String>, kind: Kind, outside: bool },
+    Words {
+        words: Vec<String>,
+        kind: Kind,
+        outside: bool,
+    },
 }
 
 pub fn assess(text: &str) -> Assessment {

@@ -15,28 +15,65 @@ fn words(ws: &[&str]) -> Vec<String> {
 #[test]
 fn what_commands_do() {
     for line in [
-        "wc -l README", "ls -la src", "cat README.md", "git status", "git log --oneline", "git diff HEAD",
-        "find . -name x.rs", "grep -rn TODO src", "pip list", "python -m pip show pytest",
+        "wc -l README",
+        "ls -la src",
+        "cat README.md",
+        "git status",
+        "git log --oneline",
+        "git diff HEAD",
+        "find . -name x.rs",
+        "grep -rn TODO src",
+        "pip list",
+        "python -m pip show pytest",
     ] {
         assert_eq!(k(line), Kind::ReadOnly, "{line}");
     }
     for line in [
-        "cargo test", "cargo +nightly test", "npm test", "npm run build", "pytest -x", "python -m pytest",
-        "python scripts/repro.py", "go test ./...", "make test", "./gradlew test", "bash scripts/repro.sh",
-        "dotnet test", "bundle exec rspec", "uv run pytest",
+        "cargo test",
+        "cargo +nightly test",
+        "npm test",
+        "npm run build",
+        "pytest -x",
+        "python -m pytest",
+        "python scripts/repro.py",
+        "go test ./...",
+        "make test",
+        "./gradlew test",
+        "bash scripts/repro.sh",
+        "dotnet test",
+        "bundle exec rspec",
+        "uv run pytest",
     ] {
         assert_eq!(k(line), Kind::RunsCode, "{line}");
     }
     for line in [
-        "npm install", "npm ci", "yarn", "npx create-thing", "pip install -r requirements.txt",
-        "python -m pip install pytest", "cargo install ripgrep", "go mod download", "uv sync", "bundle install",
-        "composer install", "dotnet restore",
+        "npm install",
+        "npm ci",
+        "yarn",
+        "npx create-thing",
+        "pip install -r requirements.txt",
+        "python -m pip install pytest",
+        "cargo install ripgrep",
+        "go mod download",
+        "uv sync",
+        "bundle install",
+        "composer install",
+        "dotnet restore",
     ] {
         assert_eq!(k(line), Kind::Installs, "{line}");
     }
     for line in [
-        "frobnicate --all", "git push", "git -c core.pager=x log", "git log --output=x", "find . -delete",
-        "find . -exec touch x", "cargo", "npm publish", "./../x", "/usr/bin/python3 x.py", "eval make",
+        "frobnicate --all",
+        "git push",
+        "git -c core.pager=x log",
+        "git log --output=x",
+        "find . -delete",
+        "find . -exec touch x",
+        "cargo",
+        "npm publish",
+        "./../x",
+        "/usr/bin/python3 x.py",
+        "eval make",
     ] {
         assert_eq!(k(line), Kind::Unknown, "{line}");
     }
@@ -65,8 +102,15 @@ fn what_commands_must_never_do() {
         assert_eq!(d(line), Some(Danger::Registry), "{line}");
     }
     for line in [
-        "npm install", "npm install --save-dev registry-url", "pip install -r requirements.txt", "pip install -e .",
-        "cargo test -- --config", "make -f other.mk", "grep -i x", "uv run pytest -i", "go env GOPROXY",
+        "npm install",
+        "npm install --save-dev registry-url",
+        "pip install -r requirements.txt",
+        "pip install -e .",
+        "cargo test -- --config",
+        "make -f other.mk",
+        "grep -i x",
+        "uv run pytest -i",
+        "go env GOPROXY",
         "wc -l sudo-notes.txt",
     ] {
         assert_eq!(d(line), None, "{line}");

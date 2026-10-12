@@ -20,7 +20,9 @@ pub enum InvalidReason {
     /// `ssh-key` 0.6.7 already refuses versions above 1 while reading (so this shows as `NotASignature`);
     /// this check stays as a second lock.
     WrongVersion,
-    WrongNamespace { found: String },
+    WrongNamespace {
+        found: String,
+    },
     WrongHash,
     WrongKeyType,
     DoesNotVerify,
@@ -72,10 +74,9 @@ impl fmt::Display for InvalidReason {
             InvalidReason::DoesNotVerify => {
                 write!(f, "the file was changed after it was signed, or the signature belongs to another file")
             }
-            InvalidReason::NotCanonical => write!(
-                f,
-                "the signature block was edited after signing; it must stay exactly as it was written"
-            ),
+            InvalidReason::NotCanonical => {
+                write!(f, "the signature block was edited after signing; it must stay exactly as it was written")
+            }
         }
     }
 }

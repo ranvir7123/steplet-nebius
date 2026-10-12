@@ -54,7 +54,10 @@ fn files() {
     assert!(denies(read("../../steplet/claude/.credentials.json"), "block.secret-path"));
     assert!(asks(p.check(&Action::Read("/etc/hostname"))));
     assert!(denies(p.check(&Action::Read("/home/tester/.ssh/id_ed25519")), "block.secret-path"));
-    assert!(denies(p.check(&Action::Write("/home/tester/.ssh/authorized_keys")), "block.secret-path"), "outside, in an always-blocked place");
+    assert!(
+        denies(p.check(&Action::Write("/home/tester/.ssh/authorized_keys")), "block.secret-path"),
+        "outside, in an always-blocked place"
+    );
     assert!(asks(p.check(&Action::Read("src/main.rs"))), "not an absolute path");
 
     let p = policy("  read:\n    - src\n  write:\n    - .\n");
@@ -73,8 +76,10 @@ fn sites_and_bad_work_folders() {
     assert!(asks(p.check(&Action::Fetch("http://crates.io/"))));
     assert!(asks(p.check(&Action::Fetch("https://static.crates.io/x"))));
     assert!(asks(p.check(&Action::Fetch("https://crates.io@example.invalid/"))));
-    let s = parse(&canonicalize(b"---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n---\n").unwrap())
-        .unwrap();
+    let s = parse(
+        &canonicalize(b"---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n---\n").unwrap(),
+    )
+    .unwrap();
     for bad in ["relative/r1", "/", "/w/r1/", "/w/./r1", "/w/r1\n"] {
         assert_eq!(Policy::from_steplet(&s, bad), Err(BadWorkFolder), "{bad:?}");
     }

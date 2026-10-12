@@ -85,10 +85,15 @@ fn size_limits() {
 #[test]
 fn every_error_has_words_and_help() {
     let all = [
-        CanonError::FileTooLarge { bytes: 1 }, CanonError::NotUtf8 { line: 1 },
-        CanonError::LoneCarriageReturn { line: 1 }, CanonError::NoHeaderStart, CanonError::NoHeaderEnd,
-        CanonError::HeaderTooLarge { bytes: 1 }, CanonError::SignatureMisplaced { line: 1 },
-        CanonError::SignatureTwice { line: 1 }, CanonError::SignatureBroken { line: 1 },
+        CanonError::FileTooLarge { bytes: 1 },
+        CanonError::NotUtf8 { line: 1 },
+        CanonError::LoneCarriageReturn { line: 1 },
+        CanonError::NoHeaderStart,
+        CanonError::NoHeaderEnd,
+        CanonError::HeaderTooLarge { bytes: 1 },
+        CanonError::SignatureMisplaced { line: 1 },
+        CanonError::SignatureTwice { line: 1 },
+        CanonError::SignatureBroken { line: 1 },
     ];
     for e in all {
         assert!(!e.to_string().is_empty());

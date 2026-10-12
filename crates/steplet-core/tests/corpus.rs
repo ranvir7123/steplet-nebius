@@ -61,7 +61,13 @@ fn every_rule_has_a_hit_and_a_near_miss() {
         let hit = corpus().join("hostile").join(format!("{}.hit.steplet", rule.id));
         let r = report(&hit).rating;
         assert!(r.findings.iter().any(|f| f.rule.id == rule.id), "{} does not trigger {}", hit.display(), rule.id);
-        assert_eq!(r.outcome, Outcome::of(rule.severity), "{}: something worse than {} fired too", hit.display(), rule.id);
+        assert_eq!(
+            r.outcome,
+            Outcome::of(rule.severity),
+            "{}: something worse than {} fired too",
+            hit.display(),
+            rule.id
+        );
         let near = corpus().join("hostile").join(format!("{}.near.steplet", rule.id));
         let r = report(&near).rating;
         assert!(!r.findings.iter().any(|f| f.rule.id == rule.id), "{} triggers {}", near.display(), rule.id);
@@ -85,7 +91,11 @@ fn counts_of_the_ordinary_files() {
         counts[r.outcome as usize] += 1;
         assert_ne!(r.outcome, Outcome::Blocked, "{}", p.display());
         if p.to_string_lossy().ends_with("-french.steplet") {
-            assert!(r.findings.iter().all(|f| f.rule.id != "hide.invisible-in-text"), "French spacing: {}", p.display());
+            assert!(
+                r.findings.iter().all(|f| f.rule.id != "hide.invisible-in-text"),
+                "French spacing: {}",
+                p.display()
+            );
         }
     }
     println!("ordinary files: {} green, {} amber, {} red, {} blocked", counts[0], counts[1], counts[2], counts[3]);

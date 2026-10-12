@@ -88,7 +88,10 @@ pub fn is_outside(path: &str) -> bool {
     let b = path.as_bytes();
     let lower = path.to_ascii_lowercase();
     matches!(b.first(), Some(b'/' | b'\\' | b'~'))
-        || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b.len() == 2 || matches!(b[2], b'/' | b'\\')))
+        || (b.len() >= 2
+            && b[0].is_ascii_alphabetic()
+            && b[1] == b':'
+            && (b.len() == 2 || matches!(b[2], b'/' | b'\\')))
         || HOMES.iter().any(|h| lower.starts_with(h))
         || parts(path).contains(&"..")
 }

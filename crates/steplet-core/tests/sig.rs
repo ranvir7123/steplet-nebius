@@ -33,7 +33,10 @@ fn changed_body() {
 fn wrong_name_space_and_wrong_hash() {
     let c = canonicalize(FILE.as_bytes()).unwrap();
     let other = c.with_signature(&common::pem_for(c.signed(), &common::key(1), "runfile-v1", HashAlg::Sha512));
-    assert_eq!(status(&other), SigStatus::Invalid { reason: InvalidReason::WrongNamespace { found: "runfile-v1".into() } });
+    assert_eq!(
+        status(&other),
+        SigStatus::Invalid { reason: InvalidReason::WrongNamespace { found: "runfile-v1".into() } }
+    );
     let sha256 = c.with_signature(&common::pem_for(c.signed(), &common::key(1), NAMESPACE, HashAlg::Sha256));
     assert_eq!(status(&sha256), SigStatus::Invalid { reason: InvalidReason::WrongHash });
 }
@@ -104,9 +107,15 @@ fn re_wrapped_signature_lines_are_refused() {
 
 #[test]
 fn reasons_in_words() {
-    for r in [InvalidReason::NotASignature, InvalidReason::WrongVersion, InvalidReason::WrongNamespace { found: "x".into() },
-              InvalidReason::WrongHash, InvalidReason::WrongKeyType, InvalidReason::DoesNotVerify,
-              InvalidReason::NotCanonical] {
+    for r in [
+        InvalidReason::NotASignature,
+        InvalidReason::WrongVersion,
+        InvalidReason::WrongNamespace { found: "x".into() },
+        InvalidReason::WrongHash,
+        InvalidReason::WrongKeyType,
+        InvalidReason::DoesNotVerify,
+        InvalidReason::NotCanonical,
+    ] {
         assert!(!r.to_string().is_empty());
     }
 }

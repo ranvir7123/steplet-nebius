@@ -2076,3 +2076,50 @@ Also done: the seven new core modules with their tests (Tasks 1 to 9), `Policy::
 - **Licence duties for Cisco's ideas** when Steplet is published: credited in `rules.rs` and `docs/rules.md`; the licence decision (P6) is still open.
 - **A fuzz run is a sample:** 15 minutes without a crash says nothing about inputs it did not try.
 - **Which Unicode version** `icu_properties` 2.3.0 uses; the space-like list matches that data, whatever version it is.
+
+## After the summary (13 Oct 2026)
+
+The user chose the recommendations on the three open questions: fast-forward `main` and push; install `rustfmt`; keep `cap.runs-code` amber until phase 3 proves the fence (decision G15). Recorded in `docs/decisions.md` (G15, G16).
+
+**`rustfmt` installed** (`rustup component add rustfmt`, a download with the user's yes). With its defaults (100-character lines) `cargo fmt --all -- --check` printed 5,999 lines of differences, because the code is written at 120. A `rustfmt.toml` with `max_width = 120` and `use_small_heuristics = "Max"` (the layout the code already used) left about 70 places, all mechanical line joins and wraps; `cargo fmt --all` applied them. Git's summary of that change: ` 34 files changed, 791 insertions(+), 238 deletions(-)`. Then every check again:
+
+```
+> cargo fmt --all -- --check
+(no output, exit code 0)
+> cargo clippy --workspace --all-targets --offline -- -D warnings     (last line)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.78s
+> cargo test --workspace --offline     (summary)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.38s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 117.77s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.72s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+That is 31 `test result: ok` lines, 0 other, 136 tests passed: the same as before the formatting. Committed as the formatting commit on the branch; `main` was then fast-forwarded to the branch and pushed.

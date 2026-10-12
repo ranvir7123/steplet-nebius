@@ -17,7 +17,12 @@ fn main() -> ExitCode {
                     eprintln!("cannot read {}: {e}", file.display());
                     return ExitCode::from(2);
                 }
-                let req = steplet_sign::sign::SignRequest { file: &file, key: &key, ssh_keygen: &keygen, today: steplet_sign::today() };
+                let req = steplet_sign::sign::SignRequest {
+                    file: &file,
+                    key: &key,
+                    ssh_keygen: &keygen,
+                    today: steplet_sign::today(),
+                };
                 match steplet_sign::sign::sign(&req) {
                     Ok(msg) => {
                         println!("{msg}");

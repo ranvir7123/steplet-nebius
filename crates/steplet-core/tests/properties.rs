@@ -10,8 +10,21 @@ use steplet_core::sig::{SigStatus, verify};
 
 fn messy_text() -> impl Strategy<Value = String> {
     let piece = prop::sample::select(vec![
-        "---", "\n", "\r\n", " ", "\t", "a", "é", "\u{feff}", "\u{200b}", "signature: |",
-        "  -----BEGIN SSH SIGNATURE-----", "  -----END SSH SIGNATURE-----", "  QUJD", "steplet: 1", "\r",
+        "---",
+        "\n",
+        "\r\n",
+        " ",
+        "\t",
+        "a",
+        "é",
+        "\u{feff}",
+        "\u{200b}",
+        "signature: |",
+        "  -----BEGIN SSH SIGNATURE-----",
+        "  -----END SSH SIGNATURE-----",
+        "  QUJD",
+        "steplet: 1",
+        "\r",
     ]);
     (any::<bool>(), prop::collection::vec(piece, 0..40))
         .prop_map(|(head, v)| format!("{}{}", if head { "---\n" } else { "" }, v.concat()))

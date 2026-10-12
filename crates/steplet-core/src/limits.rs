@@ -116,7 +116,9 @@ impl LimitBreach {
             Limited::TitleLength | Limited::SenderLength | Limited::ValueLength => {
                 "a shorter line; put the details in the body, which has no line limit"
             }
-            _ => "a shorter list; everything must fit on the receiver's screen, so split a bigger task into several files",
+            _ => {
+                "a shorter list; everything must fit on the receiver's screen, so split a bigger task into several files"
+            }
         };
         Help { allowed, example: "" }
     }

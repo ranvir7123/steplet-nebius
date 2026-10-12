@@ -250,7 +250,9 @@ impl fmt::Display for ParseError {
             K::EmptyListItem => write!(f, "an empty list item"),
             K::DuplicateKey { key, first_line } => write!(f, "`{key}` again; it is already on line {first_line}"),
             K::StartsWithSymbol { symbol } => write!(f, "a value starting with `{symbol}` must be in double quotes"),
-            K::ColonInPlainText => write!(f, "a value with a colon then a space, or ending in a colon, must be in double quotes"),
+            K::ColonInPlainText => {
+                write!(f, "a value with a colon then a space, or ending in a colon, must be in double quotes")
+            }
             K::HashInPlainText => write!(f, "a value with a space then `#` must be in double quotes"),
             K::UnclosedQuote => write!(f, "a quote that is not closed on the same line"),
             K::BadEscape { found } => write!(f, "`\\{found}` inside double quotes"),
@@ -280,41 +282,92 @@ impl fmt::Display for ParseError {
 impl ParseError {
     pub fn help(&self) -> Help {
         let (allowed, example) = match &self.kind {
-            K::Tab => ("indent with spaces, two per level; no tab characters anywhere in the header", "allow:\n  commands:\n    - cargo test"),
-            K::ControlCharacter { .. } => ("ordinary visible text; control characters, byte-order marks and Unicode line separators are not allowed in the header", "title: Run the tests"),
-            K::NotAKeyLine => ("one `name: value` per line; names are lowercase letters, digits and hyphens, with a space after the colon", "title: Run the tests"),
-            K::BadIndent { .. } => ("each level indented exactly two spaces more than the line it belongs to; every value on one line", "repository:\n  url: https://github.com/octocat/Hello-World.git"),
-            K::EmptyValue { .. } => ("a value after the colon, or lines indented two spaces below it; leave out a field you do not need", "title: Run the tests"),
-            K::ListNotIndented { .. } => ("list items indented two spaces more than the list's name", "steps:\n  - Build the project."),
-            K::NotAListItem => ("every line of a list starts with `- `", "steps:\n  - Build the project.\n  - Run the tests."),
+            K::Tab => (
+                "indent with spaces, two per level; no tab characters anywhere in the header",
+                "allow:\n  commands:\n    - cargo test",
+            ),
+            K::ControlCharacter { .. } => (
+                "ordinary visible text; control characters, byte-order marks and Unicode line separators are not allowed in the header",
+                "title: Run the tests",
+            ),
+            K::NotAKeyLine => (
+                "one `name: value` per line; names are lowercase letters, digits and hyphens, with a space after the colon",
+                "title: Run the tests",
+            ),
+            K::BadIndent { .. } => (
+                "each level indented exactly two spaces more than the line it belongs to; every value on one line",
+                "repository:\n  url: https://github.com/octocat/Hello-World.git",
+            ),
+            K::EmptyValue { .. } => (
+                "a value after the colon, or lines indented two spaces below it; leave out a field you do not need",
+                "title: Run the tests",
+            ),
+            K::ListNotIndented { .. } => {
+                ("list items indented two spaces more than the list's name", "steps:\n  - Build the project.")
+            }
+            K::NotAListItem => {
+                ("every line of a list starts with `- `", "steps:\n  - Build the project.\n  - Run the tests.")
+            }
             K::EmptyListItem => ("text after every `- `", "steps:\n  - Run the tests."),
             K::DuplicateKey { .. } => ("each name once at each level", "title: Run the tests"),
-            K::StartsWithSymbol { .. } => ("text starting with a letter, digit or other ordinary character; otherwise put the value in double quotes", "title: \"[draft] Run the tests\""),
-            K::ColonInPlainText => ("double quotes around text that contains a colon followed by a space, or ends with a colon", "title: \"Note: run the tests\""),
-            K::HashInPlainText => ("double quotes around text that contains a space followed by #", "title: \"Fix issue #12\""),
+            K::StartsWithSymbol { .. } => (
+                "text starting with a letter, digit or other ordinary character; otherwise put the value in double quotes",
+                "title: \"[draft] Run the tests\"",
+            ),
+            K::ColonInPlainText => (
+                "double quotes around text that contains a colon followed by a space, or ends with a colon",
+                "title: \"Note: run the tests\"",
+            ),
+            K::HashInPlainText => {
+                ("double quotes around text that contains a space followed by #", "title: \"Fix issue #12\"")
+            }
             K::UnclosedQuote => ("the closing quote on the same line", "title: \"Run the tests\""),
-            K::BadEscape { .. } => ("inside double quotes, a backslash only before a quote (\\\") or another backslash (\\\\)", "title: \"Say \\\"hi\\\"\""),
+            K::BadEscape { .. } => (
+                "inside double quotes, a backslash only before a quote (\\\") or another backslash (\\\\)",
+                "title: \"Say \\\"hi\\\"\"",
+            ),
             K::TextAfterQuote => ("nothing after the closing quote, not even a comment", "title: \"Run the tests\""),
             K::UnknownKey { .. } => ("only the names listed in this message", "title: Run the tests"),
-            K::MissingKey { key } => ("every required field", match *key {
-                "steplet" => "steplet: 1",
-                "sender" => "sender: Ana Lee",
-                "expires" => "expires: 2026-10-25",
-                "steps" => "steps:\n  - Run the tests.",
-                "url" => "  url: https://github.com/octocat/Hello-World.git",
-                "commit" => "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
-                _ => "title: Run the tests",
-            }),
-            K::FirstKeyNotSteplet => ("`steplet: 1` as the first line of the header", "---\nsteplet: 1\ntitle: Run the tests"),
+            K::MissingKey { key } => (
+                "every required field",
+                match *key {
+                    "steplet" => "steplet: 1",
+                    "sender" => "sender: Ana Lee",
+                    "expires" => "expires: 2026-10-25",
+                    "steps" => "steps:\n  - Run the tests.",
+                    "url" => "  url: https://github.com/octocat/Hello-World.git",
+                    "commit" => "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+                    _ => "title: Run the tests",
+                },
+            ),
+            K::FirstKeyNotSteplet => {
+                ("`steplet: 1` as the first line of the header", "---\nsteplet: 1\ntitle: Run the tests")
+            }
             K::UnsupportedVersion { .. } => ("format version 1", "steplet: 1"),
             K::ExpectedText { .. } => ("a single line of text", "title: Run the tests"),
-            K::ExpectedList { .. } => ("a list, one `- ` item per line, indented two spaces", "steps:\n  - Run the tests."),
-            K::ExpectedMap { .. } => ("named fields indented two spaces below", "repository:\n  url: https://github.com/octocat/Hello-World.git\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"),
+            K::ExpectedList { .. } => {
+                ("a list, one `- ` item per line, indented two spaces", "steps:\n  - Run the tests.")
+            }
+            K::ExpectedMap { .. } => (
+                "named fields indented two spaces below",
+                "repository:\n  url: https://github.com/octocat/Hello-World.git\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+            ),
             K::BadDate => ("a real calendar date written YYYY-MM-DD", "expires: 2026-10-25"),
-            K::BadUrl => ("https://, a lowercase host name, then a path of letters, digits and . _ ~ / -; no user name, port, ? or #", "  url: https://github.com/octocat/Hello-World.git"),
-            K::BadCommit => ("the full commit hash: 40 (or 64) lowercase hexadecimal characters", "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"),
-            K::BadDomain => ("an exact lowercase host name with at least one dot; no *, scheme, port or path", "    - crates.io"),
-            K::BadFolder => ("a folder inside the repository written with /, no .. and no leading or trailing /; . means all of it", "    - target/debug"),
+            K::BadUrl => (
+                "https://, a lowercase host name, then a path of letters, digits and . _ ~ / -; no user name, port, ? or #",
+                "  url: https://github.com/octocat/Hello-World.git",
+            ),
+            K::BadCommit => (
+                "the full commit hash: 40 (or 64) lowercase hexadecimal characters",
+                "  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+            ),
+            K::BadDomain => {
+                ("an exact lowercase host name with at least one dot; no *, scheme, port or path", "    - crates.io")
+            }
+            K::BadFolder => (
+                "a folder inside the repository written with /, no .. and no leading or trailing /; . means all of it",
+                "    - target/debug",
+            ),
         };
         Help { allowed, example }
     }

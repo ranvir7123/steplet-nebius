@@ -29,12 +29,20 @@ impl Drop for Scratch {
 
 fn file_text(expires: Option<Date>) -> String {
     let expires = expires.unwrap_or_else(|| steplet_sign::today().add_days(14).unwrap());
-    format!("---\nsteplet: 1\ntitle: Count the README lines\nsender: Test\nexpires: {expires}\nsteps:\n  - Count the lines.\n---\nCount them.\n")
+    format!(
+        "---\nsteplet: 1\ntitle: Count the README lines\nsender: Test\nexpires: {expires}\nsteps:\n  - Count the lines.\n---\nCount them.\n"
+    )
 }
 
 fn keygen(dir: &Path, name: &str, kind: &[&str]) -> PathBuf {
     let k = dir.join(name);
-    let ok = Command::new(KEYGEN).arg("-t").args(kind).args(["-N", "", "-q", "-C", "steplet-sign-test", "-f"]).arg(&k).status().unwrap();
+    let ok = Command::new(KEYGEN)
+        .arg("-t")
+        .args(kind)
+        .args(["-N", "", "-q", "-C", "steplet-sign-test", "-f"])
+        .arg(&k)
+        .status()
+        .unwrap();
     assert!(ok.success());
     k
 }
@@ -63,9 +71,12 @@ fn keygen_accepts(dir: &Path, payload: &str, pem: &str) -> bool {
     fs::write(&p, payload).unwrap();
     fs::write(&s, pem).unwrap();
     Command::new(KEYGEN)
-        .args(["-Y", "check-novalidate", "-n", "steplet-v1", "-s"]).arg(&s)
+        .args(["-Y", "check-novalidate", "-n", "steplet-v1", "-s"])
+        .arg(&s)
         .stdin(fs::File::open(&p).unwrap())
-        .status().unwrap().success()
+        .status()
+        .unwrap()
+        .success()
 }
 
 #[test]

@@ -272,6 +272,14 @@ Plan: `docs/plans/2026-10-12-milestone-1-phase-2.md`, approved by the user on 12
 | G13 | `Policy::from_steplet(s, work)` takes the working copy's absolute path; reasons are fixed Steplet texts. [amends the milestone plan's interface] | The checker must tell inside from outside the repository. |
 | G14 | `.git`, `.claude`, `.codex`, `.gemini`, `.cursor` and `.mcp.json`, at any depth, can never be written by a task. | D2, D3, D6. |
 
+Added after the run (13 Oct 2026); **the user chose the recommendation on 13 Oct 2026**. Evidence: `docs/milestone-1-phase-2-results.md`, Task 10 Step 5 and the summary.
+
+| # | Decision | Why |
+|---|---|---|
+| G15 | **`cap.runs-code` stays amber until phase 3 has proven the fence with a real agent.** Then decide whether running the repository's own tests inside the fence becomes a note (the file stays green). Rule ids and the corpus do not change either way. | 59 of the 62 ordinary corpus files are amber for this reason alone, and an amber that every file gets tells the receiver nothing (plan section 1). But downgrading it now would promise a safety that phase 2 cannot show: the fence is what makes running a stranger's tests survivable, and phase 3 is where it is proven. |
+
+| G16 | **Code is formatted with `rustfmt`, settings in `rustfmt.toml`: 120-character lines and the compact layout the code already used.** `cargo fmt --all -- --check` joins the checks every phase runs. | `rustfmt` was not installed during phase 2 (a download); installed on 13 Oct 2026 with the user's yes. The defaults (100 characters) would have reflowed about 6,000 lines for no gain. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`

@@ -63,7 +63,12 @@ fn reads_every_field_with_its_line() {
 fn optional_parts_may_be_left_out() {
     let s = read("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-10-25\nsteps:\n  - a\n---\n").unwrap();
     assert!(s.repository.is_none());
-    assert!(s.allow.commands.is_empty() && s.allow.domains.is_empty() && s.allow.read.is_empty() && s.allow.write.is_empty());
+    assert!(
+        s.allow.commands.is_empty()
+            && s.allow.domains.is_empty()
+            && s.allow.read.is_empty()
+            && s.allow.write.is_empty()
+    );
     assert!(s.never.is_empty());
     assert_eq!(s.body, "");
 }
@@ -79,7 +84,10 @@ fn the_version_comes_first_and_is_1() {
 #[test]
 fn unknown_and_missing_fields() {
     assert_eq!(kind("steps:\n", "colour: green\nsteps:\n"), K::UnknownKey { key: "colour".into(), allowed: TOP_KEYS });
-    assert_eq!(kind("  read:\n", "  network:\n    - x\n  read:\n"), K::UnknownKey { key: "network".into(), allowed: ALLOW_KEYS });
+    assert_eq!(
+        kind("  read:\n", "  network:\n    - x\n  read:\n"),
+        K::UnknownKey { key: "network".into(), allowed: ALLOW_KEYS }
+    );
     assert_eq!(kind("sender: Ana Lee\n", ""), K::MissingKey { key: "sender" });
     assert_eq!(kind("expires: 2026-10-25\n", ""), K::MissingKey { key: "expires" });
     assert_eq!(kind("steps:\n  - Build it.\n  - Test it.\n", ""), K::MissingKey { key: "steps" });
@@ -90,10 +98,16 @@ fn unknown_and_missing_fields() {
 fn wrong_shapes() {
     assert_eq!(kind("title: Run the tests\n", "title:\n  - a\n"), K::ExpectedText { key: "title".into() });
     assert_eq!(kind("title: Run the tests\n", "title: \"\"\n"), K::EmptyValue { key: "title".into() });
-    assert_eq!(kind("steps:\n  - Build it.\n  - Test it.\n", "steps: Build it.\n"), K::ExpectedList { key: "steps".into() });
+    assert_eq!(
+        kind("steps:\n  - Build it.\n  - Test it.\n", "steps: Build it.\n"),
+        K::ExpectedList { key: "steps".into() }
+    );
     assert_eq!(kind("  - Build it.\n", "  - ''\n"), K::EmptyListItem);
     assert_eq!(
-        kind("repository:\n  url: https://github.com/octocat/Hello-World.git\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d\n", "repository: x\n"),
+        kind(
+            "repository:\n  url: https://github.com/octocat/Hello-World.git\n  commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d\n",
+            "repository: x\n"
+        ),
         K::ExpectedMap { key: "repository".into() }
     );
 }
@@ -102,14 +116,24 @@ fn wrong_shapes() {
 fn typed_values() {
     assert_eq!(kind("2026-10-25", "2026-02-30"), K::BadDate);
     assert_eq!(kind("2026-10-25", "25 Oct 2026"), K::BadDate);
-    for url in ["http://github.com/x", "https://user@github.com/x", "https://GitHub.com/x", "https://127.0.0.1/x",
-                "https://github.com:443/x", "https://github.com/x?y=1", "https://localhost/x", "https://github.com/a b"] {
+    for url in [
+        "http://github.com/x",
+        "https://user@github.com/x",
+        "https://GitHub.com/x",
+        "https://127.0.0.1/x",
+        "https://github.com:443/x",
+        "https://github.com/x?y=1",
+        "https://localhost/x",
+        "https://github.com/a b",
+    ] {
         assert_eq!(kind("https://github.com/octocat/Hello-World.git", url), K::BadUrl, "{url}");
     }
     for commit in ["7fd1a60", "7FD1A60B01F91B314F59955A4E4D4E80D8EDF11D", "7fd1a60b01f91b314f59955a4e4d4e80d8edf11g"] {
         assert_eq!(kind("7fd1a60b01f91b314f59955a4e4d4e80d8edf11d", commit), K::BadCommit, "{commit}");
     }
-    for domain in ["Crates.io", "localhost", "\"*.crates.io\"", "crates.io:443", "https://crates.io", "\"-a.io\"", "1.2.3.4"] {
+    for domain in
+        ["Crates.io", "localhost", "\"*.crates.io\"", "crates.io:443", "https://crates.io", "\"-a.io\"", "1.2.3.4"]
+    {
         assert_eq!(kind("    - crates.io\n", &format!("    - {domain}\n")), K::BadDomain, "{domain}");
     }
     for folder in ["../x", "/etc", "a\\b", "a//b", "target/", "./target", "a/../b", "my folder"] {
@@ -121,12 +145,17 @@ fn typed_values() {
 #[test]
 fn every_field_error_has_words_and_help() {
     let kinds = [
-        kind("steps:\n", "colour: green\nsteps:\n"), kind("sender: Ana Lee\n", ""),
+        kind("steps:\n", "colour: green\nsteps:\n"),
+        kind("sender: Ana Lee\n", ""),
         kind("steplet: 1\ntitle: Run the tests\n", "title: Run the tests\nsteplet: 1\n"),
-        kind("steplet: 1\n", "steplet: 2\n"), kind("title: Run the tests\n", "title:\n  - a\n"),
-        kind("steps:\n  - Build it.\n  - Test it.\n", "steps: Build it.\n"), kind("2026-10-25", "2026-02-30"),
-        kind("https://github.com/octocat/Hello-World.git", "http://x.org"), kind("7fd1a60b01f91b314f59955a4e4d4e80d8edf11d", "7fd"),
-        kind("    - crates.io\n", "    - Crates.io\n"), kind("    - target/debug\n", "    - \"..\"\n"),
+        kind("steplet: 1\n", "steplet: 2\n"),
+        kind("title: Run the tests\n", "title:\n  - a\n"),
+        kind("steps:\n  - Build it.\n  - Test it.\n", "steps: Build it.\n"),
+        kind("2026-10-25", "2026-02-30"),
+        kind("https://github.com/octocat/Hello-World.git", "http://x.org"),
+        kind("7fd1a60b01f91b314f59955a4e4d4e80d8edf11d", "7fd"),
+        kind("    - crates.io\n", "    - Crates.io\n"),
+        kind("    - target/debug\n", "    - \"..\"\n"),
     ];
     for k in kinds {
         let e = ParseError { line: 4, kind: k };

@@ -44,7 +44,10 @@ fn markdown_links_show_their_real_address() {
     assert_eq!(segments("[a](javascript:alert(1))"), [t("[a](javascript:alert(1))")]);
     for not_a_link in ["[a] (b)", "[](x)", "[a]()", "[a](b c)", "[a\nb](c)"] {
         assert_eq!(source(&segments(not_a_link)), not_a_link);
-        assert!(!segments(not_a_link).iter().any(|s| matches!(s, Segment::Link { shown: Some(_), .. })), "{not_a_link:?}");
+        assert!(
+            !segments(not_a_link).iter().any(|s| matches!(s, Segment::Link { shown: Some(_), .. })),
+            "{not_a_link:?}"
+        );
     }
 }
 
@@ -55,7 +58,10 @@ fn bare_addresses() {
         [t("go to "), Segment::Link { shown: None, real: vec![t("https://a.org/x")] }, t(".")]
     );
     assert_eq!(segments("HTTPS://A.ORG"), [Segment::Link { shown: None, real: vec![t("HTTPS://A.ORG")] }]);
-    assert_eq!(segments("(http://a.org)"), [t("("), Segment::Link { shown: None, real: vec![t("http://a.org")] }, t(")")]);
+    assert_eq!(
+        segments("(http://a.org)"),
+        [t("("), Segment::Link { shown: None, real: vec![t("http://a.org")] }, t(")")]
+    );
     assert_eq!(segments("https://"), [t("https://")]);
 }
 

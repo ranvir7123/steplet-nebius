@@ -84,8 +84,7 @@ pub fn canonicalize(raw: &[u8]) -> Result<Canonical, CanonError> {
     if raw.len() > MAX_FILE_BYTES {
         return Err(CanonError::FileTooLarge { bytes: raw.len() });
     }
-    let s = core::str::from_utf8(raw)
-        .map_err(|e| CanonError::NotUtf8 { line: line_of(&raw[..e.valid_up_to()]) })?;
+    let s = core::str::from_utf8(raw).map_err(|e| CanonError::NotUtf8 { line: line_of(&raw[..e.valid_up_to()]) })?;
     let s = s.strip_prefix('\u{feff}').unwrap_or(s);
     let mut lines: Vec<&str> = Vec::new();
     for (i, piece) in s.split('\n').enumerate() {
@@ -217,10 +216,9 @@ impl fmt::Display for CanonError {
             CanonError::HeaderTooLarge { bytes } => {
                 write!(f, "the header is {bytes} bytes; at most {MAX_HEADER_BYTES} bytes (32 KiB) are allowed")
             }
-            CanonError::SignatureMisplaced { line } => write!(
-                f,
-                "line {line}: a signature block in the wrong place; it must be the last thing in the header"
-            ),
+            CanonError::SignatureMisplaced { line } => {
+                write!(f, "line {line}: a signature block in the wrong place; it must be the last thing in the header")
+            }
             CanonError::SignatureTwice { line } => write!(f, "line {line}: a second signature block"),
             CanonError::SignatureBroken { line } => write!(f, "line {line}: the signature block is damaged"),
         }
@@ -232,13 +230,14 @@ const RESIGN: &str = "steplet-sign sign my-task.steplet --key C:\\Users\\you\\.s
 impl CanonError {
     pub fn help(&self) -> Help {
         let (allowed, example) = match self {
-            CanonError::FileTooLarge { .. } => ("a file of at most 256 KiB; split a bigger task into several files", ""),
+            CanonError::FileTooLarge { .. } => {
+                ("a file of at most 256 KiB; split a bigger task into several files", "")
+            }
             CanonError::NotUtf8 { .. } => ("text saved as UTF-8 (most editors call it \"UTF-8\")", ""),
             CanonError::LoneCarriageReturn { .. } => ("Windows (\\r\\n) or Unix (\\n) line endings only", ""),
-            CanonError::NoHeaderStart => (
-                "`---` alone on the first line, then the header",
-                "---\nsteplet: 1\ntitle: Run the tests",
-            ),
+            CanonError::NoHeaderStart => {
+                ("`---` alone on the first line, then the header", "---\nsteplet: 1\ntitle: Run the tests")
+            }
             CanonError::NoHeaderEnd => (
                 "a line holding only `---` after the header, then the body",
                 "never:\n  - Do not push.\n---\n# Instructions",

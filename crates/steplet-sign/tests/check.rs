@@ -64,11 +64,19 @@ fn a_changed_signed_file_is_a_problem() {
 #[test]
 fn limits_and_clean_up_errors() {
     let many: String = (0..31).map(|i| format!("  - step {i}\n")).collect();
-    let f = GOOD.replacen("  - Check that the README file is there.\n  - Count the lines in the README file.\n  - Report the count.\n", &many, 1);
+    let f = GOOD.replacen(
+        "  - Check that the README file is there.\n  - Count the lines in the README file.\n  - Report the count.\n",
+        &many,
+        1,
+    );
     let r = check("t", f.as_bytes(), today());
     assert!(!r.ok && r.text.contains("problem: line 40: 31 steps; at most 30 are allowed"), "{}", r.text);
     let r = check("t", b"title: x\n", today());
-    assert!(!r.ok && r.text.contains("problem: line 1: the file must start with a line holding only `---`"), "{}", r.text);
+    assert!(
+        !r.ok && r.text.contains("problem: line 1: the file must start with a line holding only `---`"),
+        "{}",
+        r.text
+    );
 }
 
 #[test]

@@ -44,8 +44,14 @@ fn missing_cut_doubled_and_moved_blocks() {
     assert_eq!(status(include_bytes!("vectors/unsigned.steplet")), Ok(SigStatus::Unsigned));
     assert!(matches!(status(include_bytes!("vectors/cut.steplet")), Err(CanonError::SignatureBroken { .. })));
     assert!(matches!(status(include_bytes!("vectors/doubled.steplet")), Err(CanonError::SignatureTwice { .. })));
-    assert_eq!(status(include_bytes!("vectors/moved-in-header.steplet")), Err(CanonError::SignatureMisplaced { line: 9 }));
-    assert!(matches!(status(include_bytes!("vectors/moved-to-body.steplet")), Err(CanonError::SignatureMisplaced { .. })));
+    assert_eq!(
+        status(include_bytes!("vectors/moved-in-header.steplet")),
+        Err(CanonError::SignatureMisplaced { line: 9 })
+    );
+    assert!(matches!(
+        status(include_bytes!("vectors/moved-to-body.steplet")),
+        Err(CanonError::SignatureMisplaced { .. })
+    ));
 }
 
 #[test]

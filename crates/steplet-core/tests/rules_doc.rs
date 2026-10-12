@@ -24,5 +24,9 @@ fn docs_rules_md_lists_every_rule() {
     if std::env::var_os("STEPLET_BLESS").is_some() {
         std::fs::write(path, &want).unwrap();
     }
-    assert_eq!(std::fs::read_to_string(path).unwrap_or_default(), want, "run with STEPLET_BLESS=1 to write docs/rules.md");
+    assert_eq!(
+        std::fs::read_to_string(path).unwrap_or_default(),
+        want,
+        "run with STEPLET_BLESS=1 to write docs/rules.md"
+    );
 }

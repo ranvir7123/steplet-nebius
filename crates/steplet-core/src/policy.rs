@@ -27,9 +27,14 @@ pub enum Action<'a> {
 pub enum Decision {
     Allow,
     /// The receiver decides, on the ask screen (R7). `reason` is in Steplet's own words.
-    Ask { reason: &'static str },
+    Ask {
+        reason: &'static str,
+    },
     /// Refused without a question. `rule` is the id of the rating rule with the same meaning.
-    Deny { rule: &'static str, reason: &'static str },
+    Deny {
+        rule: &'static str,
+        reason: &'static str,
+    },
 }
 
 /// The working copy's path was not a clean absolute path (G13).
@@ -117,7 +122,10 @@ impl Policy {
                 }
             }
             None => match paths::secret_of(&p) {
-                Some(_) => deny(rules::BLOCK_SECRET_PATH, "this place holds keys, passwords or sign-ins, which no task may touch"),
+                Some(_) => deny(
+                    rules::BLOCK_SECRET_PATH,
+                    "this place holds keys, passwords or sign-ins, which no task may touch",
+                ),
                 None => ask("this path is outside the repository"),
             },
         }

@@ -65,7 +65,9 @@ fn cleaning_up_paths_as_text() {
 
 #[test]
 fn protected_folders_at_any_depth() {
-    for rel in [".git/hooks/pre-commit", "sub/.git/config", ".claude/settings.json", ".mcp.json", "a/.codex/x", ".Git/config"] {
+    for rel in
+        [".git/hooks/pre-commit", "sub/.git/config", ".claude/settings.json", ".mcp.json", "a/.codex/x", ".Git/config"]
+    {
         assert!(is_protected(rel), "{rel}");
     }
     for rel in [".github/workflows/ci.yml", "src/git.rs", "claude/notes.md"] {

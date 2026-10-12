@@ -83,9 +83,23 @@ fn refusals_name_the_line() {
 
 #[test]
 fn every_refusal_has_words_and_help() {
-    for h in ["title:\tx\n", "title: a\u{7}\n", "Title: x\n", "  title: x\n", "title:\n", "steps:\n- a\n",
-              "steps:\n  - a\n  b: c\n", "steps:\n  -\n", "title: a\ntitle: b\n", "title: [x]\n",
-              "title: a: b\n", "title: a #b\n", "title: \"a\n", "title: \"\\n\"\n", "title: \"a\" b\n"] {
+    for h in [
+        "title:\tx\n",
+        "title: a\u{7}\n",
+        "Title: x\n",
+        "  title: x\n",
+        "title:\n",
+        "steps:\n- a\n",
+        "steps:\n  - a\n  b: c\n",
+        "steps:\n  -\n",
+        "title: a\ntitle: b\n",
+        "title: [x]\n",
+        "title: a: b\n",
+        "title: a #b\n",
+        "title: \"a\n",
+        "title: \"\\n\"\n",
+        "title: \"a\" b\n",
+    ] {
         let err = tree(h, 2).unwrap_err();
         assert!(err.to_string().starts_with("line "), "{h:?}");
         assert!(!err.help().allowed.is_empty() && !err.help().example.is_empty(), "{h:?}");

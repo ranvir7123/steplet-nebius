@@ -8,9 +8,14 @@ use alloc::vec::Vec;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Segment {
     Text(String),
-    InvisibleBadge { codepoint: u32 },
+    InvisibleBadge {
+        codepoint: u32,
+    },
     /// `shown` is `None` for a bare address. Inside a link there are only `Text` and `InvisibleBadge` pieces.
-    Link { shown: Option<Vec<Segment>>, real: Vec<Segment> },
+    Link {
+        shown: Option<Vec<Segment>>,
+        real: Vec<Segment>,
+    },
 }
 
 pub fn segments(text: &str) -> Vec<Segment> {
@@ -18,7 +23,9 @@ pub fn segments(text: &str) -> Vec<Segment> {
     let (mut plain, mut i) = (0, 0);
     while i < text.len() {
         let rest = &text[i..];
-        let found = markdown_link(rest).map(|(len, shown, real)| (len, Some(shown), real)).or_else(|| bare_url(rest).map(|len| (len, None, &rest[..len])));
+        let found = markdown_link(rest)
+            .map(|(len, shown, real)| (len, Some(shown), real))
+            .or_else(|| bare_url(rest).map(|len| (len, None, &rest[..len])));
         if let Some((len, shown, real)) = found {
             out.extend(pieces(&text[plain..i]));
             out.push(Segment::Link { shown: shown.map(pieces), real: pieces(real) });
@@ -112,11 +119,36 @@ pub fn is_space_like(c: char) -> bool {
 
 /// Sorted, non-overlapping ranges, both ends included.
 const INVISIBLE: &[(u32, u32)] = &[
-    (0x0000, 0x001f), (0x007f, 0x00a0), (0x00ad, 0x00ad), (0x034f, 0x034f), (0x0600, 0x0605),
-    (0x061c, 0x061c), (0x06dd, 0x06dd), (0x070f, 0x070f), (0x0890, 0x0891), (0x08e2, 0x08e2),
-    (0x115f, 0x1160), (0x1680, 0x1680), (0x17b4, 0x17b5), (0x180b, 0x180f), (0x2000, 0x200f),
-    (0x2028, 0x202f), (0x205f, 0x206f), (0x3000, 0x3000), (0x3164, 0x3164), (0xe000, 0xf8ff),
-    (0xfe00, 0xfe0f), (0xfeff, 0xfeff), (0xffa0, 0xffa0), (0xfff0, 0xfffb), (0x110bd, 0x110bd),
-    (0x110cd, 0x110cd), (0x13430, 0x1343f), (0x1bca0, 0x1bca3), (0x1d173, 0x1d17a), (0xe0000, 0xe0fff),
-    (0xf0000, 0xffffd), (0x100000, 0x10fffd),
+    (0x0000, 0x001f),
+    (0x007f, 0x00a0),
+    (0x00ad, 0x00ad),
+    (0x034f, 0x034f),
+    (0x0600, 0x0605),
+    (0x061c, 0x061c),
+    (0x06dd, 0x06dd),
+    (0x070f, 0x070f),
+    (0x0890, 0x0891),
+    (0x08e2, 0x08e2),
+    (0x115f, 0x1160),
+    (0x1680, 0x1680),
+    (0x17b4, 0x17b5),
+    (0x180b, 0x180f),
+    (0x2000, 0x200f),
+    (0x2028, 0x202f),
+    (0x205f, 0x206f),
+    (0x3000, 0x3000),
+    (0x3164, 0x3164),
+    (0xe000, 0xf8ff),
+    (0xfe00, 0xfe0f),
+    (0xfeff, 0xfeff),
+    (0xffa0, 0xffa0),
+    (0xfff0, 0xfffb),
+    (0x110bd, 0x110bd),
+    (0x110cd, 0x110cd),
+    (0x13430, 0x1343f),
+    (0x1bca0, 0x1bca3),
+    (0x1d173, 0x1d17a),
+    (0xe0000, 0xe0fff),
+    (0xf0000, 0xffffd),
+    (0x100000, 0x10fffd),
 ];

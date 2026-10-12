@@ -31,7 +31,10 @@ fn two_blocks() {
 
 #[test]
 fn block_not_last_in_the_header() {
-    assert_eq!(read(&format!("---\nsteplet: 1\n{SIG}title: x\n---\n")), Err(CanonError::SignatureMisplaced { line: 3 }));
+    assert_eq!(
+        read(&format!("---\nsteplet: 1\n{SIG}title: x\n---\n")),
+        Err(CanonError::SignatureMisplaced { line: 3 })
+    );
 }
 
 #[test]
@@ -72,7 +75,8 @@ fn block_lines_must_be_indented_base64() {
 #[test]
 fn with_signature_puts_the_block_last_in_the_header_and_replaces_an_old_one() {
     let unsigned = read("---\nsteplet: 1\ntitle: x\n---\nbody\n").unwrap();
-    let signed = unsigned.with_signature("-----BEGIN SSH SIGNATURE-----\r\nU1NIU0lHAAAAAQ==\r\n-----END SSH SIGNATURE-----\r\n\r\n");
+    let signed = unsigned
+        .with_signature("-----BEGIN SSH SIGNATURE-----\r\nU1NIU0lHAAAAAQ==\r\n-----END SSH SIGNATURE-----\r\n\r\n");
     assert_eq!(signed, format!("---\nsteplet: 1\ntitle: x\n{SIG}---\nbody\n"));
     let again = read(&signed).unwrap();
     assert_eq!(again.signed(), unsigned.signed());
