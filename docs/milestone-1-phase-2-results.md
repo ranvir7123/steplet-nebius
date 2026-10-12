@@ -1120,3 +1120,78 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 ```
 
 **Verdict:** done. 12 tests pass in `rules`; clippy is clean. One compile error in the plan's code was fixed as recorded above. Not run in this task: the full workspace test (only `rules.rs` and its test changed; clippy compiled every test target).
+
+## Task 8: the checker for a run (`Policy::check`)
+
+Run 12 Oct 2026, same worktree, starting from `c7572cc`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written.
+
+**Step 1, the failing state** (`policy.rs` holds the types and a `check` that always allows):
+
+```
+> cargo test -p steplet-core --offline --test policy
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.20s
+     Running tests\policy.rs (target\debug\deps\policy-51ac68b37eecea73.exe)
+
+running 3 tests
+test files ... FAILED
+test sites_and_bad_work_folders ... FAILED
+test commands ... FAILED
+
+failures:
+
+---- files stdout ----
+
+thread 'files' (45644) panicked at crates\steplet-core\tests\policy.rs:50:5:
+assertion failed: asks(write("src/main.rs"))
+
+---- sites_and_bad_work_folders stdout ----
+
+thread 'sites_and_bad_work_folders' (3112) panicked at crates\steplet-core\tests\policy.rs:73:5:
+assertion failed: asks(p.check(&Action::Fetch("http://crates.io/")))
+
+---- commands stdout ----
+
+thread 'commands' (18076) panicked at crates\steplet-core\tests\policy.rs:29:5:
+assertion failed: asks(check("cargo test --release"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    commands
+    files
+    sites_and_bad_work_folders
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p steplet-core --test policy`
+```
+
+**Step 3, after `policy.rs` is written** (expected 3 passing):
+
+```
+> cargo test -p steplet-core --offline --test policy
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.29s
+     Running tests\policy.rs (target\debug\deps\policy-51ac68b37eecea73.exe)
+
+running 3 tests
+test sites_and_bad_work_folders ... ok
+test commands ... ok
+test files ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.20s
+```
+
+**Verdict:** done. 3 tests pass in `policy` (commands; files to read and write; web addresses and bad working-copy paths); clippy is clean. Not run in this task: the full workspace test (only a new module and test were added; clippy compiled every test target).

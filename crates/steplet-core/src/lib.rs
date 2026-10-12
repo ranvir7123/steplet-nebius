@@ -11,6 +11,7 @@ pub mod header;
 pub mod hosts;
 pub mod limits;
 pub mod paths;
+pub mod policy;
 pub mod prose;
 pub mod rules;
 pub mod sig;
