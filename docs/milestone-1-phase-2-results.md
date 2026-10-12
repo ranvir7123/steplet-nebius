@@ -644,3 +644,96 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ```
 
 **Verdict:** done. 6 tests pass in `command_split`, including 2,000 bash-made vectors matched word for word; clippy is clean. Not run in this task: the full workspace test (`cargo test --workspace`), since only a new module and a new test file were added; it runs again in Task 14 and at every task that touches existing code.
+
+## Task 3: the always-blocked list, paths outside the repository, protected folders
+
+Run 12 Oct 2026, same worktree, starting from `ea60966`.
+
+Changes from the plan while running it: none. The code and the tests compiled and passed as written.
+
+**Step 1, the failing state** (`paths.rs` is a stub where every function answers no):
+
+```
+> cargo test -p steplet-core --offline --test paths
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.28s
+     Running tests\paths.rs (target\debug\deps\paths-1e09dc0109ff8170.exe)
+
+running 5 tests
+test in_text_only_places_outside_the_repository_count ... FAILED
+test protected_folders_at_any_depth ... FAILED
+test places_that_hold_keys_by_their_names ... FAILED
+test paths_outside_the_repository ... FAILED
+test cleaning_up_paths_as_text ... FAILED
+
+failures:
+
+---- in_text_only_places_outside_the_repository_count stdout ----
+
+thread 'in_text_only_places_outside_the_repository_count' (44944) panicked at crates\steplet-core\tests\paths.rs:43:61:
+called `Option::unwrap()` on a `None` value
+
+---- protected_folders_at_any_depth stdout ----
+
+thread 'protected_folders_at_any_depth' (30152) panicked at crates\steplet-core\tests\paths.rs:69:9:
+.git/hooks/pre-commit
+
+---- places_that_hold_keys_by_their_names stdout ----
+
+thread 'places_that_hold_keys_by_their_names' (24908) panicked at crates\steplet-core\tests\paths.rs:28:53:
+called `Option::unwrap()` on a `None` value
+
+---- paths_outside_the_repository stdout ----
+
+thread 'paths_outside_the_repository' (21928) panicked at crates\steplet-core\tests\paths.rs:19:9:
+/etc/hostname
+
+---- cleaning_up_paths_as_text stdout ----
+
+thread 'cleaning_up_paths_as_text' (42544) panicked at crates\steplet-core\tests\paths.rs:53:5:
+assertion `left == right` failed
+  left: None
+ right: Some("/w/r1/src/b.rs")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    cleaning_up_paths_as_text
+    in_text_only_places_outside_the_repository_count
+    paths_outside_the_repository
+    places_that_hold_keys_by_their_names
+    protected_folders_at_any_depth
+
+test result: FAILED. 0 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p steplet-core --test paths`
+```
+
+**Step 3, after `paths.rs` is written:**
+
+```
+> cargo test -p steplet-core --offline --test paths
+   Compiling steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.63s
+     Running tests\paths.rs (target\debug\deps\paths-1e09dc0109ff8170.exe)
+
+running 5 tests
+test cleaning_up_paths_as_text ... ok
+test protected_folders_at_any_depth ... ok
+test in_text_only_places_outside_the_repository_count ... ok
+test paths_outside_the_repository ... ok
+test places_that_hold_keys_by_their_names ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+**Extra: clippy with warnings as errors** (exit code 0, last lines):
+
+```
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-core v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-core)
+    Checking steplet-sign v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase2-task1-07fd4c\crates\steplet-sign)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.63s
+```
+
+**Verdict:** done. 5 tests pass in `paths`; clippy is clean. Not run in this task: the full workspace test (no existing code changed; clippy compiled every test target).

@@ -9,6 +9,7 @@ pub mod date;
 pub mod display;
 pub mod header;
 pub mod limits;
+pub mod paths;
 pub mod sig;
 
 /// The signature name space (decision P4).
