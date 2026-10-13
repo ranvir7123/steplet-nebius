@@ -1,0 +1,22 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": ["/mnt", "/var/lib/steplet", "/work"],
+      "allowRead": ["/work/p1/repo"],
+      "denyWrite": ["/work/p1/repo/.git"]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": ["Read(//mnt/**)", "Read(//var/lib/steplet/**)", "Edit(//work/p1/repo/.git/**)"]
+  },
+  "switchModelsOnFlag": false,
+  "apiKeyHelper": "/bin/echo p3-scripted-run-not-a-key"
+}
