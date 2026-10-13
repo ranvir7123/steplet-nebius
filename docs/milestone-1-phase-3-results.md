@@ -497,3 +497,56 @@ key, last 20 characters: 0  (files read: 4)
   - Nothing was written outside the working copy.
 - **One line needs a closer look: `C_write_outside_workspace` says `ok: true`** in both runs, yet the target file (`/var/lib/steplet/runs/p2/tmp/written_by_probe.txt`) does not exist when root looks after the run. Phase 0 got "Read-only file system" here, because its target was not inside a denied folder. My reading is that the fence covers a denied folder with an empty, temporary one, so the write landed there and was thrown away. **Not yet proven**; Task 3 looks at the fence's mounts directly.
 - **Inside the fence, `git status` shows five files that do not exist** (`.bash_profile`, `.bashrc`, `.claude/`, `.gitconfig`, `.gitmodules`). From outside, after the run, the copy is clean (`## main...origin/main` and nothing else). These are the fence's own guard placeholders; phase 0 S4b saw the same. For the report (Task 10): changed files come from Steplet's own `git status` after the run, never from what the agent saw inside the fence.
+
+## Task 3: not run yet
+
+Task 3 tests the agent's own file tools against shortcut files that point out of the working copy. While it was being prepared, a safety filter on the assistant's side stopped the work twice. Task 3 is left for later, on the user's word; the tasks after it do not depend on its result to be built. Until it runs, the C line above and the "receiver's files are not even present" promise rest on Task 1 Check 3 (nothing of the receiver's is in Steplet's Linux) and Task 2 (the key is on no Linux disk), not on a direct test of the file tools.
+
+## Task 4: the runner crate, and the checker mapping
+
+**Changes from the plan, both recorded here:**
+- **The gate program's crate (`steplet-gate`) is created in Task 8, not now.** Until Task 8 it would be an empty stub.
+- **Each shared type is added by the task that first uses it**, with the names and fields of plan section 6: `GateRequest` and `GateAnswer` now, `RunPaths` in Task 5, `RunRequest` in Task 6, `Event` in Task 7, the report types in Task 10. This avoids types with no code behind them.
+
+**One addition: searches.** `decide` refuses a Glob whose `pattern`, or a Grep whose `glob`, starts at `/`, `\` or `~` or contains `..`. A search names a folder (which the checker sees), and its pattern could otherwise reach outside that folder. A search without a folder is refused too, since there is no path to check.
+
+Step 2, the test before the code:
+
+```
+> cargo test -p steplet-run --offline --test decide
+     Locking 7 packages to latest Rust 1.98 compatible versions
+      Adding itoa v1.0.18
+      Adding memchr v2.8.3
+      Adding serde v1.0.229
+      Adding serde_core v1.0.229
+      Adding serde_derive v1.0.229
+      Adding serde_json v1.0.151
+      Adding zmij v1.0.23
+error[E0432]: unresolved imports `steplet_run::GateAnswer`, `steplet_run::GateRequest`, `steplet_run::decide`
+error: could not compile `steplet-run` (test "decide") due to 1 previous error
+```
+
+Every package came from cargo's cache (no download). The 14-day check of the lock file runs at the wrap-up (Task 12).
+
+Step 4, with `src/types.rs`, `src/decide.rs` and `src/lib.rs` written:
+
+```
+> cargo test -p steplet-run --offline --test decide
+test an_allow_hands_back_exactly_the_request ... ok
+test maps_requests_to_the_checker ... ok
+test anything_unclear_is_refused_with_a_reason ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo fmt --all -- --check
+Diff in \\?\C:\dev\runFile\.claude\worktrees\e3-layout-phase3-plan-8f4432\crates\steplet-run\tests\decide.rs:36:
+(one long line in the test wrapped into three)
+fmt exit code: 1
+> cargo fmt --all
+> cargo fmt --all -- --check
+fmt exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings     (last line)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+> cargo test -p steplet-run --offline
+     Running tests\decide.rs (target\debug\deps\decide-081efc8f1b1a45b2.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
