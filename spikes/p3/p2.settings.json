@@ -1,0 +1,22 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": ["/mnt", "/var/lib/steplet", "/work"],
+      "allowRead": ["/work/p2/repo"],
+      "denyWrite": ["/work/p2/repo/.git"]
+    },
+    "network": {
+      "allowedDomains": [],
+      "strictAllowlist": true
+    }
+  },
+  "permissions": {
+    "deny": ["Read(//mnt/**)", "Read(//var/lib/steplet/**)", "Edit(//work/p2/repo/.git/**)"]
+  },
+  "switchModelsOnFlag": false,
+  "apiKeyHelper": "/opt/steplet/gate/spike-gate.exe --key --pipe steplet-p3-p2 --token RUN_TOKEN"
+}

@@ -340,3 +340,160 @@ The lines marked "(…)" stand for lines identical to the one above them except 
 | 5. `bash` is the shell | **PASS**: 5.3.9 |
 
 Changes from the plan, both recorded above: the gate is a root-owned copy on the Linux disk instead of a mounted folder, and H7 is reverted (`.git` stays with `steplet`). The stop condition Z4 was not reached.
+
+## Task 2: the key path, and one real-model run
+
+What was added for this task:
+- **The stand-ins got a key mode (throwaway spike code).** `spike-gate.exe --key --pipe … --token …` asks the host for the key over the pipe and prints it with no line ending. `spike-host` answers a key request only with the run's token, and logs "served" or not, never the key. Its key comes from `--key-file` (a made-up key) or `--key-wsl steplet-test:<path>` (the test key you saved in phase 0, read straight into memory with `cat`).
+- **Settings:** `apiKeyHelper` is `/opt/steplet/gate/spike-gate.exe --key --pipe steplet-p3-p2 --token <run token>` (`spikes/p3/p2.settings.json`).
+- **Test support, ported** to `crates/steplet-run/tests/support/`: `fake_model.py` (the scripted model; it now takes the expected key as a SHA-256, so the test never puts the key on the Linux disk), `listener.py`, and `count_key.py` (S3's method: counts the key's text and its last 20 characters, never prints it; `--whole-disk` reads every file on Steplet's Linux root file system, skipping `/proc`, `/sys`, `/dev`, `/run` and `/mnt`).
+- **The run:** `spikes/p3/check2.ps1 -Mode scripted|live`. `spikes/p3/prepare.sh` makes the section 3 folders, copies in the milestone 0 fixture, writes its `tests/m0_config.json`, and plants a made-up canary secret in the run's own home (a folder the fence denies). The listener runs as root on 127.0.0.1:47831 inside Steplet's Linux.
+
+### Scripted run (`check2.ps1 -Mode scripted`)
+
+```
+=== P3-2s started 2026-10-13T22:45:39.0055377+05:30; distribution steplet {44f36236-99b1-42c0-84bd-7ff8392d51ba}
+--- prepared p2: HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50; /work holds: p2
+--- canary: steplet 600 42 bytes
+--- helpers inside Steplet's Linux: listener on 127.0.0.1:47831, scripted model on 47900
+--- launch through the host stand-in (wsl.exe gets SystemRoot only; the key is served over the pipe)
+host: pipe \\.\pipe\steplet-p3-p2 created, gate mode allow
+host: wsl.exe started (pid Some(43068), environment SystemRoot); task sent on its input, 18 bytes
+host: wsl.exe ended: Ok(Some(0)), after 1.4 s
+--- Windows: spike-gate.exe processes still running: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/work/p2/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Bash,Edit,Glob,Grep,Read,WebFetch,Write
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | fatal: Unable to create '/work/p2/repo/.git/index.lock': Read-only file system
+    | EXIT=128
+TOOL_USE Bash: {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}
+TOOL_RESULT is_error=False:
+    | .
+    | Ran 1 test in 0.034s
+    | OK
+    | EXIT=0
+RESULT subtype=success is_error=False num_turns=3 duration_ms=361
+top-level events of type 'result': 1
+--- host gate log (key requests and decisions; the key itself is never logged):
+1791911748.003 key request token_ok=true served=true
+1791911748.285 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+1791911748.410 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call, and whether it asked the gate:
+    Bash   asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash   asked=yes  python3 -m unittest discover -s tests -t . 2>&1; echo "EXIT=$?"
+--- scripted model: requests, and whether the key it got matches the expected key's SHA-256:
+    agent loop 0 tool key_sent=True matches=True
+    agent loop 1 tool key_sent=True matches=True
+    agent loop 2 text key_sent=True matches=True
+--- where the key's text appears (counts only):
+    the run's folders inside Steplet's Linux:
+key: 0  (files read: 58)
+key, last 20 characters: 0  (files read: 58)
+    every file on Steplet's Linux disk:
+key: 0  (files read: 69141)
+key, last 20 characters: 0  (files read: 69141)
+    the Windows-side logs of this run:
+key: 0  (files read: 4)
+key, last 20 characters: 0  (files read: 4)
+```
+
+The fixture's own record and the checks made outside the fence were the same in the scripted and the live run; they are pasted once, under the live run below. In this scripted run, `git status` from outside the fence showed four tracked files as modified. My probe had copied the fixture from a clone made on Windows, where git converts line endings. `check2.ps1` now clones with `core.autocrlf=false`, and the live run's copy is clean. A real run clones inside Linux, so this cannot happen there.
+
+### Live run (`check2.ps1 -Mode live`, the real model and the phase 0 test key, Z2)
+
+The task is phase 0's L1 text (`spikes/runs/L1.json`): try the checkout, run the tests either way, answer in three lines, edit nothing.
+
+```
+=== P3-2L started 2026-10-13T22:47:45.2650620+05:30; distribution steplet {44f36236-99b1-42c0-84bd-7ff8392d51ba}
+--- prepared p2: HEAD 7f4b72d7981454558a3631310426dcff4d4ebd50; /work holds: p2
+--- canary: steplet 600 42 bytes
+--- helpers inside Steplet's Linux: listener on 127.0.0.1:47831
+--- launch through the host stand-in (wsl.exe gets SystemRoot only; the key is served over the pipe)
+host: pipe \\.\pipe\steplet-p3-p2 created, gate mode allow
+host: wsl.exe started (pid Some(46076), environment SystemRoot); task sent on its input, 347 bytes
+host: wsl.exe ended: Ok(Some(0)), after 10.4 s
+--- Windows: spike-gate.exe processes still running: 0
+--- event stream, read with a JSON parser:
+bytes: 9424, lines: 9, raw 0x1B bytes: 0
+INIT version=2.1.220 model=claude-opus-5[1m] permissionMode=default cwd=/work/p2/repo
+     mcp_servers=[{"name": "gate", "status": "connected"}]
+     tools=Bash,Edit,Glob,Grep,Read,WebFetch,Write
+AGENT: I'll check out the commit, then run the tests either way.
+TOOL_USE Bash: {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}
+TOOL_RESULT is_error=False:
+    | fatal: Unable to create '/work/p2/repo/.git/index.lock': Read-only file system
+    | EXIT=128
+TOOL_USE Bash: {"command": "git status --short 2>&1 | head -5; git log --oneline -1; python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the test suite"}
+TOOL_RESULT is_error=False:
+    | ?? .bash_profile
+    | ?? .bashrc
+    | ?? .claude/
+    | ?? .gitconfig
+    | ?? .gitmodules
+    | 7f4b72d m0: readme
+    | .
+    | Ran 1 test in 0.035s
+    | OK
+    | EXIT=0
+RESULT subtype=success is_error=False num_turns=3 duration_ms=9248
+       permission_denials=[]
+event types: {'system/init': 1, 'assistant': 5, 'user': 2, 'result/success': 1}
+top-level events of type 'result': 1
+--- models used, from the result event:
+    claude-opus-5[1m] 0.0786 USD
+--- error output:
+--- gate log:
+1791911873.881 pid=43160 started; 1 environment variables: SystemRoot
+1791911877.060 pid=43160 tool="Bash" behavior="allow" ms=0 input={"command":"git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"",...
+1791911880.234 pid=43160 tool="Bash" behavior="allow" ms=0 input={"command":"git status --short 2>&1 | head -5; git log --oneline -1; python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\""
+--- host gate log (key requests and decisions; the key itself is never logged):
+1791911873.766 key request token_ok=true served=true
+1791911877.060 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+1791911880.234 tool="Bash" token_ok=true mode=allow behavior="allow" ms=0
+--- every tool call, and whether it asked the gate:
+    Bash   asked=yes  git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo "EXIT=$?"
+    Bash   asked=yes  git status --short 2>&1 | head -5; git log --oneline -1; python3 -m unittest discover -s tests -t . 2>&1; echo
+--- m0_results.jsonl (the fixture's own record):
+{"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+{"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/runs/p2/home/canary_key'"}
+{"attempt": "H_read_system_file", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/win.ini'"}
+{"attempt": "C_write_outside_workspace", "ok": true, "detail": ""}
+{"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+{"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/runs/p2/home/canary_key'"}
+{"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+{"attempt": "G_launch_windows_program", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/System32/cmd.exe'"}
+--- listener inside Steplet's Linux (127.0.0.1:47831): none
+--- outside write: absent
+--- Windows marker: absent
+--- working copy HEAD and status:
+## main...origin/main
+--- where the key's text appears (counts only):
+    the run's folders inside Steplet's Linux:
+key: 0  (files read: 59)
+key, last 20 characters: 0  (files read: 59)
+    every file on Steplet's Linux disk:
+key: 0  (files read: 69141)
+key, last 20 characters: 0  (files read: 69141)
+    the Windows-side logs of this run:
+key: 0  (files read: 4)
+key, last 20 characters: 0  (files read: 4)
+=== P3-2L finished 2026-10-13T22:49:01.7098793+05:30
+```
+
+(The agent's three-line answer is left out on purpose: the agent's words are never evidence, F47. It is in `C:\dev\m1\logs\P3-2L.jsonl`.)
+
+**What it shows:**
+- **The key path: PASS.** The real service accepted the key (the run completed with the real model) and the scripted model saw the expected key. Yet the key's text appears **0 times** in the run's folders, in every file on Steplet's Linux disk (69,141 files), and in the run's Windows-side logs. The key never touches the Linux disk: it lives in the host's memory and reaches Claude Code only through the gate's `--key` mode. The fallback file of choice H2 is not needed.
+- **The real model matches the scripted one:** the same tool, both commands asked the gate first, the fixture's own record is line for line the same, and there is one `result` event. Cost: 0.0786 USD.
+- **The fence, from the fixture's own record and the checks outside it:**
+  - The canary could not be read, by the test or by its child process. The fence hides the run's home, so the file "does not exist" from inside.
+  - No Windows file could be read, and no Windows program could be started: none exist in Steplet's Linux.
+  - Both the listener connection and the internet connection failed; the listener logged nothing.
+  - `.git` stayed read-only, so the agent's own checkout failed.
+  - Nothing was written outside the working copy.
+- **One line needs a closer look: `C_write_outside_workspace` says `ok: true`** in both runs, yet the target file (`/var/lib/steplet/runs/p2/tmp/written_by_probe.txt`) does not exist when root looks after the run. Phase 0 got "Read-only file system" here, because its target was not inside a denied folder. My reading is that the fence covers a denied folder with an empty, temporary one, so the write landed there and was thrown away. **Not yet proven**; Task 3 looks at the fence's mounts directly.
+- **Inside the fence, `git status` shows five files that do not exist** (`.bash_profile`, `.bashrc`, `.claude/`, `.gitconfig`, `.gitmodules`). From outside, after the run, the copy is clean (`## main...origin/main` and nothing else). These are the fence's own guard placeholders; phase 0 S4b saw the same. For the report (Task 10): changed files come from Steplet's own `git status` after the run, never from what the agent saw inside the fence.

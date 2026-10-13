@@ -65,6 +65,23 @@ struct Gate {
     token: String,
     deadline: Duration,
     log: PathBuf,
+    /// Phase 3, Task 2: the key served to the gate's `--key` mode (apiKeyHelper). Never logged or printed.
+    key: Option<String>,
+}
+
+/// `--key-file <Windows path>` (a made-up key for scripted runs) or `--key-wsl <distro>:<Linux path>` (the test key
+/// the user saved in phase 0, read straight into memory with `cat` as that distro's user `tester`).
+fn key_from(args: &[String]) -> Option<String> {
+    if let Some(path) = opt(args, "--key-file") {
+        return Some(std::fs::read_to_string(path).expect("key file").trim().to_owned());
+    }
+    let (distro, path) = opt(args, "--key-wsl")?.split_once(':').map(|(d, p)| (d.to_owned(), p.to_owned()))?;
+    let out = std::process::Command::new(WSL)
+        .args(["-d", &distro, "-u", "tester", "--exec", "/bin/cat", &path])
+        .output()
+        .expect("wsl cat");
+    let key = String::from_utf8(out.stdout).expect("key is text").trim().to_owned();
+    (out.status.success() && !key.is_empty()).then_some(key)
 }
 
 fn gate_from(args: &[String], id: &str) -> Gate {
@@ -73,6 +90,7 @@ fn gate_from(args: &[String], id: &str) -> Gate {
         token: req(args, "--token"),
         deadline: Duration::from_millis(opt(args, "--deadline-ms").map(|v| v.parse().expect("milliseconds")).unwrap_or(10_000)),
         log: Path::new(LOGS).join(format!("{id}.host-gate.log")),
+        key: key_from(args),
     }
 }
 
@@ -159,6 +177,17 @@ async fn answer(conn: NamedPipeServer, g: Arc<Gate>) {
     };
     let deny = |why: &str| json!({"behavior": "deny", "message": format!("Steplet spike host: {why}")});
     let token_ok = request["run_token"].as_str() == Some(g.token.as_str());
+    if request["kind"] == "key" {
+        let reply = match (&g.key, token_ok) {
+            (Some(key), true) => json!({"key": key}),
+            (None, _) => json!({"error": "no key"}),
+            (_, false) => json!({"error": "wrong run token"}),
+        };
+        let _ = write_half.write_all(format!("{reply}\n").as_bytes()).await;
+        let _ = write_half.flush().await;
+        append(&g.log, &format!("key request token_ok={token_ok} served={}", reply.get("key").is_some()));
+        return;
+    }
     let reply = if !token_ok {
         deny("wrong run token")
     } else {

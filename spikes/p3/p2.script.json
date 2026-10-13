@@ -1,0 +1,8 @@
+{
+  "about": "Phase 3 Task 2, scripted: the agent tries the checkout itself (the fence keeps .git read-only), then runs the fixture's tests",
+  "steps": [
+    {"tool": "Bash", "input": {"command": "git checkout 65930082d222089b2633d34e9bb2bd42351bdc76 2>&1; echo \"EXIT=$?\"", "description": "Check out the specified commit"}},
+    {"tool": "Bash", "input": {"command": "python3 -m unittest discover -s tests -t . 2>&1; echo \"EXIT=$?\"", "description": "Run the unittest suite"}},
+    {"text": "P3 task 2: the tests ran."}
+  ]
+}
