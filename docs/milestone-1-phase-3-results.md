@@ -550,3 +550,151 @@ fmt exit code: 0
 running 3 tests
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
+
+## Task 5: the settings file and MCP config
+
+**Changes from the plan, recorded here:**
+- **Two settings beyond section 3's sketch.** Decisions already require both, and both were in the file the Task 2 runs used: `switchModelsOnFlag: false` (E1: the run stays on the model the receiver approved) and `apiKeyHelper` set to the gate's key mode (H2: the key is never written to the Linux disk).
+- **The writers take a `GateLink`** (the gate program's Linux path, the pipe name, the run token, the gate's Windows log). `apiKeyHelper` needs the pipe and token, so the interface is `settings_json(s, paths, gate)` and `mcp_json(gate)`. `mcp_json` takes no run paths, because it uses none.
+- **`RunPaths::new(distro_id, run_id)` builds section 3's paths and is the only way to make a `RunPaths`.** Both types are read-only after `new` (private fields, read-only accessors with the names of plan section 6). `new` refuses a run id that is not 1 to 64 lower-case letters, digits and `-` (the id becomes part of commands run as root), and a distribution id that is not a braced GUID (it goes on `wsl.exe`'s command line). `GateLink::new` refuses a program, pipe name or token that a shell could misread, because `apiKeyHelper` is a line Claude Code hands to `/bin/sh`. Each must be plain words of at most 128 characters. It also refuses a log that is empty, starts with `-`, or holds a control character.
+- An example program, `crates/steplet-run/examples/settings.rs`, prints both files for a `.steplet` file (the paste below).
+
+Step 2, the test before the code:
+
+```
+> cargo test -p steplet-run --offline --test settings
+error[E0432]: unresolved imports `steplet_run::GateLink`, `steplet_run::RunPaths`, `steplet_run::mcp_json`, `steplet_run::settings_json`
+error: could not compile `steplet-run` (test "settings") due to 1 previous error
+```
+
+Step 4, with `src/settings.rs` written and `src/types.rs` extended:
+
+```
+> cargo test -p steplet-run --offline --test settings
+test the_run_paths_follow_the_layout ... ok
+test a_gate_value_that_a_shell_could_misread_is_refused ... ok
+test a_run_id_that_could_reach_another_place_is_refused ... ok
+test the_mcp_config_names_the_gate_as_its_only_server ... ok
+test the_settings_are_exactly_the_planned_shape ... ok
+test no_allow_rules_and_no_read_rule_on_the_work_folder ... ok
+test the_settings_match_the_file_the_task_2_runs_used ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+`the_settings_match_the_file_the_task_2_runs_used` compares the generated file with `crates/steplet-run/tests/support/task2.settings.json`, a copy of `spikes/p3/p2.settings.json`: the file the scripted and real-model runs of Task 2 used, with its token placeholder. The two shape tests passed on the first build, so I checked that they catch a mistake. I removed the `switchModelsOnFlag` line from the writer, ran the tests, then put the line back:
+
+```
+test the_settings_match_the_file_the_task_2_runs_used ... FAILED
+test the_settings_are_exactly_the_planned_shape ... FAILED
+test result: FAILED. 5 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+restored: True
+```
+
+**A code review before the commit** (read-only, one reviewer) found nothing that must be fixed, and five points worth fixing, all applied:
+- the fields were public, so a value could be changed after `new` had checked it: now private, with read-only accessors;
+- the distribution id was not checked: it must now be a braced GUID;
+- the 128-character limit on plain words;
+- one `rule(tool, folder)` helper writes each deny rule and explains the `//`;
+- a test that the file's `allow:` commands, read and write folders leave the settings unchanged (they reach only the gate's checker).
+
+The tests came first (`the_gate_link_keeps_its_values`, `a_distribution_id_must_be_a_windows_guid`, the 128-character case, and the equality check in `no_allow_rules_and_no_read_rule_on_the_work_folder`). Before the code, they failed to build, with 12 of these errors:
+
+```
+error[E0599]: no method named `distro_id` found for struct `RunPaths` in the current scope
+(the same for run_id, work_repo, run_home, run_config, run_tmp, settings, mcp, exe, pipe, token, log)
+error: could not compile `steplet-run` (test "settings") due to 12 previous errors
+```
+
+After it (the first build hit the McAfee lock, `LNK1104`; the next build was clean):
+
+```
+> cargo fmt --all; cargo fmt --all -- --check
+fmt exit code: 0
+> cargo test -p steplet-run --offline
+     Running tests\decide.rs (target\debug\deps\decide-081efc8f1b1a45b2.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\settings.rs (target\debug\deps\settings-c9824e0201d52b9c.exe)
+running 9 tests
+test the_gate_link_keeps_its_values ... ok
+test a_run_id_that_could_reach_another_place_is_refused ... ok
+test a_distribution_id_must_be_a_windows_guid ... ok
+test the_run_paths_follow_the_layout ... ok
+test the_mcp_config_names_the_gate_as_its_only_server ... ok
+test a_gate_value_that_a_shell_could_misread_is_refused ... ok
+test the_settings_are_exactly_the_planned_shape ... ok
+test the_settings_match_the_file_the_task_2_runs_used ... ok
+test no_allow_rules_and_no_read_rule_on_the_work_folder ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit code: 0
+```
+
+Step 5, the generated files for a corpus file that declares two sites (`corpus/ordinary/uv-install-and-test.steplet`, `allow: domains: pypi.org, files.pythonhosted.org`), with a sample pipe, token and log:
+
+```
+> cargo run -q -p steplet-run --offline --example settings -- corpus/ordinary/uv-install-and-test.steplet r1
+--- /var/lib/steplet/runs/r1/settings.json
+{
+  "apiKeyHelper": "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token sampletoken",
+  "permissions": {
+    "deny": [
+      "Read(//mnt/**)",
+      "Read(//var/lib/steplet/**)",
+      "Edit(//work/r1/repo/.git/**)"
+    ]
+  },
+  "sandbox": {
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false,
+    "enabled": true,
+    "failIfUnavailable": true,
+    "filesystem": {
+      "allowRead": [
+        "/work/r1/repo"
+      ],
+      "denyRead": [
+        "/mnt",
+        "/var/lib/steplet",
+        "/work"
+      ],
+      "denyWrite": [
+        "/work/r1/repo/.git"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "strictAllowlist": true
+    }
+  },
+  "switchModelsOnFlag": false
+}
+--- /var/lib/steplet/runs/r1/mcp.json
+{
+  "mcpServers": {
+    "gate": {
+      "args": [
+        "--pipe",
+        "steplet-r1",
+        "--token",
+        "sampletoken",
+        "--log",
+        "C:\\Users\\sample\\AppData\\Local\\Steplet\\logs\\r1.gate.log"
+      ],
+      "command": "/opt/steplet/gate/steplet-gate.exe",
+      "type": "stdio"
+    }
+  }
+}
+example exit code: 0
+```
+
+(The keys come out in alphabetical order; Claude Code reads JSON, so order does not matter.)
+
+**Noted for a later task, not changed now:** the gate program now sits on the Linux disk at `/opt/steplet/gate/`, outside every folder the fence hides, so it is the one Windows program a fenced command could find. Phase 0 does not settle whether such a command can start it. Where `cmd.exe` was present, the attempt "returned non-zero exit status 1", which fits either interop being blocked inside the fence or `cmd.exe` starting and its write failing. Task 11 Step 2 therefore tries `/opt/steplet/gate/steplet-gate.exe` itself from inside the fence. If it starts, the fix to measure is adding `/opt/steplet/gate` to `denyRead`; Claude Code starts the gate from outside the fence, so the gate would still run.
+
+**Not verified in this task:** that Claude Code 2.1.220 accepts the generated files. That rests on the two Task 2 runs, whose settings file the generator now matches exactly (the test above), and is checked again when Task 7 launches with the generated files.
