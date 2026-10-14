@@ -698,3 +698,291 @@ example exit code: 0
 **Noted for a later task, not changed now:** the gate program now sits on the Linux disk at `/opt/steplet/gate/`, outside every folder the fence hides, so it is the one Windows program a fenced command could find. Phase 0 does not settle whether such a command can start it. Where `cmd.exe` was present, the attempt "returned non-zero exit status 1", which fits either interop being blocked inside the fence or `cmd.exe` starting and its write failing. Task 11 Step 2 therefore tries `/opt/steplet/gate/steplet-gate.exe` itself from inside the fence. If it starts, the fix to measure is adding `/opt/steplet/gate` to `denyRead`; Claude Code starts the gate from outside the fence, so the gate would still run.
 
 **Not verified in this task:** that Claude Code 2.1.220 accepts the generated files. That rests on the two Task 2 runs, whose settings file the generator now matches exactly (the test above), and is checked again when Task 7 launches with the generated files.
+## Task 6: the working copy
+
+### Your decisions during this task (14 Oct 2026)
+
+- **H1 moves into the launch (Task 7): "root first, then drop".** Each run will start as root through one fixed Steplet script inside Steplet's own Linux. The script unmounts the shared folders, keeps name lookup working with a plain copy of the lookup file, checks the layout, then permanently becomes `steplet` and starts the agent. The approved launch line changes from `-u steplet` to `-u root` plus that script. The measurements below are why.
+- **ripgrep is installed** in Steplet's Linux (`srt` will not start without it) and added to the setup script's base tools.
+- **P3 is enforced with a short list of hosts:** milestone 1 clones only from `github.com`, `gitlab.com`, `codeberg.org` and `bitbucket.org` (`REPOSITORY_HOSTS` in `src/prepare.rs`). Any other address is refused before Linux is touched. A file could otherwise name a home or company server, which Steplet's own git would reach before any fence applies.
+
+### Changes from the plan, recorded here
+
+- **H1's unmount is not in `prepare`** (above, and the measurements below).
+- **`.git` stays owned by `steplet`.** H7 was reverted in Task 1; it is still guarded by the fence's `denyWrite` and the `Edit` deny rule. The plan's Task 6 text still says `chown -R root:root .git`.
+- **`prepare` takes the `GateLink` and writes the run's settings file and MCP config** (root, 644), so one step leaves the run ready to launch: `prepare(req, paths, gate)`.
+- **The fenced checkout starts in an empty private folder, not in the working copy** (measured below). It runs as `steplet`, like the clone: `setpriv`, no extra powers, `no_new_privs`.
+- **Time limits:** the clone gives up after 10 minutes, or after a minute below 1 KB/s; the checkout gives up after 5 minutes.
+- **New in `src/wsl.rs`:** `run` (one program inside Steplet's Linux, `wsl.exe` with `SystemRoot` only, C8) and `find_distribution`, which reads the distribution's id from the registry, so nothing hardcodes it.
+
+### What the design rests on: measured in Steplet's Linux
+
+**1. Name lookup depends on `/mnt/wsl`, and WSL rebuilds the shared folders.** First, a read-only look (`t6_mounts.sh`, scratchpad):
+
+```
+--- whoami: root
+--- /etc/resolv.conf: lrwxrwxrwx 1 root root 20 Oct 14 13:26 /etc/resolv.conf -> /mnt/wsl/resolv.conf
+    resolves to: /mnt/wsl/resolv.conf
+--- mounts at or below /mnt:
+    /mnt/wsl tmpfs rw,relatime
+    /mnt/wslg tmpfs rw,relatime
+    /mnt/wslg/distro ext4 ro,relatime,discard,errors=remount-ro,data=ordered
+    /mnt/wslg/versions.txt overlay rw,relatime,lowerdir=/systemvhd,upperdir=/system/rw/upper,workdir=/system/rw/work,uuid=on
+    /mnt/wslg/doc overlay rw,relatime,lowerdir=/systemvhd,upperdir=/system/rw/upper,workdir=/system/rw/work,uuid=on
+    /mnt/wslg/run/user/0 tmpfs rw,nosuid,nodev,relatime,size=776412k,nr_inodes=194103,mode=700
+--- other mounts whose source or target mentions wsl:
+    /usr/lib/modules/6.6.87.2-microsoft-standard-WSL2 none overlay
+    /usr/lib/wsl/drivers drivers 9p
+    /usr/lib/wsl/lib none overlay
+--- /tmp/.X11-unix: drwxrwxrwx 2 root root 60 Oct 14 13:26 /tmp/.X11-unix
+--- environment WSL sets for root: WSL2_GUI_APPS_ENABLED=1 WSL_DISTRO_NAME=steplet WSL_INTEROP=/run/WSL/328_interop WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/0/ WSLENV= PULSE_SERVER=unix:/mnt/wslg/PulseServer
+--- DNS works now: 20.207.73.82    github.com
+--- srt: lrwxrwxrwx 1 root root 44 Oct 13 12:33 /opt/steplet/srt/node_modules/.bin/srt -> ../@anthropic-ai/sandbox-runtime/dist/cli.js
+--- node: /usr/bin/node v22.22.1
+--- /work: p2    /var/lib/steplet/runs: p2
+```
+
+Then H1 as the plan wrote it, in one call (`t6_unmount.sh`): make the lookup file a plain copy, unmount, and leave a marker in `/run`. Then three later calls (`t6_after.sh`, read-only). The first line of output is `umount`'s own message, and the cut-off `55.255.254` is the end of the lookup file's address line, interleaved with it:
+
+```
+umount: /mnt/wslg/run/user/0: target is busy.
+55.255.254
+--- /tmp/.X11-unix mount: /tmp/.X11-unix none[/.X11-unix] tmpfs
+/tmp/.X11-unix none[/.X11-unix] tmpfs
+--- 1. /etc/resolv.conf becomes a plain file with the same lines
+-rw-r--r-- 1 root root 200 Oct 14 13:27 /etc/resolv.conf
+--- 2. unmount /mnt/wslg (and everything below it), /tmp/.X11-unix, /mnt/wsl
+wslg exit code: 32
+X11 exit code: 0
+wsl exit code: 0
+--- mounts left at or below /mnt: [/mnt/wslg /mnt/wslg/distro /mnt/wslg/versions.txt /mnt/wslg/doc /mnt/wslg/run/user/0 ]
+--- /mnt/wsl and /mnt/wslg now hold: [/mnt/wsl:  /mnt/wslg: .X11-unix PulseAudioRDPSink PulseAudioRDPSource PulseServer distro doc pulseaudio.log run runtime-dir stderr.log versions.txt weston.log wlog.log ]
+--- name lookup still works: 20.207.73.82    github.com
+--- instance marker written to /run: 1791984451
+--- later call, 6 s after the unmount call began:
+    marker: 1791984451; uptime 80.56 s
+    mounts at or below /mnt: [/mnt/wslg /mnt/wslg/distro /mnt/wslg/versions.txt /mnt/wslg/doc /mnt/wslg/run/user/0 ]
+    /etc/resolv.conf: lrwxrwxrwx -> /mnt/wsl/resolv.conf
+--- later call, 26 s after the unmount call began:
+    marker: gone (the distribution restarted); uptime 103.55 s
+    mounts at or below /mnt: [/mnt/wsl /mnt/wslg /mnt/wslg/distro /mnt/wslg/versions.txt /mnt/wslg/doc /mnt/wslg/run/user/0 ]
+    /etc/resolv.conf: lrwxrwxrwx -> /mnt/wsl/resolv.conf
+--- later call, 79 s after the unmount call began:
+    marker: gone (the distribution restarted); uptime 156.70 s
+    mounts at or below /mnt: [/mnt/wsl /mnt/wslg /mnt/wslg/distro /mnt/wslg/versions.txt /mnt/wslg/doc /mnt/wslg/run/user/0 ]
+    /etc/resolv.conf: lrwxrwxrwx -> /mnt/wsl/resolv.conf
+```
+
+What it shows:
+- **`/etc/resolv.conf` (where Linux looks up web addresses) is a link into `/mnt/wsl`.** Unmounting `/mnt/wsl` breaks name lookup, including Claude Code's own connection to the model, unless the lookup file is replaced first.
+- **WSL re-created that link in the same running instance:** 6 s later the marker was still there, but the link was back, pointing into an unmounted folder.
+- **The distribution stopped within about 20 s of going idle** (the marker was gone while the machine's uptime kept growing), and the next start mounted everything again.
+- **`/mnt/wslg/run/user/0` was busy,** so a plain unmount failed (exit 32); it needs a lazy unmount (`umount -l`).
+
+So an unmount in the prepare step would not last until the agent starts. It has to happen in the session that starts the agent, as root. That led to your decision above. It is built and measured in Task 7.
+
+**2. `srt` needs ripgrep, and guards file names in the folder it starts in.** A test repository made inside Steplet's Linux (`t6_checkout.sh`; every file a harmless placeholder: `.bashrc`, `.claude/settings.json`, `.gitmodules`, `.mcp.json`, `.vscode/settings.json`, `README`, `src/main.py`), checked out inside `srt` twice. First, before ripgrep was there:
+
+```
+=== checkout inside srt, started in /work/t6/repo
+Error: Sandbox dependencies not available: ripgrep (rg) not found
+checkout exit code: 1
+(the same for the second start folder)
+```
+
+`srt` uses ripgrep to look for the names it guards (`dist/sandbox/sandbox-utils.js`: `.gitconfig`, `.gitmodules`, `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`, `.ripgreprc`, `.mcp.json`, and the folders `.vscode`, `.idea`, `.claude/commands`, `.claude/agents`), and only in the folder it starts in (`linux-sandbox-utils.js`, `linuxGetCwdMandatoryDenyPaths`). Installed with your yes:
+
+```
+--- before: dpkg-query: no packages found matching ripgrep
+apt exit code: 0
+Setting up ripgrep (15.1.0-1ubuntu1) ...
+Processing triggers for man-db (2.13.1-1build1) ...
+ripgrep: 15.1.0-1ubuntu1
+rg: /usr/bin/rg; ripgrep 15.1.0
+```
+
+(A first attempt never ran: PowerShell rewrote the command line, the quoting trap. "before" shows nothing had been installed.) Then the same probe:
+
+```
+--- test commit 8fbcef93d186036024176e991df473e606d15bda tracks: .bashrc .claude/settings.json .gitmodules .mcp.json .vscode/settings.json README src/main.py
+=== checkout inside srt, started in /work/t6/repo
+error: The following untracked working tree files would be overwritten by checkout:
+	.bashrc
+	.gitmodules
+	.mcp.json
+	.vscode
+Please move or remove them before you switch branches.
+Aborting
+checkout exit code: 1
+HEAD: 8fbcef93d186036024176e991df473e606d15bda
+files present:
+git status: [D  .bashrc D  .claude/settings.json D  .gitmodules D  .mcp.json D  .vscode/settings.json D  README D  src/main.py ]
+=== checkout inside srt, started in /var/lib/steplet/runs/t6/tmp
+checkout exit code: 0
+HEAD: 8fbcef93d186036024176e991df473e606d15bda
+files present: ./.bashrc ./.claude/settings.json ./.gitmodules ./.mcp.json ./.vscode/settings.json ./README ./src/main.py
+git status: []
+--- cleaned up: /work holds [p2 ]
+```
+
+Started in the working copy, `srt` put its placeholders on the guarded names and git refused the checkout. Any commit that tracks `.gitmodules` or `.vscode/` (both common) could never be checked out that way. Started in an empty private folder, every file came out and the copy is clean. So `prepare.sh` starts the checkout from an empty folder of its own, which it deletes afterwards.
+
+**3. The write paths `srt` adds on this layout** (plan section 9 gives this to Task 6). One debug run of the checkout fence, as `steplet`, from an empty folder (`t6_srt_paths.sh`):
+
+```
+srt exit code: 0
+--- debug lines about writing, binding or temporary places:
+[SandboxDebug] Linux bridges ready after 3 attempts
+[SandboxDebug] Original command: /bin/sh -c 'echo "inside: uid $(id -u)"; touch /tmp/t6-probe 2>&1; ls -A /tmp 2>&1 | head -5'
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/stdout -> /dev/stdout
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/stderr -> /dev/stderr
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/null -> /dev/null
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/tty -> /dev/tty
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/dtracehelper -> /dev/dtracehelper
+[SandboxDebug] [Sandbox Linux] Processing write path: /dev/autofs_nowait -> /dev/autofs_nowait
+[SandboxDebug] [Sandbox Linux] Processing write path: /tmp/claude -> /tmp/claude
+[SandboxDebug] [Sandbox Linux] Skipping non-existent write path: /tmp/claude
+[SandboxDebug] [Sandbox Linux] Processing write path: /private/tmp/claude -> /private/tmp/claude
+[SandboxDebug] [Sandbox Linux] Skipping non-existent write path: /private/tmp/claude
+[SandboxDebug] [Sandbox Linux] Processing write path: /work/t6d/repo -> /work/t6d/repo
+touch: cannot touch '/tmp/t6-probe': Read-only file system
+snap-private-tmp
+--- the command's own lines:
+[SandboxDebug] Original command: /bin/sh -c 'echo "inside: uid $(id -u)"; touch /tmp/t6-probe 2>&1; ls -A /tmp 2>&1 | head -5'
+inside: uid 999
+touch: cannot touch '/tmp/t6-probe': Read-only file system
+--- after: /tmp/t6-probe on the real disk: ls: cannot access '/tmp/t6-probe': No such file or directory
+```
+
+Besides the working copy, `srt` adds the standard device files, and `/tmp/claude` and a macOS path, both skipped because they do not exist. The phase 0 `~/.npm/_logs` path does not appear: the home here is an empty folder. **Noted for Task 7:** if `/tmp/claude` ever existed, every fence would be allowed to write there, so the launch script should make sure it does not. The command ran as uid 999 (`steplet`), so the switch from root by `setpriv` worked.
+
+### The tests
+
+`crates/steplet-run/tests/prepare.rs`. The `#[ignore]` tests need Steplet's Linux and the network, and clone two public repositories at pinned commits: `octocat/Hello-World` at `7fd1a60b…` (phase 0 S4's), and `anthropics/claude-code-action` at `34968b59…` (14 Oct 2026), which tracks `.claude/settings.json`, `.claude/commands/` and `.claude/agents/`. Step 2, before the code:
+
+```
+> cargo test -p steplet-run --offline --test prepare
+error[E0432]: unresolved imports `steplet_run::PrepareError`, `steplet_run::RunRequest`, `steplet_run::discard`, `steplet_run::prepare`, `steplet_run::wsl`
+error: could not compile `steplet-run` (test "prepare") due to 1 previous error
+```
+
+Step 4, the first passing run of the three Linux tests:
+
+```
+> cargo test -p steplet-run --offline --test prepare -- --ignored
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 42.76s
+```
+
+They passed on the first run, so I broke the script on purpose twice (each time in place, then restored) to see that they catch it. First, the checkout started in the working copy, as in the probe above:
+
+```
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... FAILED
+called `Result::unwrap()` on an `Err` value: Step { step: "check out the commit inside the fence", detail: "fatal: cannot create directory at '.claude/agents': Read-only file system\nsteplet-prepare: the checkout of 34968b5981d5d170904281aa3df6f3c0d4a28855 failed inside the fence" }
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 9.82s
+```
+
+Second, the agent files not removed:
+
+```
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... FAILED
+thread 'agent_settings_files_the_commit_carries_are_checked_out_then_removed' (39568) panicked at crates\steplet-run\tests\prepare.rs:131:5:
+only .claude is gone:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 19.41s
+restored: True
+```
+
+### The code review, and what changed
+
+A read-only reviewer found nothing that must be fixed. Applied:
+- **The script could be eaten by a program it starts.** The script comes on `bash`'s standard input, which `bash` reads as it goes, and every program started from the script inherits that input. Both scripts now do all their work inside one function, which `bash` reads whole before running it, with input from `/dev/null`. The same two lines, sent plainly and then wrapped:
+
+```
+--- plain: a program that reads its input
+before
+exit code: 0
+--- wrapped in one function, input from /dev/null
+before
+after
+exit code: 0
+```
+
+  In the plain version, "after" never ran, and the exit code still said success.
+- **Stopping the `steplet` account's programs** now kills again on every pass, by both effective and real user id, and also runs after the checkout, before root works on its folders.
+- **The base64 encoder** is checked against RFC 4648's test vectors. This is the codebase's first test inside a source file (`prepare::tests`), because the encoder is private.
+- **A request that should get through is tested as getting through** (`a_plain_request_gets_past_the_checks`).
+- **Local-network addresses:** a name like `printer.local` passed the address check. That became your host-list decision above. Tested first: before the list, `https://printer.local/…` got through to `wsl.exe` (`Err(Step { step: "reach Steplet's Linux", detail: "" })`).
+- **That empty detail** happened because `wsl.exe` prints its own failures on standard output. The detail now falls back to standard output.
+
+Not applied: the reviewer's point that `rm`'s error output is lost is wrong; it is not suppressed, so it reaches the detail. The duplicate address and commit checks stay, because `steplet-core` is unchanged in this phase.
+
+After the changes:
+
+```
+> cargo fmt --all -- --check
+fmt exit code: 0
+> cargo test -p steplet-run --offline
+test prepare::tests::base64_gives_the_rfc_4648_test_vectors ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\decide.rs (target\debug\deps\decide-081efc8f1b1a45b2.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\prepare.rs (target\debug\deps\prepare-8568093f74a6ab1e.exe)
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... ignored, needs Steplet's Linux and the network
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ignored, needs Steplet's Linux and the network
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... ignored, needs Steplet's Linux and the network
+test a_request_steplet_could_misread_is_refused_before_linux_is_touched ... ok
+test a_plain_request_gets_past_the_checks ... ok
+test result: ok. 2 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.56s
+     Running tests\settings.rs (target\debug\deps\settings-c9824e0201d52b9c.exe)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit code: 0
+> cargo test -p steplet-run --offline --test prepare -- --ignored --nocapture --test-threads=1
+running 3 tests
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... --- https://github.com/octocat/steplet-test-no-such-repository.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d: could not clone the repository:
+fatal: could not read Username for 'https://github.com': terminal prompts disabled
+steplet-prepare: could not clone https://github.com/octocat/steplet-test-no-such-repository.git
+--- https://github.com/octocat/Hello-World.git at 0000000000000000000000000000000000000001: could not find the declared commit:
+steplet-prepare: https://github.com/octocat/Hello-World.git has no commit 0000000000000000000000000000000000000001
+ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... /var/lib/steplet/runs/t6a:
+total 28
+drwxr-xr-x 5 root    root    4096 Oct 14 19:05 .
+drwxr-xr-x 3 root    root    4096 Oct 14 19:05 ..
+drwx------ 2 steplet steplet 4096 Oct 14 19:05 config
+drwx------ 2 steplet steplet 4096 Oct 14 19:05 home
+-rw-r--r-- 1 root    root     321 Oct 14 19:05 mcp.json
+-rw-r--r-- 1 root    root     735 Oct 14 19:05 settings.json
+drwx------ 2 steplet steplet 4096 Oct 14 19:05 tmp
+/work:
+total 12
+drwxr-xr-x  3 root root 4096 Oct 14 19:05 .
+drwxr-xr-x 20 root root 4096 Oct 14 19:05 ..
+drwxr-xr-x  3 root root 4096 Oct 14 19:05 t6a
+/work/t6a:
+total 12
+drwxr-xr-x 3 root    root    4096 Oct 14 19:05 .
+drwxr-xr-x 3 root    root    4096 Oct 14 19:05 ..
+drwxr-xr-x 3 steplet steplet 4096 Oct 14 19:05 repo
+/work/t6a/repo:
+total 16
+drwxr-xr-x 3 steplet steplet 4096 Oct 14 19:05 .
+drwxr-xr-x 3 root    root    4096 Oct 14 19:05 ..
+drwxr-xr-x 5 steplet steplet 4096 Oct 14 19:05 .git
+-rw-r--r-- 1 steplet steplet   13 Oct 14 19:05 README
+ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 29.02s
+```
+
+The folders match plan section 3 (with `.git` owned by `steplet`, per the H7 reversal). The two files are root-owned 644 and match `settings_json` and `mcp_json` byte for byte. `/work` holds only this run, and the earlier run's leftovers are gone. A wrong address or commit names the step in plain words and checks out nothing. After `discard`, `/work` and the runs folder are empty.
+
+**Not verified in this task:**
+- The unmount (H1), which is now Task 7's.
+- A repository whose commit tracks `.gitmodules` with real submodules (submodules are never fetched).
+- Hosts other than github.com: no GitLab, Codeberg or Bitbucket repository was cloned.
+- A clone big enough to reach the time limits.
+- Two runs at once (`prepare` ends the last run's programs on purpose; one run at a time is the app's job in phase 4).

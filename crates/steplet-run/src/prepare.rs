@@ -1,0 +1,113 @@
+//! The working copy (decision D6): a fresh hardened clone, the declared commit checked out inside the fence with no
+//! agent, the agent settings files removed, and the run's private folders and settings files written. It all runs as
+//! root inside Steplet's own Linux, from the fixed script `prepare.sh`; `discard` removes the run when it ends.
+
+use steplet_core::hosts;
+
+use crate::settings::{mcp_json, settings_json};
+use crate::types::{BadValue, GateLink, RunPaths, RunRequest};
+use crate::wsl;
+
+const PREPARE: &str = include_str!("prepare.sh");
+const DISCARD: &str = include_str!("discard.sh");
+
+/// P3: milestone 1 clones public repositories only, so only from these public code hosts (the user's choice, 14 Oct
+/// 2026). Any other name could be a home or company server that Steplet's own git would reach before any fence.
+pub const REPOSITORY_HOSTS: &[&str] = &["github.com", "gitlab.com", "codeberg.org", "bitbucket.org"];
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PrepareError {
+    /// The request holds a value Steplet will not hand to its Linux.
+    Refused(BadValue),
+    /// `wsl.exe` could not be started.
+    Wsl(String),
+    /// A step inside Steplet's Linux failed. `step` names it; `detail` is the end of what it printed about it.
+    Step { step: &'static str, detail: String },
+}
+
+/// Prepares run `paths` for `req`. The repository address and the commit go into a script run as root, so they are
+/// checked here first: the address must be a plain `https://` address on one of `REPOSITORY_HOSTS`, and the commit
+/// 40 or 64 lower-case hexadecimal digits.
+pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<(), PrepareError> {
+    if !is_plain_https(&req.repo_url) {
+        return Err(PrepareError::Refused(BadValue("repository address")));
+    }
+    if !hosts::https_host(&req.repo_url).is_some_and(|h| REPOSITORY_HOSTS.contains(&h.as_str())) {
+        return Err(PrepareError::Refused(BadValue("repository host")));
+    }
+    if !is_commit(&req.commit) {
+        return Err(PrepareError::Refused(BadValue("commit")));
+    }
+    let settings = base64(settings_json(&req.steplet, paths, gate).as_bytes());
+    let mcp = base64(mcp_json(gate).as_bytes());
+    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp])
+}
+
+/// Ends whatever the run left running and deletes its working copy and private folders.
+pub fn discard(paths: &RunPaths) -> Result<(), PrepareError> {
+    as_root(paths, DISCARD, &[paths.run_id()])
+}
+
+fn as_root(paths: &RunPaths, script: &str, args: &[&str]) -> Result<(), PrepareError> {
+    let argv = [&["/bin/bash", "-s", "--"][..], args].concat();
+    let out =
+        wsl::run(paths.distro_id(), "root", &argv, script.as_bytes()).map_err(|e| PrepareError::Wsl(e.to_string()))?;
+    let step = match out.status {
+        Some(0) => return Ok(()),
+        Some(10) => "clear the last run",
+        Some(11) => "clone the repository",
+        Some(12) => "find the declared commit",
+        Some(13) => "check out the commit inside the fence",
+        Some(14) => "remove the agent settings files",
+        Some(15) => "write the run's settings",
+        Some(20) => "remove the run",
+        _ => "reach Steplet's Linux",
+    };
+    // The script writes to its error output; `wsl.exe` writes its own failures to standard output.
+    let said = if out.stderr.trim().is_empty() { &out.stdout } else { &out.stderr };
+    let lines: Vec<&str> = said.lines().collect();
+    Err(PrepareError::Step { step, detail: lines[lines.len().saturating_sub(15)..].join("\n") })
+}
+
+fn is_plain_https(url: &str) -> bool {
+    hosts::https_host(url).is_some()
+        && url
+            .strip_prefix("https://")
+            .is_some_and(|rest| rest.bytes().all(|b| b.is_ascii_alphanumeric() || b"._~/-".contains(&b)))
+}
+
+fn is_commit(s: &str) -> bool {
+    (s.len() == 40 || s.len() == 64) && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// Standard base64 with `=` padding (RFC 4648), so a file's text crosses the Windows command line unchanged.
+fn base64(bytes: &[u8]) -> String {
+    const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk.iter().enumerate().fold(0u32, |n, (i, &b)| n | (u32::from(b) << (16 - 8 * i)));
+        for i in 0..4 {
+            out.push(if i <= chunk.len() { char::from(LETTERS[((n >> (18 - 6 * i)) & 63) as usize]) } else { '=' });
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn base64_gives_the_rfc_4648_test_vectors() {
+        for (plain, coded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(super::base64(plain.as_bytes()), coded, "{plain:?}");
+        }
+        assert_eq!(super::base64(&[0xfb, 0xff, 0xfe]), "+//+", "the last two letters of the alphabet");
+    }
+}

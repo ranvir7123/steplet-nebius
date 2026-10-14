@@ -37,13 +37,13 @@ id steplet > /dev/null 2>&1 || useradd --system --user-group --shell /usr/sbin/n
 passwd -l steplet
 id steplet
 
-echo "--- base tools (choice H4-A)"
+echo "--- base tools (choice H4-A; ripgrep because srt needs it, approved 14 Oct 2026)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q > /var/log/steplet-apt-update.txt 2>&1
 apt-get install -y -q --no-install-recommends git python3 python3-venv build-essential ca-certificates \
-    bubblewrap socat nodejs npm > /var/log/steplet-apt-install.txt 2>&1
+    bubblewrap socat ripgrep nodejs npm > /var/log/steplet-apt-install.txt 2>&1
 tail -2 /var/log/steplet-apt-install.txt
-for p in git python3 build-essential bubblewrap socat nodejs npm; do
+for p in git python3 build-essential bubblewrap socat ripgrep nodejs npm; do
   echo "$p: $(dpkg-query -W -f='${Version}' "$p")"
 done
 

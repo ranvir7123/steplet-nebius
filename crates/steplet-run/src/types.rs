@@ -1,6 +1,9 @@
 //! The runner's shared types. Each is added by the task that first needs it (plan section 6 gives the full list).
 
+use std::time::Duration;
+
 use serde_json::Value;
+use steplet_core::header::Steplet;
 
 /// Where Steplet's Linux keeps things (plan section 3). `/work` is kept apart from `/var/lib/steplet` so the fence
 /// can hide the private folder without also hiding the working copy (C9).
@@ -155,6 +158,17 @@ fn is_guid(s: &str) -> bool {
     let groups: Vec<&str> = inner.split('-').collect();
     groups.len() == 5
         && groups.iter().zip([8, 4, 4, 4, 12]).all(|(g, n)| g.len() == n && g.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// What one run is asked to do. `prepare` checks the repository address and the commit before it uses them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RunRequest {
+    pub steplet: Steplet,
+    pub repo_url: String,
+    pub commit: String,
+    pub task_text: String,
+    pub max_turns: u32,
+    pub deadline: Duration,
 }
 
 /// One permission request from the agent, as `steplet-gate.exe` relays it over the pipe.

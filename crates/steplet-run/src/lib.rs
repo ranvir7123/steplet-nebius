@@ -2,9 +2,12 @@
 //! option D), with every action the agent proposes decided by the one checker, `steplet_core::policy::Policy::check`.
 
 mod decide;
+mod prepare;
 mod settings;
 mod types;
+pub mod wsl;
 
 pub use decide::decide;
+pub use prepare::{PrepareError, REPOSITORY_HOSTS, discard, prepare};
 pub use settings::{mcp_json, settings_json};
-pub use types::{BadValue, GateAnswer, GateLink, GateRequest, RunPaths};
+pub use types::{BadValue, GateAnswer, GateLink, GateRequest, RunPaths, RunRequest};
