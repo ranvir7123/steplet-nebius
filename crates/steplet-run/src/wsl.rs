@@ -4,7 +4,7 @@
 
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 /// What one program inside Steplet's Linux did.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -15,15 +15,20 @@ pub struct Output {
     pub stderr: String,
 }
 
-/// Runs `argv` as `user` in the distribution `distro_id`, starting in `/`, with `stdin` as its whole input.
-pub fn run(distro_id: &str, user: &str, argv: &[&str], stdin: &[u8]) -> io::Result<Output> {
-    let mut child = windows_program("wsl.exe")?
+/// Starts `argv` as `user` in the distribution `distro_id`, in `/`, with its input and both outputs piped.
+pub fn spawn(distro_id: &str, user: &str, argv: &[&str]) -> io::Result<Child> {
+    windows_program("wsl.exe")?
         .args(["--distribution-id", distro_id, "-u", user, "--cd", "/", "--exec"])
         .args(argv)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn()
+}
+
+/// Runs `argv` as `user` in the distribution `distro_id`, starting in `/`, with `stdin` as its whole input.
+pub fn run(distro_id: &str, user: &str, argv: &[&str], stdin: &[u8]) -> io::Result<Output> {
+    let mut child = spawn(distro_id, user, argv)?;
     let mut input = child.stdin.take().expect("standard input is piped");
     let output = std::thread::scope(|s| {
         // Written from its own thread so a program that answers before reading all of it cannot stall both sides.
@@ -62,7 +67,7 @@ fn windows_program(name: &str) -> io::Result<Command> {
 
 /// Program output as text. `wsl.exe`'s own messages come in UTF-16, so the zero bytes between their letters are
 /// dropped; any byte that is still not UTF-8 becomes the replacement character.
-fn text(bytes: &[u8]) -> String {
+pub(crate) fn text(bytes: &[u8]) -> String {
     let kept: Vec<u8> = bytes.iter().copied().filter(|&b| b != 0).collect();
     String::from_utf8_lossy(&kept).into_owned()
 }

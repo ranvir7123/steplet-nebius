@@ -986,3 +986,295 @@ The folders match plan section 3 (with `.git` owned by `steplet`, per the H7 rev
 - Hosts other than github.com: no GitLab, Codeberg or Bitbucket repository was cloned.
 - A clone big enough to reach the time limits.
 - Two runs at once (`prepare` ends the last run's programs on purpose; one run at a time is the app's job in phase 4).
+## Task 7: the launcher, the stream reader, the events, and stop
+
+### Changes from the plan, recorded here
+
+- **The launch starts as root, as you decided (H1, Task 6).** `launch` installs `src/start-run.sh` fresh as `/opt/steplet/bin/start-run` (root, 755) and runs `wsl.exe --distribution-id <id> -u root --cd / --exec /opt/steplet/bin/start-run <run id> <seconds> <turns>`. The script:
+  - closes the shared folders;
+  - checks the layout (`/work` holds this run only; the settings file and MCP config are root's, 644);
+  - becomes `steplet` for good with `setpriv` (no powers, `no_new_privs`);
+  - runs section 3's command unchanged (`timeout -k 10`, the `env -i` list, Claude Code's flags).
+
+  `wsl.exe` still gets `SystemRoot` only, and the task still goes on standard input, which is then closed.
+- **How H1 closes the folders (measured below):**
+  - `/mnt/wsl` is replaced by a small folder of Steplet's own that holds a copy of the name lookup file. WSL puts the lookup file's link back at every new session, so an empty `/mnt/wsl` broke name lookup.
+  - `/mnt/wslg` and `/tmp/.X11-unix` are unmounted. The X11 one counts as closed when its path no longer reaches a mount of its own, because it can be listed while hidden under Ubuntu's own `/tmp`.
+  - `/tmp/claude` is removed (the point noted in Task 6).
+- **`parse_line(line) -> Vec<Event>`**, not `parse_event(line) -> Option<Event>`: one message can hold several blocks, and a dropped tool call would hide an action from Task 9's tripwires. A line that is not JSON gives `Unreadable`, a kind Steplet does not read gives `Other("type/subtype")`, and only the model's thinking gives nothing.
+- **`Event` gains `Started { model, tools, gate_connected }`.** It shows the model and whether the gate connected.
+- **`Result` carries `subtype` and the final `text`, and `ModelSwitch` carries the refusal's `explanation`,** which Task 10 and E1 need.
+- **`GateDecision` and `SkippedGate` come with Tasks 8 and 9,** which produce them.
+- **`launch(req, paths, logs, model_url)`** takes the request (task, turns, time limit), Steplet's logs folder on Windows (section 3: the stream is kept there unchanged as `<run id>.jsonl`, with `<run id>.stderr.txt`), and, for tests only, the scripted model's address. That address must be `http://127.0.0.1:<port>`.
+- **The test harness** (`tests/support/mod.rs`) drives the scripted model and the phase 0 stand-in gate and host until Task 8. It installs the stand-in gate at a path named after its contents (below).
+
+### The stream reader
+
+What the 44 recorded streams in `C:\dev\m1\logs` hold (`t7_kinds.py`, scratchpad; counts of lines by kind):
+
+```
+    51  (not JSON)                                         e.g. S2r-empty.jsonl
+     7  ?                                                  e.g. selftest.mcp-in.jsonl
+    47  assistant:text                                     e.g. L1.jsonl
+    16  assistant:thinking                                 e.g. L1.jsonl
+   162  assistant:tool_use                                 e.g. L1.jsonl
+     1  result/error_during_execution                      e.g. S1t.jsonl
+    35  result/success                                     e.g. L1.jsonl
+    38  system/init                                        e.g. L1.jsonl
+     3  system/model_refusal_fallback                      e.g. S6R-run1.jsonl
+     3  system/model_refusal_no_fallback                   e.g. S6R-off-run1.jsonl
+     1  system/task_notification                           e.g. S1t.jsonl
+     3  system/task_started                                e.g. S1k.jsonl
+    56  system/thinking_tokens                             e.g. L1.jsonl
+     1  user:text                                          e.g. S1t.jsonl
+   160  user:tool_result                                   e.g. L1.jsonl
+```
+
+None holds a hook event. Milestone 0's hook lines (`C:\dev\m0\logs\T3a_repo_files.txt`) are summaries from another version, so the parser treats anything whose type or subtype names a hook as a hook event (so the run stops), and Task 9's live hook test checks the real 2.1.220 shape.
+
+The fixture: one raw line of each kind, copied unchanged (`t7_fixture.py`, scratchpad):
+
+```
+line  1  init               from L1.jsonl
+line  2  thinking           from L1.jsonl
+line  3  text               from L1.jsonl
+line  4  tool_use           from L1.jsonl
+line  5  tool_result        from L1.jsonl
+line  6  result_success     from L1.jsonl
+line  7  tool_result_error  from S1b.jsonl
+line  8  interrupted_text   from S1t.jsonl
+line  9  task_notification  from S1t.jsonl
+line 10  result_error       from S1t.jsonl
+line 11  switch             from S6R-run1.jsonl
+line 12  no_switch          from S6R-off-run1.jsonl
+wrote 12 lines, 11115 bytes
+```
+
+L1 and S6R used the real test key, so the fixture was checked for it before going into the repository (S3's method, counts only):
+
+```
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+exit code: 0
+lines containing sk-ant: 0
+```
+
+Before the parser:
+
+```
+> cargo test -p steplet-run --offline --test stream
+error[E0432]: unresolved imports `steplet_run::Event`, `steplet_run::parse_line`
+error: could not compile `steplet-run` (test "stream") due to 1 previous error
+```
+
+After:
+
+```
+test every_hook_event_is_seen ... ok
+test a_refusal_shows_whether_the_model_switched ... ok
+test the_start_names_the_model_the_tools_and_whether_the_gate_connected ... ok
+test tool_results_say_whether_they_failed ... ok
+test the_end_of_a_run_as_claude_code_reports_it ... ok
+test the_agent_s_words_and_tool_calls ... ok
+test nothing_is_dropped_and_nothing_panics ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+### The launch, and four things its tests found
+
+The live tests (`tests/launch.rs`, `#[ignore]`) prepare a run from `octocat/Hello-World` (Task 6), start the scripted model inside Steplet's Linux and the stand-in host on Windows, and launch. The first run, with the first version of the start script, passed:
+
+```
+test a_scripted_run_streams_its_events_in_order ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 11.87s
+```
+
+**1. Name lookup broke for the next session.** The second test's clone failed, right after the first run:
+
+```
+called `Result::unwrap()` on an `Err` value: Step { step: "clone the repository", detail: "fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Could not resolve host: github.com\nsteplet-prepare: could not clone https://github.com/octocat/Hello-World.git" }
+```
+
+The first start script had made `/etc/resolv.conf` a plain copy and unmounted `/mnt/wsl`. As measured in Task 6, WSL then put the link back for the next session, and the link pointed into an empty folder. The same would break a run in the middle, including Claude Code's own connection to the model, whenever any new session started (the stop command, for one). **Fix:** `/mnt/wsl` is replaced by Steplet's own small folder (`tmpfs`, source `steplet-wsl`) holding a copy of the lookup file, so WSL's link keeps working. Nothing the other systems share there is visible. The first test now also clones a second time right after its run (below).
+
+**2. A program stopped starting from one path.** The next runs' gate never connected:
+
+```
+Stderr("apiKeyHelper failed: exited 1: /opt/steplet/gate/spike-gate.exe: Invalid argument")
+Started { ..., gate_connected: false }
+Stderr("Error: MCP tool mcp__gate__decide (passed via --permission-prompt-tool) not found. Available MCP tools: none")
+```
+
+Every tool call failed, so nothing ran unchecked. What was found, step by step (probes in the scratchpad):
+- WSL's handler for Windows programs was registered (`/proc/sys/fs/binfmt_misc/WSLInterop: enabled, interpreter /init, magic 4d5a`).
+- In a freshly started Linux, before any start-script step ran, the program at that path already failed: `before anything ... gate exit code 1 (/opt/steplet/gate/spike-gate.exe: Invalid argument)`. So the start script was not the cause.
+- The file is byte-for-byte the build (`c706ab5a…` on Windows, on the Linux disk, and read by Windows through `\\wsl.localhost\steplet\...`).
+- Starting it failed from every folder (`/tmp`, `/`, `/root`, `/opt/steplet/gate`).
+- **The same bytes at any other path start** (`/tmp/t7-new-gate.exe: exit code 101`, its expected stop on a missing option). So do the older build at a new name in the gate folder, and Windows' own `whoami.exe` (`exit code 0`).
+- The build runs on Windows from its own folder (`exit code 101`).
+- Smart App Control is off (`VerifiedAndReputablePolicyState` 0).
+- No Code Integrity event names it, and no readable McAfee log of the last 8 hours does.
+- No `spike-gate` process was left on Windows.
+- Replacing a program at a fresh path with a byte-identical new file did not reproduce it (all three starts `exit code 101`).
+
+**The cause was not found.** Something on Windows refuses to start the program from that one `\\wsl.localhost` path. The harness now installs the stand-in gate at a path named after its contents, and never replaces a gate file in place. **For Task 8:** the product gate should be installed the same way (a new name for each build, never overwritten); if Windows ever refuses a gate path, every run fails closed.
+
+**3. A mount that is listed but cannot be reached.** The next runs stopped in the start script (exit code 30):
+
+```
+Stderr("steplet-start: could not close /tmp/.X11-unix")
+```
+
+The mount table (`t7_x11.sh`):
+
+```
+ /tmp/.X11-unix (id, parent id, mount point, source):
+    80 65 / /dev/sdd
+    128 80 /tmp/.X11-unix none
+    131 80 /tmp tmpfs
+--- device of /tmp: 68; of /tmp/.X11-unix: 68
+--- mountpoint says: /tmp/.X11-unix is a mountpoint
+--- what the path shows:
+--- try a plain lazy unmount:
+    exit code 32
+--- entries left: 1
+```
+
+WSL's X11 mount (id 128) is on the root disk, and Ubuntu's own `/tmp` (id 131) was mounted over it later. So the path leads into the new `/tmp` and shows an empty folder, while `umount` says "not mounted" and fails. **Fix:** a folder counts as closed when its path no longer reaches a mount of its own (its device equals its parent folder's).
+
+**4. Ubuntu 26.04's core tools are the Rust rewrite** (`install (uutils coreutils) 0.8.0`). Its `install` refuses to replace an existing file from `/dev/stdin` without `-D`, and reports "No such file or directory":
+
+```
+with -D, round 1: exit 0, holds: version 1, said:
+with -D, round 2: exit 0, holds: version 2, said:
+with -D, round 3: exit 0, holds: version 3, said:
+without -D, round 4: exit 1, holds: version 3, said: install: No such file or directory
+without -D, round 5: exit 1, holds: version 3, said: install: No such file or directory
+```
+
+Steplet's code always passes `-D`. Also from these runs: **a stopped run and a run at its time limit both end with exit code 124**, so the report (Task 10) must take "Steplet stopped it" from Steplet's own record.
+
+### The code review, and what changed
+
+A read-only reviewer found nothing that must be fixed. Applied, each with a test first:
+- **A message line that also carried a `subtype` lost its tool calls** (it was read as `assistant/<subtype>`), and other kinds of call (`server_tool_use`, `mcp_tool_use`) came out as `Other`. Now a message is read by its type alone, and every block whose type ends in `tool_use` is a `ToolUse`. Before the fix, the new cases failed (`the_agent_s_words_and_tool_calls ... FAILED`, at `tests/stream.rs:54`).
+- **A stop in the first second could miss the run:** before its `exec`, the run is the root start script, which no `pkill` pattern matched, so the agent could start after the stop. Now `stop`, once a second for up to 10 s, kills this run's start script and sends the end signal to Claude Code. Then everything of the `steplet` account is killed, and `wsl.exe` last. Restoring the old `stop` (one end signal, then 10 s) makes the new test fail:
+
+```
+=== break: stop as it was before the review (one end signal, then 10 s)
+thread 'a_stop_right_after_launch_never_lets_the_agent_act' (7444) panicked at crates\steplet-run\tests\launch.rs:254:5:
+test a_stop_right_after_launch_never_lets_the_agent_act ... FAILED
+```
+
+  Removing only the start-script kill was not caught: the once-a-second end signal alone stopped the agent before it acted. The two are layers.
+- **Programs a run leaves running are killed when it ends** (`wait` and `stop`), and `wait` gives its readers 10 s, so a leftover holding an output open cannot hang it. Not proven by the test, and stated as such: with the leftover kill disabled, the test still found nothing left, because Claude Code ended its own background command when it exited (and the fence ends whatever a fenced command starts):
+
+```
+=== break: leftovers never ended
+--- steplet programs when the result came: 13; after wait (5.2 s, exit code Some(0)): 0
+test whatever_a_run_leaves_running_ends_with_it ... ok
+```
+
+- **The capability bounding set is emptied too** (`--bounding-set=-all`). The fence still works: a new user namespace starts with its own full set.
+- **The task text is checked to arrive whole.** The scripted model now logs the text blocks of the first user message, and the first test checks that the two-line task is among them. If a step before the `exec` read the task from standard input, it would fail.
+- Not changed: `pkill`'s pattern (the run id and the paths hold no special characters), and no length limit per stream line (the source is local).
+
+### The final runs
+
+```
+> cargo test -p steplet-run --offline --test launch -- --ignored --nocapture --test-threads=1
+running 5 tests
+test a_scripted_run_streams_its_events_in_order ... --- every event of run t7a:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_e71e43d1d98b40ca88e9", name: "Bash", input: Object {"command": String("git checkout 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d 2>&1; echo \"EXIT=$?\""), "description": String("Check out the declar...
+    ToolResult { id: "toolu_test_e71e43d1d98b40ca88e9", is_error: false, text: "fatal: Unable to create '/work/t7a/repo/.git/index.lock': Read-only file system\nEXIT=128" }
+    ToolUse { id: "toolu_test_d28bcad7da164fdcad99", name: "Bash", input: Object {"command": String("cat README; echo \"EXIT=$?\""), "description": String("Run the tests")} }
+    ToolResult { id: "toolu_test_d28bcad7da164fdcad99", is_error: false, text: "Hello World!\nEXIT=0" }
+    AgentText("Task 7: the scripted run is done.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Task 7: the scripted run is done." }
+--- exit code: Some(0)
+--- 7 lines kept in C:\Users\RANVIR\AppData\Local\Steplet\logs\t7a.jsonl
+--- the first user message, as the scripted model received it: ["<system-reminder>\nAs you answer the user's questions, you can use the following context:\n# currentDate\nToday's date is 2026-10-14.\n\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n", "Follow the script.\nSecond line of the Steplet test task t7a, which must arrive whole."]
+--- after the run, in a new session: /mnt/wsl steplet-wsl; resolv.conf; /mnt/wsl/resolv.conf
+ok
+test a_stop_right_after_launch_never_lets_the_agent_act ... --- stopped at once; exit code Some(9); every event:
+--- acted: no; programs of the steplet account left: 0; start scripts left: 0
+ok
+test stop_ends_a_run_mid_command_and_leaves_nothing_running ... --- seen from outside while the command ran:
+mounts under /mnt: [/mnt/wsl steplet-wsl ]
+/mnt/wsl holds: [resolv.conf ]
+resolv.conf: /mnt/wsl/resolv.conf
+name lookup: works
+/tmp/claude: absent
+process timeout: user steplet CapEff: 0000000000000000 CapBnd: 0000000000000000 NoNewPrivs: 1
+process claude: user steplet CapEff: 0000000000000000 CapBnd: 0000000000000000 NoNewPrivs: 1
+root processes of the run: 0
+--- stopped after 0.7 s; exit code Some(124); every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_7408e5804f6340709977", name: "Bash", input: Object {"command": String("sleep 120; echo slept"), "description": String("Stay busy")} }
+    Other("system/task_started")
+    Other("system/task_notification")
+    ToolResult { id: "toolu_test_7408e5804f6340709977", is_error: true, text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the ...
+    Other("user/text")
+    Result { subtype: "error_during_execution", is_error: true, stop_reason: "tool_use", models: ["claude-opus-5[1m]"], text: "" }
+--- programs of the steplet account left: 0
+ok
+test the_time_limit_ends_a_run ... --- run t7c ended after 20.6 s (prepare included), exit code Some(124)
+    (the same events as the stop above, with their own ids)
+ok
+test whatever_a_run_leaves_running_ends_with_it ... --- events:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_766c7e1cbb884e64bcae", name: "Bash", input: Object {"command": String("sleep 300"), "description": String("Leave something running"), "run_in_background": Bool(true)} }
+    Other("system/background_tasks_changed")
+    Other("system/task_started")
+    ToolResult { id: "toolu_test_766c7e1cbb884e64bcae", is_error: false, text: "Command running in background with ID: binc2lvlu. Output is being written to: /var/lib/steplet/runs/t7e/tmp/claude-999/-work-t7e-repo/8a183582-9...
+    AgentText("Done, with something left running.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Done, with something left running." }
+--- steplet programs when the result came: 13; after wait (5.4 s, exit code Some(0)): 0
+ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 57.50s
+```
+
+What they show, against the plan's Step 4:
+- **The event sequence for a scripted run** is `Started` (the gate connected, H5's seven tools only), then `ToolUse` (checkout), `ToolResult`, `ToolUse` (tests), `ToolResult`, the agent's text, and `Result`. The exit code is 0, and the stream is kept unchanged on Windows.
+- **A stop in the middle of a command (F37)** ends with exactly one `Result` (`error_during_execution`) and no `steplet` program left; so does the time limit (exit code 124).
+- **H1, seen from outside while the agent ran:** under `/mnt` only Steplet's own folder, holding only the lookup file; name lookup works; `/tmp/claude` is absent. Both of the run's programs are `steplet`, with no powers, an empty bounding set and `no_new_privs`; none of the run's programs is root.
+- **A second clone right after a run** works (the regression from finding 1).
+
+Then the rest of the crate, and Task 6's Linux tests again, since `wsl.rs` changed under them:
+
+```
+> cargo fmt --all -- --check
+fmt exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit code: 0
+> cargo test -p steplet-run --offline     (the "Running" and "test result" lines)
+     Running unittests src\lib.rs (target\debug\deps\steplet_run-69c98f84c3c22b38.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\decide.rs (target\debug\deps\decide-081efc8f1b1a45b2.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\launch.rs (target\debug\deps\launch-444583d51df510c9.exe)
+test result: ok. 1 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\prepare.rs (target\debug\deps\prepare-8568093f74a6ab1e.exe)
+test result: ok. 2 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.63s
+     Running tests\settings.rs (target\debug\deps\settings-c9824e0201d52b9c.exe)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\stream.rs (target\debug\deps\stream-d49a474abde3d3bf.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test exit code: 0
+> cargo test -p steplet-run --offline --test prepare -- --ignored --test-threads=1
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 24.58s
+```
+
+
+**Not verified in this task:**
+- The real gate (Task 8): these runs used the phase 0 stand-in in `allow` mode, so nothing was checked by `Policy::check` yet.
+- The real model (all scripted).
+- A hook event's real shape in 2.1.220 (Task 9).
+- The cause of the "Invalid argument" path.
+- Whether a leftover program can outlive Claude Code (the test could not make one).
+- A run longer than a few minutes.
+- A change of network during a run (the lookup file is a copy taken at the start).

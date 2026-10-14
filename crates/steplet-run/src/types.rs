@@ -171,6 +171,56 @@ pub struct RunRequest {
     pub deadline: Duration,
 }
 
+/// One thing that happened in a run, as read from Claude Code's event stream or its error output. Nothing on the
+/// stream is dropped without a trace except the model's thinking: a kind Steplet does not read becomes `Other`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    /// The run started: the model, the tools offered, and whether the gate's MCP server connected.
+    Started {
+        model: String,
+        tools: Vec<String>,
+        gate_connected: bool,
+    },
+    /// Text the agent wrote. Shown only as "the agent says", never read for the run's outcome (F47).
+    AgentText(String),
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
+    ToolResult {
+        id: String,
+        is_error: bool,
+        text: String,
+    },
+    /// A hook started, ran or answered. Any of them stops the run (D3).
+    HookEvent {
+        name: String,
+    },
+    /// The model refused. `to` is the model Claude Code then switched to, if it did (E1, D7).
+    ModelSwitch {
+        from: String,
+        to: Option<String>,
+        category: String,
+        explanation: String,
+    },
+    /// The run's end as Claude Code reports it; `models` are the keys of its `modelUsage`. Not the outcome by
+    /// itself (F35): a refused run says `success`.
+    Result {
+        subtype: String,
+        is_error: bool,
+        stop_reason: String,
+        models: Vec<String>,
+        text: String,
+    },
+    /// One line of Claude Code's error output.
+    Stderr(String),
+    /// A line on the event stream that is not a JSON object.
+    Unreadable(String),
+    /// A JSON event of a kind Steplet does not read, named `type/subtype`.
+    Other(String),
+}
+
 /// One permission request from the agent, as `steplet-gate.exe` relays it over the pipe.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GateRequest {

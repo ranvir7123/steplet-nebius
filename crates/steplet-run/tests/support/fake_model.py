@@ -12,7 +12,8 @@ already in the conversation, so retries and side requests never move the script 
   {"refusal": {"message": {...}, "delta": {...}},    the model refuses: stop reason "refusal", with the given
    "text_after_refusal": "..."}                       fields merged in; a repeat request at the same step
                                                       gets text_after_refusal instead
-Requests without tools (titles, summaries) get the text "ok". One JSON line is logged per request.
+Requests without tools (titles, summaries) get the text "ok". One JSON line is logged per request; the agent loop's
+first request also logs the text blocks of the first user message, so a test can check the task arrived whole.
 Keys are never logged: only whether one was sent, and whether its SHA-256 equals the expected one.
 """
 import hashlib
@@ -43,6 +44,17 @@ def tool_results_in(messages):
         if m.get("role") == "user" and isinstance(m.get("content"), list):
             count += sum(1 for b in m["content"] if isinstance(b, dict) and b.get("type") == "tool_result")
     return count
+
+
+def first_user_texts(messages):
+    """The text blocks of the first user message: the task as the agent received it (test data only)."""
+    for m in messages:
+        if m.get("role") == "user":
+            c = m.get("content")
+            if isinstance(c, str):
+                return [c[:2000]]
+            return [b.get("text", "")[:2000] for b in c if isinstance(b, dict) and b.get("type") == "text"]
+    return []
 
 
 def step_for(number):
@@ -106,6 +118,8 @@ class Handler(BaseHTTPRequestHandler):
             number = tool_results_in(body.get("messages") or [])
             step = step_for(number)
             entry.update(kind="agent loop", step=number, answer=next(iter(step)))
+            if number == 0:
+                entry["first_user_texts"] = first_user_texts(body.get("messages") or [])
         else:
             step = {"text": "ok"}
             entry.update(kind="side request")
