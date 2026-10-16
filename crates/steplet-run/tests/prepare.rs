@@ -31,7 +31,9 @@ fn request(url: &str, commit: &str) -> RunRequest {
 
 fn gate(run_id: &str) -> GateLink {
     let log = format!(r"C:\Users\Test User\AppData\Local\Steplet\logs\{run_id}.gate.log");
-    GateLink::new("/opt/steplet/gate/steplet-gate.exe", &format!("steplet-{run_id}"), "0123abcd", &log).unwrap()
+    let deadline = Duration::from_secs(30);
+    GateLink::new("/opt/steplet/gate/steplet-gate.exe", &format!("steplet-{run_id}"), "0123abcd", &log, deadline)
+        .unwrap()
 }
 
 fn steplet_linux() -> String {

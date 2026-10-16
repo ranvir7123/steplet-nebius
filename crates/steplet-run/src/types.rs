@@ -1,5 +1,6 @@
 //! The runner's shared types. Each is added by the task that first needs it (plan section 6 gives the full list).
 
+use std::fmt;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -93,22 +94,23 @@ impl RunPaths {
 }
 
 /// How Claude Code reaches the gate in one run: the gate program on Steplet's Linux disk, the pipe it relays to, the
-/// run's token, and the gate's log (a Windows path: the gate is a Windows program). Made only by `new`, which checks
-/// its values, and read-only after that.
-#[derive(Clone, Debug, PartialEq)]
+/// run's token, the gate's log (a Windows path: the gate is a Windows program), and Steplet's limit on each decision
+/// (F36). Made only by `new`, which checks its values, and read-only after that. Its `Debug` hides the token.
+#[derive(Clone, PartialEq)]
 pub struct GateLink {
     exe: String,
     pipe: String,
     token: String,
     log: String,
+    deadline: Duration,
 }
 
 impl GateLink {
     /// The program, pipe name and token also go into `apiKeyHelper`, a line Claude Code hands to a shell, so each is
     /// made of plain words (the program is an absolute path of them). The log is passed as one argument, not through
     /// a shell, so only an empty log, a leading `-` (the gate would read it as an option) or a control character is
-    /// refused.
-    pub fn new(exe: &str, pipe: &str, token: &str, log: &str) -> Result<GateLink, BadValue> {
+    /// refused. The deadline is from a tenth of a second to an hour.
+    pub fn new(exe: &str, pipe: &str, token: &str, log: &str, deadline: Duration) -> Result<GateLink, BadValue> {
         let path_ok = exe
             .strip_prefix('/')
             .is_some_and(|rest| rest.split('/').all(|part| plain_word(part) && part != "." && part != ".."));
@@ -124,7 +126,10 @@ impl GateLink {
         if log.is_empty() || log.starts_with('-') || log.chars().any(char::is_control) {
             return Err(BadValue("gate log"));
         }
-        Ok(GateLink { exe: exe.into(), pipe: pipe.into(), token: token.into(), log: log.into() })
+        if !(Duration::from_millis(100)..=Duration::from_secs(3600)).contains(&deadline) {
+            return Err(BadValue("gate deadline"));
+        }
+        Ok(GateLink { exe: exe.into(), pipe: pipe.into(), token: token.into(), log: log.into(), deadline })
     }
 
     pub fn exe(&self) -> &str {
@@ -142,6 +147,28 @@ impl GateLink {
     pub fn log(&self) -> &str {
         &self.log
     }
+
+    /// How long Steplet takes at most to answer one request; a decision not made by then is a refusal.
+    pub fn deadline(&self) -> Duration {
+        self.deadline
+    }
+
+    /// The deadline as the gate's `--deadline-ms` option.
+    pub(crate) fn deadline_ms(&self) -> String {
+        self.deadline.as_millis().to_string()
+    }
+}
+
+impl fmt::Debug for GateLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GateLink")
+            .field("exe", &self.exe)
+            .field("pipe", &self.pipe)
+            .field("token", &HIDDEN)
+            .field("log", &self.log)
+            .field("deadline", &self.deadline)
+            .finish()
+    }
 }
 
 /// True for a word a shell reads as itself and a program does not read as an option: 1 to 128 ASCII letters, digits,
@@ -153,7 +180,7 @@ fn plain_word(s: &str) -> bool {
 }
 
 /// True for a GUID in braces, `{8-4-4-4-12}` hexadecimal digits, as WSL's registry names each distribution.
-fn is_guid(s: &str) -> bool {
+pub(crate) fn is_guid(s: &str) -> bool {
     let Some(inner) = s.strip_prefix('{').and_then(|rest| rest.strip_suffix('}')) else { return false };
     let groups: Vec<&str> = inner.split('-').collect();
     groups.len() == 5
@@ -221,14 +248,29 @@ pub enum Event {
     Other(String),
 }
 
-/// One permission request from the agent, as `steplet-gate.exe` relays it over the pipe.
-#[derive(Clone, Debug, PartialEq)]
+/// One permission request from the agent, as `steplet-gate.exe` relays it over the pipe. Its `Debug` hides the run
+/// token.
+#[derive(Clone, PartialEq)]
 pub struct GateRequest {
     pub run_token: String,
     pub tool_name: String,
     pub input: Value,
     pub tool_use_id: String,
 }
+
+impl fmt::Debug for GateRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GateRequest")
+            .field("run_token", &HIDDEN)
+            .field("tool_name", &self.tool_name)
+            .field("input", &self.input)
+            .field("tool_use_id", &self.tool_use_id)
+            .finish()
+    }
+}
+
+/// What a hidden value shows as in `Debug`.
+const HIDDEN: &str = "(hidden)";
 
 /// The answer the gate hands back to Claude Code.
 #[derive(Clone, Debug, PartialEq)]

@@ -1,7 +1,7 @@
 # Steplet product code. spikes/ is a separate, throwaway workspace and is not part of this one.
 [workspace]
 resolver = "3"
-members = ["crates/steplet-core", "crates/steplet-sign", "crates/steplet-wasm", "crates/steplet-run"]
+members = ["crates/steplet-core", "crates/steplet-sign", "crates/steplet-wasm", "crates/steplet-run", "crates/steplet-gate"]
 exclude = ["spikes", "crates/steplet-core/fuzz"]
 
 [workspace.package]

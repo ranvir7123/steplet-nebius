@@ -1,5 +1,6 @@
 //! Starting the agent, reading its events, and stopping it (plan Task 7). The tests marked `#[ignore]` need Steplet's
-//! Linux, the network (for the clone) and the phase 0 stand-ins (see `support`); they run one at a time:
+//! Linux and the network (for the clone); since Task 8 they use the real gate, answering "allow" to everything, as
+//! the phase 0 stand-in host did. They run one at a time:
 //! `cargo test -p steplet-run --offline --test launch -- --ignored --test-threads=1`.
 
 mod support;
@@ -9,8 +10,10 @@ use std::time::{Duration, Instant};
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
-use steplet_run::{Event, GateLink, LaunchError, RunHandle, RunPaths, RunRequest, discard, launch, prepare};
-use support::{Helper, gate_log, install_stand_in_gate, logs_dir, root_sh, scripted_model, stand_in_host};
+use steplet_run::{
+    Event, GateLink, GateService, LaunchError, RunHandle, RunPaths, RunRequest, discard, launch, prepare,
+};
+use support::{Helper, allow_everything, gate_log, install_gate, logs_dir, root_sh, scripted_model, serve_gate};
 
 const HELLO: (&str, &str) = ("https://github.com/octocat/Hello-World.git", "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d");
 
@@ -53,15 +56,18 @@ fn print_all(events: &[Event]) {
     }
 }
 
-/// One prepared run with the scripted model and the stand-in gate, until the returned guards are dropped.
-fn start(run_id: &str, port: u16, script: &str, seconds: u64, task: &str) -> (RunHandle, RunPaths, Helper, Helper) {
+/// One prepared run with the scripted model and the gate, until the returned guards are dropped.
+fn start(
+    run_id: &str,
+    port: u16,
+    script: &str,
+    seconds: u64,
+    task: &str,
+) -> (RunHandle, RunPaths, GateService, Helper) {
     let distro = support::steplet_linux();
-    let gate_exe = install_stand_in_gate(&distro);
-    let (pipe, token) = (format!("steplet-{run_id}"), format!("{run_id}token0123"));
-    let host = stand_in_host(&pipe, &token);
+    let (gate, host) = serve_gate(&distro, run_id, Duration::from_secs(10), allow_everything);
     let model = scripted_model(&distro, run_id, script, port);
     let paths = RunPaths::new(&distro, run_id).unwrap();
-    let gate = GateLink::new(&gate_exe, &pipe, &token, &gate_log(run_id)).unwrap();
     let mut req = request(seconds);
     req.task_text = task.into();
     prepare(&req, &paths, &gate).unwrap();
@@ -85,7 +91,7 @@ fn launch_refuses_values_it_would_misread() {
 }
 
 #[test]
-#[ignore = "needs Steplet's Linux, the network and the stand-ins"]
+#[ignore = "needs Steplet's Linux and the network"]
 fn a_scripted_run_streams_its_events_in_order() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let script = r#"{"steps": [
@@ -150,14 +156,15 @@ fn a_scripted_run_streams_its_events_in_order() {
     );
     println!("--- after the run, in a new session: {after}");
     let next = RunPaths::new(distro, "t7a2").unwrap();
-    let gate_exe = install_stand_in_gate(distro);
-    let gate = GateLink::new(&gate_exe, "steplet-t7a2", "t7a2token", &gate_log("t7a2")).unwrap();
+    let gate_exe = install_gate(distro);
+    let gate =
+        GateLink::new(&gate_exe, "steplet-t7a2", "t7a2token", &gate_log("t7a2"), Duration::from_secs(10)).unwrap();
     prepare(&request(60), &next, &gate).expect("a second clone right after a run");
     discard(&next).unwrap();
 }
 
 #[test]
-#[ignore = "needs Steplet's Linux, the network and the stand-ins"]
+#[ignore = "needs Steplet's Linux and the network"]
 fn stop_ends_a_run_mid_command_and_leaves_nothing_running() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let script = r#"{"steps": [
@@ -215,7 +222,7 @@ echo "root processes of the run: $(pgrep -u root -f SETTINGS | wc -l)""#;
 }
 
 #[test]
-#[ignore = "needs Steplet's Linux, the network and the stand-ins"]
+#[ignore = "needs Steplet's Linux and the network"]
 fn the_time_limit_ends_a_run() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let script = r#"{"steps": [
@@ -238,7 +245,7 @@ fn wsl_count(distro: &str, argv: &[&str]) -> usize {
 }
 
 #[test]
-#[ignore = "needs Steplet's Linux, the network and the stand-ins"]
+#[ignore = "needs Steplet's Linux and the network"]
 fn a_stop_right_after_launch_never_lets_the_agent_act() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let script = r#"{"steps": [
@@ -261,7 +268,7 @@ fn a_stop_right_after_launch_never_lets_the_agent_act() {
 }
 
 #[test]
-#[ignore = "needs Steplet's Linux, the network and the stand-ins"]
+#[ignore = "needs Steplet's Linux and the network"]
 fn whatever_a_run_leaves_running_ends_with_it() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let script = r#"{"steps": [

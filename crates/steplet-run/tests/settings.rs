@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde_json::{Value, json};
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
@@ -14,8 +16,11 @@ fn paths(run_id: &str) -> RunPaths {
 
 const LOG: &str = r"C:\Users\Test User\AppData\Local\Steplet\logs\r1.gate.log";
 
+/// Steplet's limit on one gate decision, in these tests.
+const DEADLINE: Duration = Duration::from_secs(30);
+
 fn gate(exe: &str, pipe: &str, token: &str) -> GateLink {
-    GateLink::new(exe, pipe, token, LOG).unwrap()
+    GateLink::new(exe, pipe, token, LOG, DEADLINE).unwrap()
 }
 
 fn read(text: &str) -> Value {
@@ -42,6 +47,7 @@ fn the_gate_link_keeps_its_values() {
         [g.exe(), g.pipe(), g.token(), g.log()],
         ["/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd", LOG]
     );
+    assert_eq!(g.deadline(), DEADLINE);
 }
 
 #[test]
@@ -67,7 +73,7 @@ fn the_settings_are_exactly_the_planned_shape() {
                 "deny": ["Read(//mnt/**)", "Read(//var/lib/steplet/**)", "Edit(//work/r1/repo/.git/**)"]
             },
             "switchModelsOnFlag": false,
-            "apiKeyHelper": "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token 0123abcd"
+            "apiKeyHelper": "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token 0123abcd --deadline-ms 30000"
         })
     );
 }
@@ -75,8 +81,12 @@ fn the_settings_are_exactly_the_planned_shape() {
 #[test]
 fn the_settings_match_the_file_the_task_2_runs_used() {
     // The file Task 2's scripted and real-model runs used, with its token placeholder (spikes/p3/p2.settings.json).
+    // Since Task 8 the key mode also gets Steplet's deadline; the rest is unchanged.
     let g = gate("/opt/steplet/gate/spike-gate.exe", "steplet-p3-p2", "RUN_TOKEN");
-    assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g)), read(include_str!("support/task2.settings.json")));
+    let mut used = read(include_str!("support/task2.settings.json"));
+    let helper = format!("{} --deadline-ms 30000", used["apiKeyHelper"].as_str().unwrap());
+    used["apiKeyHelper"] = helper.into();
+    assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g)), used);
 }
 
 #[test]
@@ -108,7 +118,7 @@ fn the_mcp_config_names_the_gate_as_its_only_server() {
                 "gate": {
                     "type": "stdio",
                     "command": "/opt/steplet/gate/steplet-gate.exe",
-                    "args": ["--pipe", "steplet-r1", "--token", "0123abcd", "--log", LOG]
+                    "args": ["--pipe", "steplet-r1", "--token", "0123abcd", "--log", LOG, "--deadline-ms", "30000"]
                 }
             }
         })
@@ -144,7 +154,7 @@ fn a_distribution_id_must_be_a_windows_guid() {
 fn a_gate_value_that_a_shell_could_misread_is_refused() {
     let exe = "/opt/steplet/gate/steplet-gate.exe";
     let long = "t".repeat(129);
-    assert!(GateLink::new(exe, "p", &"t".repeat(128), LOG).is_ok(), "128 characters is the longest word");
+    assert!(GateLink::new(exe, "p", &"t".repeat(128), LOG, DEADLINE).is_ok(), "128 characters is the longest word");
     for (exe, pipe, token, log) in [
         (exe, "p", long.as_str(), LOG),
         ("steplet-gate.exe", "p", "t", LOG),
@@ -160,6 +170,17 @@ fn a_gate_value_that_a_shell_could_misread_is_refused() {
         (exe, "p", "t", "--key"),
         (exe, "p", "t", "C:\\logs\nx"),
     ] {
-        assert!(GateLink::new(exe, pipe, token, log).is_err(), "{exe:?} {pipe:?} {token:?} {log:?}");
+        assert!(GateLink::new(exe, pipe, token, log, DEADLINE).is_err(), "{exe:?} {pipe:?} {token:?} {log:?}");
+    }
+}
+
+#[test]
+fn a_gate_deadline_outside_a_tenth_of_a_second_to_an_hour_is_refused() {
+    let exe = "/opt/steplet/gate/steplet-gate.exe";
+    for ok in [Duration::from_millis(100), Duration::from_secs(3600)] {
+        assert!(GateLink::new(exe, "p", "t", LOG, ok).is_ok(), "{ok:?}");
+    }
+    for bad in [Duration::ZERO, Duration::from_millis(99), Duration::from_millis(3_600_001)] {
+        assert!(GateLink::new(exe, "p", "t", LOG, bad).is_err(), "{bad:?}");
     }
 }

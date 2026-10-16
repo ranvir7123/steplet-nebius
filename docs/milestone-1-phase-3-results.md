@@ -1278,3 +1278,384 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; fini
 - Whether a leftover program can outlive Claude Code (the test could not make one).
 - A run longer than a few minutes.
 - A change of network during a run (the lookup file is a copy taken at the start).
+
+## Task 8: the gate service and the gate program, with the deadline
+
+Started 16 Oct 2026, on `main` at `56d0433` (pull request 2 merged; this branch fast-forwarded onto it).
+
+What was built:
+- **`steplet-gate.exe`** (new crate `crates/steplet-gate`, serde_json only). Claude Code starts it inside Steplet's Linux as its permission-prompt server. It holds no logic and no state: each request goes to Steplet on a connection of its own. Anything but a clear answer in time is a refusal: no pipe, a closed pipe, an answer of the wrong shape, or no answer by Steplet's deadline plus 2 s. Its `--key` mode is Claude Code's `apiKeyHelper` (H2): it prints the key alone, or nothing. Its log names each decision (tool, request id, answer, time) and never the input or the token.
+- **The gate service** (`crates/steplet-run/src/gate.rs`). It is Steplet's end of the run's pipe, made before the launch, and it refuses to start if anyone else already holds the pipe's name. For each connection, in this order:
+  1. it reads the request (at most 16 MiB, within the deadline);
+  2. it checks who connected: the gate program, Steplet's own Windows account and sign-in session, at least medium integrity, not restricted, not in an app container;
+  3. it checks the run's token;
+  4. it gives the decision until the deadline;
+  5. it records what was asked, before sending the answer, and marks the answer delivered once the gate has read all of it (at most 5 s, then the connection is cut).
+
+  `GateService::requests()` returns that record.
+- **Who connected** (`crates/steplet-run/src/client.rs`): every Windows call Steplet makes about a client, and the pipe's permission list. Only Steplet's own account may open the pipe; programs below medium integrity may neither read nor write it. (Windows' default list lets everyone read.)
+- **The gate program on the Linux disk:** `install_gate` names it after its contents (SHA-256), writes a new build to a `.part` file and renames it into place, and uses a file already there only if its SHA-256 matches. A gate file is never overwritten (Task 7, finding 2).
+
+### Changes from the plan, recorded here
+
+- **`serve(link, program, key, decide)`**, not `serve(pipe, token, policy, deadline)`:
+  - The pipe, the token and the deadline come from the `GateLink` the gate itself is started with, so the two ends cannot disagree.
+  - `program` is the gate program as Windows names it (measured below).
+  - `key` is served to the key mode (H2 needs the same pipe).
+  - `decide` is a function, so a decision that never comes can be tested, and phase 4's ask screen can plug in. Steplet's runs pass `decide(&policy, request)`, so the one checker (row 29) still makes every decision.
+- **The gate gets `--deadline-ms`**, and `GateLink` carries the deadline (a tenth of a second to an hour). The gate keeps its own timer: Steplet's deadline plus 2 s. That timer covers the case where Steplet's end of the pipe stops answering altogether; Steplet's own refusal at its deadline normally comes first. The plan listed only `--pipe`, `--token`, `--log` and `--key`.
+- **`requests()` returns `Asked` records** (`Decision`, `Key`, `Refused`), each with who connected. Task 9 needs what was asked, Task 10 the refusals, and this task the gate's identity. They are in the order Steplet *answered*, not the order asked (measured in the crash run below), so Task 9 must match them by request id. A decision with `delivered: false` was not acted on.
+- **No `Event::GateDecision`.** The decisions are on `requests()`; Task 9 decides whether to merge them into one list.
+- **The crash case kills the gate mid-request from outside** (F39, T2d). There is no `--crash-once` option in the product gate: no test-only behaviour in shipped code.
+- **Tests in two files:**
+  - `crates/steplet-gate/tests/gate.rs`: the gate program against a stand-in for Steplet's end of the pipe.
+  - `crates/steplet-run/tests/gate.rs`: the service, with the test program itself playing the gate, plus three `#[ignore]` live runs.
+
+  The tests that need only Windows are ordinary tests, not `#[ignore]`.
+- **The test harness uses the real gate now.** It builds `steplet-gate` from this source into `target/gate-for-tests`, and installs it as Steplet does. Task 7's launch tests run through it, with an allow-everything decision as the stand-in host's `allow` mode had. The phase 0 stand-ins are no longer used by any test.
+- **mio pinned to 1.2.2.** Cargo picked mio 1.2.4 for tokio, but it was published on 3 Oct 2026, so it is 13 days old: under F12's 14 days (pasted below). 1.2.2 is in the cache and is 90 days old; tokio needs 1.2.0 or later.
+
+### Before the code
+
+The gate crate as an empty program, and the runner without the service:
+
+```
+> cargo test -p steplet-gate --offline
+test options_it_does_not_know_are_refused ... FAILED
+test the_handshake_offers_one_tool_and_ignores_what_it_cannot_read ... FAILED
+test the_key_mode_prints_the_key_alone_or_nothing ... FAILED
+test the_log_names_each_decision_but_never_its_input ... FAILED
+test no_answer_from_steplet_is_a_refusal_at_steplet_s_deadline ... FAILED
+test steplet_s_answer_reaches_claude_code_and_the_request_carries_the_run_s_token ... FAILED
+test an_answer_of_the_wrong_shape_is_a_refusal ... FAILED
+test a_pipe_closed_without_an_answer_and_a_missing_pipe_are_refusals ... FAILED
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+> cargo test -p steplet-run --offline --no-run     (each error kind once, with its count)
+      1 error: could not compile `steplet-run` (example "settings") due to 1 previous error
+      1 error: could not compile `steplet-run` (test "gate") due to 8 previous errors
+      1 error: could not compile `steplet-run` (test "launch") due to 6 previous errors
+      1 error: could not compile `steplet-run` (test "prepare") due to 1 previous error
+      1 error: could not compile `steplet-run` (test "settings") due to 6 previous errors
+     10 error[E0061]: this function takes 4 arguments but 5 arguments were supplied
+      1 error[E0425]: cannot find function `gate_file_name` in crate `steplet_run`
+      1 error[E0425]: cannot find function `gate_on_windows` in crate `steplet_run`
+      2 error[E0425]: cannot find function `install_gate` in crate `steplet_run`
+      1 error[E0432]: unresolved import `steplet_run::GateService`
+      1 error[E0432]: unresolved imports `steplet_run::ApiKey`, `steplet_run::Asked`, `steplet_run::GateError`, `steplet_run::GateService`, `steplet_run::serve`
+      1 error[E0432]: unresolved imports `steplet_run::ApiKey`, `steplet_run::GateService`, `steplet_run::gate_on_windows`, `steplet_run::serve`
+      1 error[E0433]: cannot find `Client` in `steplet_run`
+      1 error[E0599]: no method named `deadline` found for struct `GateLink` in the current scope
+```
+
+### The gate program on its own (`crates/steplet-gate/tests/gate.rs`)
+
+A stand-in plays Steplet's end of the pipe. These tests start the gate on Windows directly, so its log shows the test's own 127 Windows variables. Started by Claude Code inside Steplet's Linux, it sees one (below).
+
+```
+> cargo test -p steplet-gate --offline -- --nocapture --test-threads=1     (the test lines and what they printed)
+test a_pipe_closed_without_an_answer_and_a_missing_pipe_are_refusals ... --- no pipe: refused in 7 ms: {"behavior":"deny","message":"Steplet refused this: Steplet is not serving this run."}
+test an_answer_of_the_wrong_shape_is_a_refusal ... ok
+test no_answer_from_steplet_is_a_refusal_at_steplet_s_deadline ... --- Steplet held the request: refused after 3007 ms: {"behavior":"deny","message":"Steplet refused this: Steplet did not answer in time."}
+--- gate log:
+1792147324.218 pid=47672 started; 127 Windows variables: ACSetupSvcPort,ACSvcPort,AI_AGENT,ALLUSERSPROFILE,ANTHROPIC_BASE_URL,API_TIMEOUT_MS,APPDATA,BAGGAGE,CARGO,CARGO_BIN_EXE_steplet-gate,CARGO_HOME
+1792147327.219 pid=47672 tool=Read id=toolu_t8_1 behavior=deny ms=3000
+1792147327.219 pid=47672 refused by the gate itself: Steplet did not answer in time
+1792147327.220 pid=47672 tool=Read id=toolu_t8_2 behavior=allow ms=0
+1792147327.220 pid=47672 standard input closed; ending
+test options_it_does_not_know_are_refused ... ok
+test steplet_s_answer_reaches_claude_code_and_the_request_carries_the_run_s_token ... --- allowed in 6 ms: {"behavior":"allow","updatedInput":{"command":"cargo test","description":"Run the tests"}}
+test the_handshake_offers_one_tool_and_ignores_what_it_cannot_read ... ok
+test the_key_mode_prints_the_key_alone_or_nothing ... --- key mode, Steplet held the request: exit code Some(1) after 3049 ms
+test the_log_names_each_decision_but_never_its_input ... --- gate log:
+1792147331.393 pid=31076 started; 127 Windows variables: ACSetupSvcPort,ACSvcPort,AI_AGENT,ALLUSERSPROFILE,ANTHROPIC_BASE_URL,API_TIMEOUT_MS,APPDATA,BAGGAGE,CARGO,CARGO_BIN_EXE_steplet-gate,CARGO_HOME
+1792147331.394 pid=31076 tool=Write id=toolu_t8_7 behavior=allow ms=0
+1792147331.394 pid=31076 standard input closed; ending
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.34s
+```
+
+(Log lines are cut at 200 characters here; each "started" line goes on to list the rest of the variable names.)
+
+What they cover, beyond the lines above:
+- the MCP handshake (one tool, `decide`; a notification or a line that is not JSON gets no reply; a call to any other tool is an error and asks Steplet nothing);
+- nine answers of the wrong shape, each a refusal (F38);
+- a closed pipe, then the next request answered as if nothing had happened (no state between requests);
+- the key mode printing the key alone with no line ending, and nothing (exit code 1) for an error, an empty key, an unreadable answer, a closed pipe, a held request, or no pipe;
+- twelve wrong command lines (exit code 2), including `--crash-once` and a deadline over an hour.
+
+### The service, with this test program playing the gate (`crates/steplet-run/tests/gate.rs`)
+
+```
+> cargo test -p steplet-run --offline --test gate -- --nocapture --test-threads=1     (the test lines and what they printed; full records left out)
+test a_client_that_never_reads_its_answer_is_let_go ... --- read after 9 s: 0 of about 4194304 bytes (Err(Os { code: 233, kind: Uncategorized, message: "No process is on the other end of the pipe." }))
+test a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered ... --- the silent client was let go after 1015 ms: Ok(0)
+--- not JSON: {"behavior":"deny","message":"Steplet refused this: the request is not JSON."}
+--- not an object: {"behavior":"deny","message":"Steplet refused this: the request carries no run token."}
+--- no kind: {"behavior":"deny","message":"Steplet refused this: the request is of no kind Steplet reads."}
+--- no tool: {"behavior":"deny","message":"Steplet refused this: the request names no tool."}
+--- tool not text: {"behavior":"deny","message":"Steplet refused this: the request names no tool."}
+--- larger than 16 MiB: No process is on the other end of the pipe. (os error 233)
+--- refused: ["no request came before the deadline", "the request is not JSON", "the request carries no run token", "the request is of no kind Steplet reads", "the request names no tool", "the request names no tool", "the request is longer than 16 MiB"]
+test a_decision_that_never_comes_is_refused_at_steplet_s_deadline ... --- the decision never came: refused after 1505 ms: {"behavior":"deny","message":"Steplet did not decide within 1.5 s, so it refused this"}
+--- recorded: took 1504 ms, "Steplet did not decide within 1.5 s, so it refused this"
+test a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run ... ignored, needs Steplet's Linux and the network
+test a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not ... ignored, needs Steplet's Linux and the network
+test a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next ... ignored, needs Steplet's Linux and the network
+test a_program_other_than_the_gate_is_refused ... ok
+test a_restricted_or_low_integrity_client_is_refused ... --- restricted, but its list still names this user: Ok(Object {"behavior": String("deny"), "message": String("Steplet refused this: Steplet does not take requests from this program.")})
+--- restricted to Everyone: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+--- low integrity: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+test a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate ... ok
+test an_answer_the_client_never_read_is_recorded_as_not_delivered ... ok
+test someone_holding_the_pipe_name_first_stops_the_gate_from_starting ... --- the name was taken first: Some(Taken)
+--- a low-integrity program adds an end to Steplet's pipe: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+--- a program of the same account adds an end to Steplet's pipe: Ok(0x188)
+test the_checker_decides_each_request_and_the_service_records_who_asked ... ok
+test the_gate_program_s_windows_name_is_its_path_in_steplet_s_linux ... ok
+test the_pipe_is_gone_once_the_service_stops ... --- after stop: Err(Os { code: 2, kind: NotFound, message: "The system cannot find the file specified." })
+test result: ok. 11 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 17.15s
+```
+
+The new gate cases, against what the plan asked:
+- **Someone holding the pipe's name first:** the service does not start (`Taken`), so the run must not launch; once the name is free it starts.
+- **A program other than the gate:** the right token from the wrong program is refused, for a decision and for the key.
+- **A restricted-token client:**
+  - restricted to Everyone, or at low integrity: Windows itself refuses the connection (access denied), because of the pipe's permission list;
+  - restricted, but with a list that still names this user: it gets past Windows, and Steplet's own check refuses it.
+
+### Live: the real gate, started by Claude Code inside Steplet's Linux
+
+```
+> cargo test -p steplet-run --offline --test gate --test launch --test prepare -- --ignored --nocapture --test-threads=1     (the gate tests' part; record lines cut at 240 characters by the test)
+     Running tests\gate.rs (target\debug\deps\gate-7950a27d338678d7.exe)
+running 3 tests
+test a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run ... --- run t8c: exit code Some(0) after 5.5 s; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_6663f24eafb84527a676", name: "Write", input: Object {"content": String("late\n"), "file_path": String("/work/t8c/repo/late.txt")} }
+    ToolResult { id: "toolu_test_6663f24eafb84527a676", is_error: true, text: "Steplet did not decide within 3 s, so it refused this" }
+    AgentText("Task 8: done.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Task 8: done." }
+--- the gate's record:
+    Key { client: Client { pid: 32428, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: fals...
+    Decision { client: Client { pid: 33240, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+--- late.txt exists: false; the run took 15.6 s (prepare included)
+--- the decision: Deny { message: "Steplet did not decide within 3 s, so it refused this" } after 3007 ms, delivered true
+ok
+test a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not ... --- run t8a: exit code Some(0) after 1.8 s; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_ddd855d102d641c58fe8", name: "Bash", input: Object {"command": String("touch declared.txt"), "description": String("Declared")} }
+    ToolResult { id: "toolu_test_ddd855d102d641c58fe8", is_error: false, text: "(Bash completed with no output)" }
+    ToolUse { id: "toolu_test_3edcef0d2e3740a09357", name: "Bash", input: Object {"command": String("touch undeclared.txt"), "description": String("Not declared")} }
+    ToolResult { id: "toolu_test_3edcef0d2e3740a09357", is_error: true, text: "this needs the receiver's yes, and no one could answer: the file does not ask for this command" }
+    ToolUse { id: "toolu_test_33001d9be9d64e17a70d", name: "Write", input: Object {"content": String("t8\n"), "file_path": String("/work/t8a/repo/written.txt")} }
+    ToolResult { id: "toolu_test_33001d9be9d64e17a70d", is_error: true, text: "this needs the receiver's yes, and no one could answer: the file does not ask to change files here" }
+    AgentText("Task 8: done.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Task 8: done." }
+--- the gate's record:
+    Key { client: Client { pid: 41076, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: fals...
+    Decision { client: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+    Decision { client: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+    Decision { client: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+--- declared.txt, undeclared.txt, written.txt exist: [true, false, false]
+--- Bash toolu_test_ddd855d102d641c58fe8: Allow { updated_input: Object {"command": String("touch declared.txt"), "description": String("Declared")} } in 0 ms
+--- Bash toolu_test_3edcef0d2e3740a09357: Deny { message: "this needs the receiver's yes, and no one could answer: the file does not ask for this command" } in 0 ms
+--- Write toolu_test_33001d9be9d64e17a70d: Deny { message: "this needs the receiver's yes, and no one could answer: the file does not ask to change files here" } in 0 ms
+--- Steplet itself: Client { pid: 38120, program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase3-task8-5d752e\\target\\debug\\deps\\gate-7950a27d338678d7.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false, app_container: false, identify_only: false }
+--- the gate: Client { pid: 41076, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false, app_container: false, identify_only: true }
+--- the gate: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false, app_container: false, identify_only: true }
+--- the gate: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false, app_container: false, identify_only: true }
+--- the gate: Client { pid: 43252, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false, app_container: false, identify_only: true }
+ok
+test a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next ... --- taskkill /F /IM steplet-gate-605053681878df44.exe: SUCCESS: The process "steplet-gate-605053681878df44.exe" with PID 11432 has been terminated.
+--- run t8b: exit code Some(0) after 2.3 s; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_4926f8d5b2ec41ebaa6f", name: "Write", input: Object {"content": String("1\n"), "file_path": String("/work/t8b/repo/first.txt")} }
+    ToolResult { id: "toolu_test_4926f8d5b2ec41ebaa6f", is_error: true, text: "<tool_use_error>Error calling tool (Write): MCP error -32000: Connection closed</tool_use_error>" }
+    ToolUse { id: "toolu_test_30682b0865384b5a8aff", name: "Write", input: Object {"content": String("2\n"), "file_path": String("/work/t8b/repo/second.txt")} }
+    ToolResult { id: "toolu_test_30682b0865384b5a8aff", is_error: false, text: "File created successfully at: /work/t8b/repo/second.txt (file state is current in your context — no need to Read it back)" }
+    AgentText("Task 8: done.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Task 8: done." }
+--- the gate's record:
+    Key { client: Client { pid: 3340, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted: false...
+    Decision { client: Client { pid: 46624, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+    Decision { client: Client { pid: 11432, program: "\\\\wsl.localhost\\steplet\\opt\\steplet\\gate\\steplet-gate-605053681878df44.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 1592295, integrity: 8192, restricted:...
+--- first.txt, second.txt exist: [false, true]; exit code Some(0)
+--- gate process id and delivered, first write: (11432, false); second: (46624, true)
+--- what Claude Code said about the first: Some("<tool_use_error>Error calling tool (Write): MCP error -32000: Connection closed</tool_use_error>")
+ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 32.07s
+running 3 tests
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... --- https://github.com/octocat/steplet-test-no-such-repository.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d: could not clone the repository:
+fatal: could not read Username for 'https://github.com': terminal prompts disabled
+steplet-prepare: could not clone https://github.com/octocat/steplet-test-no-such-repository.git
+--- https://github.com/octocat/Hello-World.git at 0000000000000000000000000000000000000001: could not find the declared commit:
+steplet-prepare: https://github.com/octocat/Hello-World.git has no commit 0000000000000000000000000000000000000001
+ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... /var/lib/steplet/runs/t6a:
+total 28
+drwxr-xr-x 5 root    root    4096 Oct 16 10:41 .
+drwxr-xr-x 3 root    root    4096 Oct 16 10:41 ..
+drwx------ 2 steplet steplet 4096 Oct 16 10:41 config
+drwx------ 2 steplet steplet 4096 Oct 16 10:41 home
+-rw-r--r-- 1 root    root     363 Oct 16 10:41 mcp.json
+-rw-r--r-- 1 root    root     755 Oct 16 10:41 settings.json
+drwx------ 2 steplet steplet 4096 Oct 16 10:41 tmp
+/work:
+total 12
+drwxr-xr-x  3 root root 4096 Oct 16 10:41 .
+drwxr-xr-x 20 root root 4096 Oct 16 10:39 ..
+drwxr-xr-x  3 root root 4096 Oct 16 10:41 t6a
+/work/t6a:
+total 12
+drwxr-xr-x 3 root    root    4096 Oct 16 10:41 .
+drwxr-xr-x 3 root    root    4096 Oct 16 10:41 ..
+drwxr-xr-x 3 steplet steplet 4096 Oct 16 10:41 repo
+/work/t6a/repo:
+total 16
+drwxr-xr-x 3 steplet steplet 4096 Oct 16 10:41 .
+drwxr-xr-x 3 root    root    4096 Oct 16 10:41 ..
+drwxr-xr-x 5 steplet steplet 4096 Oct 16 10:41 .git
+-rw-r--r-- 1 steplet steplet   13 Oct 16 10:41 README
+ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 24.69s
+```
+
+What they show:
+- **A declared command runs, and what the file did not ask for does not** (phase 0 S1). `touch declared.txt` was allowed in 0–1 ms and the marker exists. `touch undeclared.txt` and a write were refused, with the checker's reason, and neither file exists. Each of the three tool calls reached the gate; its request id matches the event stream. The key reached Claude Code through the gate's key mode only, and the scripted model received it.
+- **A gate that dies mid-request** (F33/F39): the request it died on was refused ("Connection closed"), and its answer is recorded as not delivered. Claude Code started the gate again under a new process id, and the next write was allowed and made.
+- **A decision that never comes** (F36): refused at Steplet's deadline, 3007 ms with a 3 s deadline. The run went on and ended by itself with exit code 0.
+
+### Who the gate is, as Windows sees it (the Task 1 gap)
+
+From the first live run (`--- the gate:` lines above), against Steplet itself:
+
+| | The gate | Steplet (the test program) |
+|---|---|---|
+| Program | `\\wsl.localhost\steplet\opt\steplet\gate\steplet-gate-605053681878df44.exe` | `C:\dev\runFile\...\gate-7950a27d338678d7.exe` |
+| Windows account | `S-1-5-21-3179155314-955974558-399537313-1002` | the same |
+| Sign-in session (logon session id) | 1592295 | the same |
+| Integrity level | 8192 (medium) | 8192 (medium) |
+| Restricted token, app container | no, no | no, no |
+| What Steplet may do with the connection | identify it only | — |
+
+The program name Windows reports is the gate's Linux path under `\\wsl.localhost\steplet`, which is what `gate_on_windows` computes. The gate's own log for these runs (`%LOCALAPPDATA%\Steplet\logs\t8a.gate.log`, four runs of `t8a`):
+
+```
+1792145738.230 pid=33120 started; 1 Windows variables: SystemRoot
+1792145738.411 pid=33120 tool=Bash id=toolu_test_fbc23891f01f473a84da behavior=allow ms=1
+1792145738.552 pid=33120 tool=Bash id=toolu_test_e526da98e725486fb479 behavior=deny ms=0
+1792145738.571 pid=33120 tool=Write id=toolu_test_2bef0de198f14cdb93e7 behavior=deny ms=1
+1792145876.698 pid=42128 started; 1 Windows variables: SystemRoot
+1792145876.840 pid=42128 tool=Bash id=toolu_test_3f1d3cabf3af40c5ba86 behavior=allow ms=1
+1792145876.974 pid=42128 tool=Bash id=toolu_test_3a049db22b64470fa1d8 behavior=deny ms=0
+1792145876.990 pid=42128 tool=Write id=toolu_test_2c6511bf6a0e466fa063 behavior=deny ms=0
+1792146297.911 pid=14292 started; 1 Windows variables: SystemRoot
+1792146298.041 pid=14292 tool=Bash id=toolu_test_1f0bfdf0d932462da8c1 behavior=allow ms=1
+1792146298.164 pid=14292 tool=Bash id=toolu_test_fe436fad7654446ab52e behavior=deny ms=0
+1792146298.177 pid=14292 tool=Write id=toolu_test_a7955cd01d374ea5b25d behavior=deny ms=0
+1792147215.885 pid=43252 started; 1 Windows variables: SystemRoot
+1792147216.043 pid=43252 tool=Bash id=toolu_test_ddd855d102d641c58fe8 behavior=allow ms=1
+1792147216.173 pid=43252 tool=Bash id=toolu_test_3edcef0d2e3740a09357 behavior=deny ms=0
+1792147216.229 pid=43252 tool=Write id=toolu_test_33001d9be9d64e17a70d behavior=deny ms=0
+```
+
+So the gate saw one Windows variable, `SystemRoot` (C8). The log names each decision and holds no input: `grep -c 'touch declared\|content'` on it gave `0`.
+
+### The gate program on the Linux disk
+
+Three builds, three files, none replaced, each matching its name:
+
+```
+> wsl.exe --distribution-id {44f36236-99b1-42c0-84bd-7ff8392d51ba} -u root --cd / --exec /bin/sh -c 'ls -l /opt/steplet/gate/; sha256sum /opt/steplet/gate/steplet-gate-*'
+total 1756
+-rwxr-xr-x 1 root root 301568 Oct 14 19:29 spike-gate-63f64aab01e799ed.exe
+-rwxr-xr-x 1 root root 301568 Oct 14 19:23 spike-gate.exe
+-rwxr-xr-x 1 root root 395264 Oct 16 10:24 steplet-gate-2c7bf6a6745eeda0.exe
+-rwxr-xr-x 1 root root 395264 Oct 16 10:40 steplet-gate-605053681878df44.exe
+-rwxr-xr-x 1 root root 395264 Oct 16 10:15 steplet-gate-cd3582a82a2df1d0.exe
+2c7bf6a6745eeda043abb4b03c4f7661f76dd1f30e7e6e70c3760d27e438036c  /opt/steplet/gate/steplet-gate-2c7bf6a6745eeda0.exe
+605053681878df4431c6b4b2ef62649d64fe91c8e4ff7e7b3c20ba8864de8792  /opt/steplet/gate/steplet-gate-605053681878df44.exe
+cd3582a82a2df1d0a30cef3eb0b793dc4c34907fa7a220d6bde928a781615153  /opt/steplet/gate/steplet-gate-cd3582a82a2df1d0.exe
+```
+
+### Task 7's launch tests and Task 6's working-copy tests again, through the real gate
+
+```
+     Running tests\launch.rs (target\debug\deps\launch-f6b8f524c9b73717.exe)
+test a_scripted_run_streams_its_events_in_order ... --- every event of run t7a:
+test a_stop_right_after_launch_never_lets_the_agent_act ... --- stopped at once; exit code Some(9); every event:
+test stop_ends_a_run_mid_command_and_leaves_nothing_running ... --- seen from outside while the command ran:
+test the_time_limit_ends_a_run ... --- run t7c ended after 19.3 s (prepare included), exit code Some(124)
+test whatever_a_run_leaves_running_ends_with_it ... --- events:
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 55.18s
+     Running tests\prepare.rs (target\debug\deps\prepare-91bd744977e3ec40.exe)
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... --- https://github.com/octocat/steplet-test-no-such-repository.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d: could not clone the repository:
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... /var/lib/steplet/runs/t6a:
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 24.69s
+```
+
+### The code review, and what changed
+
+A separate reviewer read the change and found nothing critical. Three points were rated important:
+
+1. **The run's token showed in debugging output** (`Debug` of `GateRequest`, `GateLink`, and so the record). **Fixed:** both now print `(hidden)`. Before the fix, the new check failed: `the run's token is never shown, even in the record`, `test the_checker_decides_each_request_and_the_service_records_who_asked ... FAILED`.
+2. **"Anything that can run the gate with the token gets the key."** True, and **not changed**, because nothing inside the run can do it. The agent's commands run inside the fence, which cannot start Windows programs (F28, measured in phase 0). The token is not visible from inside the fence (phase 0 S1a). The agent's own tools read and write files; they do not run programs. Serving the key only once would also break longer runs, because Claude Code asks for the key again over time. Recorded beside the same-account limit below.
+3. **A client that never reads its answer kept its end of the pipe for ever.** An allowed write's answer carries the whole file, more than the pipe holds. **Fixed**, in two steps:
+   - The first fix (a time limit on the write) did not work. Tokio's write finishes once it has taken the data, before the client has it, so the test still read the whole answer after 9 s: `--- read after 9 s: 4194391 of about 4194304 bytes (Ok(4194391))`.
+   - Now Steplet waits until the client has read the whole answer (Windows' `FlushFileBuffers`), at most 5 s, then cuts the connection: `read after 9 s: 0 of about 4194304 bytes` above.
+
+   `delivered` now means the gate read the answer. It is set a moment after the gate has it, so the tests wait for it. One point is kept as it was: if Steplet cannot make a new end of its pipe, it stops serving, which refuses everything. Retrying could end up joining a pipe someone else made, once Steplet's own ends were gone.
+
+Of the minor points:
+- **Fixed:** the gate refuses a deadline over an hour; the largest number used to overflow its clock. Before the fix: `left: Some(0) right: Some(2)` for `--deadline-ms 3600001`.
+- **Fixed:** two comments now say exactly what `delivered` and `identify_only` mean.
+- **Left as they are, and noted for the final review:**
+  - the integrity number is read without checking that the label has one part (a real label always has one);
+  - the record has no size cap;
+  - two installs of the same build at the very same moment would share one `.part` file (Steplet runs one run at a time);
+  - a refused permission at pipe creation is reported as "taken".
+
+### Checks
+
+```
+> cargo fmt --all -- --check
+fmt exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-run v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase3-task8-5d752e\crates\steplet-run)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.40s
+clippy exit code: 0
+> cargo test --workspace --offline     (every "test result" line, summed by awk)
+179 passed, 0 failed, 11 ignored, in 41 test programs, every one ok
+test exit code: 0
+```
+
+The six packages cargo added to the lock file (all from cargo's cache, no download), checked with `lock_ages.py` (it counts days to 11 Oct 2026, so each is 5 days older today):
+
+```
+> python -I lock_ages.py t8-new-entries.lock     (a lock file of just the six new entries)
+bytes              1.12.1                 published 2026-07-08    95 days old
+mio                1.2.4                  published 2026-10-03     8 days old  <-- under 14 days
+pin-project-lite   0.2.17                 published 2026-02-27   226 days old
+socket2            0.6.5                  published 2026-07-13    90 days old
+tokio              1.53.1                 published 2026-07-20    83 days old
+wasi               0.11.1+wasi-snapshot-preview1 published 2025-06-10   488 days old
+6 crates.io packages in the lock file; 1 under 14 days old; 0 yanked
+> python -I lock_ages.py t8-mio.lock
+mio                1.2.2                  published 2026-07-13    90 days old
+1 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+> cargo update -p mio --precise 1.2.2 --offline
+ Downgrading mio v1.2.4 -> v1.2.2
+```
+
+### What this task did not verify
+
+- **A program of the same Windows account can add its own end of Steplet's pipe** (measured above: `Ok(0x188)`), and could then receive a gate request and answer it. Windows does not keep one account's programs apart. Such a program could equally read Steplet's memory, so the pipe is not where this is stopped. Nothing inside a run can start a Windows program (F28). Phase 5 could have the gate check the server's process id.
+- **The key goes to whatever runs the gate with the run's token** (review point 2). Nothing in the run can (F28, S1a), but this rests on the fence, not on the gate.
+- **The real model:** every run here used the scripted one.
+- **Steplet running as administrator (high integrity)**, and a standard (non-administrator) Windows account: not tried.
+- **Two requests at the same moment** from one run: Claude Code asked one at a time here.
+- **A write near the 16 MiB limit through Claude Code:** tested at the pipe only.
+- **The gate's own timer through WSL:** tested with the gate started on Windows directly; through WSL only Steplet's own deadline was tested.
+- **The key in Steplet's memory** is not wiped after use.
+- **The cause of Task 7's "Invalid argument" path:** still unknown. A new name for each build avoids it.

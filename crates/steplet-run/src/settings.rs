@@ -41,7 +41,13 @@ pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink) -> String {
         // E1: the run stays on the model the receiver approved; a refusal ends it.
         "switchModelsOnFlag": false,
         // H2: the gate asks the app for the key over the pipe, so the key is never written to the Linux disk.
-        "apiKeyHelper": format!("{} --key --pipe {} --token {}", gate.exe(), gate.pipe(), gate.token()),
+        "apiKeyHelper": format!(
+            "{} --key --pipe {} --token {} --deadline-ms {}",
+            gate.exe(),
+            gate.pipe(),
+            gate.token(),
+            gate.deadline_ms()
+        ),
     }))
 }
 
@@ -58,7 +64,10 @@ pub fn mcp_json(gate: &GateLink) -> String {
             GATE_SERVER: {
                 "type": "stdio",
                 "command": gate.exe(),
-                "args": ["--pipe", gate.pipe(), "--token", gate.token(), "--log", gate.log()],
+                "args": [
+                    "--pipe", gate.pipe(), "--token", gate.token(), "--log", gate.log(),
+                    "--deadline-ms", gate.deadline_ms(),
+                ],
             }
         }
     }))
