@@ -10,6 +10,7 @@
 use std::fmt;
 use std::io;
 use std::os::windows::io::AsRawHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -75,6 +76,7 @@ pub enum GateError {
 /// The running service. Stopping it, or dropping it, closes the pipe.
 pub struct GateService {
     records: Arc<Mutex<Vec<Asked>>>,
+    stopping: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<()>>,
 }
@@ -86,6 +88,38 @@ impl GateService {
     /// gate has read it; a decision that never is was not acted on.
     pub fn requests(&self) -> Vec<Asked> {
         self.records.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// What Steplet answered the gate about tool call `id`, for the tripwire watcher: `None` if the gate never asked
+    /// about it, `Some(true)` if any answer was "allow", `Some(false)` if every one was "deny". Each answer is on
+    /// record before it is sent, so this is known before the call can run. A request with no id matches no call.
+    pub fn answered(&self, id: &str) -> Option<bool> {
+        if id.is_empty() {
+            return None;
+        }
+        let records = self.records.lock().unwrap_or_else(PoisonError::into_inner);
+        records.iter().fold(None, |seen, asked| match asked {
+            Asked::Decision { request, answer, .. } if request.tool_use_id == id => {
+                Some(seen == Some(true) || matches!(answer, GateAnswer::Allow { .. }))
+            }
+            _ => seen,
+        })
+    }
+
+    /// From now on every request is refused: Steplet is stopping the run, which takes a moment. Every decision
+    /// recorded after this returns is a refusal, including one still being made now; one recorded a moment before
+    /// may still be on its way to the gate. The key is still served.
+    pub fn refuse_everything(&self) {
+        // Set while holding the record, which each decision also holds while it is checked and recorded.
+        let _records = self.records.lock().unwrap_or_else(PoisonError::into_inner);
+        self.stopping.store(true, Ordering::SeqCst);
+    }
+
+    /// Stops the service and returns everything asked. Called once the agent has ended: a decision still being made
+    /// then was not acted on.
+    pub fn into_requests(mut self) -> Vec<Asked> {
+        self.end();
+        self.requests()
     }
 
     pub fn stop(mut self) {
@@ -119,6 +153,8 @@ struct Rules<D> {
     deadline: Duration,
     decide: D,
     records: Arc<Mutex<Vec<Asked>>>,
+    /// Set once Steplet is stopping the run: every request is then refused.
+    stopping: Arc<AtomicBool>,
 }
 
 /// Starts the service for `link`: its pipe, token and deadline are the ones the gate is started with. Only
@@ -148,6 +184,7 @@ where
         Err(e) => return Err(start("could not make the pipe", e)),
     };
     let records = Arc::new(Mutex::new(Vec::new()));
+    let stopping = Arc::new(AtomicBool::new(false));
     let rules = Arc::new(Rules {
         token: link.token().into(),
         program: program.into(),
@@ -156,6 +193,7 @@ where
         deadline: link.deadline(),
         decide,
         records: records.clone(),
+        stopping: stopping.clone(),
     });
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::spawn(move || {
@@ -164,7 +202,7 @@ where
         let _ = runtime.block_on(stopped);
         runtime.shutdown_background();
     });
-    Ok(GateService { records, stop: Some(stop), thread: Some(thread) })
+    Ok(GateService { records, stopping, stop: Some(stop), thread: Some(thread) })
 }
 
 /// One end of the pipe, with Steplet's permission list, refusing clients on other computers.
@@ -292,11 +330,17 @@ where
             }
         }
         Incoming::Decide(request) => {
+            let stopping = || rules.stopping.load(Ordering::SeqCst);
+            let refused_while_stopping =
+                || GateAnswer::Deny { message: "Steplet is stopping this run, so it refused this".into() };
             let left = rules.deadline.saturating_sub(started.elapsed());
             let asking = rules.clone();
             let asked = request.clone();
-            let decided =
-                tokio::time::timeout(left, tokio::task::spawn_blocking(move || (asking.decide)(&asked))).await;
+            let decided = if stopping() {
+                Ok(Ok(refused_while_stopping()))
+            } else {
+                tokio::time::timeout(left, tokio::task::spawn_blocking(move || (asking.decide)(&asked))).await
+            };
             let answer = match decided {
                 Ok(Ok(answer)) => answer,
                 Ok(Err(_)) => GateAnswer::Deny { message: "Steplet's checker failed, so it refused this".into() },
@@ -307,13 +351,19 @@ where
                     ),
                 },
             };
-            let reply = match &answer {
-                GateAnswer::Allow { updated_input } => json!({"behavior": "allow", "updatedInput": updated_input}),
-                GateAnswer::Deny { message } => json!({"behavior": "deny", "message": message}),
-            };
-            // Recorded before it is sent, so the record of an allowed action exists before the action can run.
+            // Recorded before it is sent, so the record of an allowed action exists before the action can run. Whether
+            // Steplet has begun stopping the run is checked in the same step (see `refuse_everything`).
             let took = started.elapsed();
-            let n = record(&rules.records, Asked::Decision { client, request, answer, took, delivered: false });
+            let (n, reply) = {
+                let mut records = rules.records.lock().unwrap_or_else(PoisonError::into_inner);
+                let answer = if stopping() { refused_while_stopping() } else { answer };
+                let reply = match &answer {
+                    GateAnswer::Allow { updated_input } => json!({"behavior": "allow", "updatedInput": updated_input}),
+                    GateAnswer::Deny { message } => json!({"behavior": "deny", "message": message}),
+                };
+                records.push(Asked::Decision { client, request, answer, took, delivered: false });
+                (records.len() - 1, reply)
+            };
             if send(&mut conn, &reply).await.is_ok() {
                 mark_read(&rules.records, n);
             }

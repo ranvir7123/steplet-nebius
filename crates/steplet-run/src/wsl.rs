@@ -2,9 +2,11 @@
 //! variable (C8): with an empty environment it fails, and the whole environment would hand Windows variables over.
 //! Both Windows programs are taken from the Windows folder itself, never looked up on `PATH`.
 
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// What one program inside Steplet's Linux did.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,17 +30,59 @@ pub fn spawn(distro_id: &str, user: &str, argv: &[&str]) -> io::Result<Child> {
 
 /// Runs `argv` as `user` in the distribution `distro_id`, starting in `/`, with `stdin` as its whole input.
 pub fn run(distro_id: &str, user: &str, argv: &[&str], stdin: &[u8]) -> io::Result<Output> {
-    let mut child = spawn(distro_id, user, argv)?;
-    let mut input = child.stdin.take().expect("standard input is piped");
-    let output = std::thread::scope(|s| {
+    finish(spawn(distro_id, user, argv)?, stdin, None)
+}
+
+/// As `run`, but gives up after `limit`: `wsl.exe` is then ended and the result is a `TimedOut` error. For calls that
+/// must not hold Steplet for ever when its Linux does not answer. What the program started inside Linux may go on.
+pub fn run_within(distro_id: &str, user: &str, argv: &[&str], stdin: &[u8], limit: Duration) -> io::Result<Output> {
+    finish(spawn(distro_id, user, argv)?, stdin, Some(limit))
+}
+
+fn finish(mut child: Child, stdin: &[u8], limit: Option<Duration>) -> io::Result<Output> {
+    let (Some(mut input), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
+    else {
+        let _ = child.kill();
+        return Err(io::Error::other("the program's input and outputs were not connected"));
+    };
+    thread::scope(|s| {
         // Written from its own thread so a program that answers before reading all of it cannot stall both sides.
         // A program that stops reading early ends the write; its exit code tells what happened.
         s.spawn(move || {
             let _ = input.write_all(stdin);
         });
-        child.wait_with_output()
-    })?;
-    Ok(Output { status: output.status.code(), stdout: text(&output.stdout), stderr: text(&output.stderr) })
+        let out = s.spawn(move || read_all(stdout));
+        let err = s.spawn(move || read_all(stderr));
+        let status = match limit {
+            None => child.wait()?,
+            Some(limit) => {
+                let start = Instant::now();
+                loop {
+                    if let Some(status) = child.try_wait()? {
+                        break status;
+                    }
+                    if start.elapsed() >= limit {
+                        // Ending `wsl.exe` closes its outputs, which ends the readers.
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            format!("Steplet's Linux did not answer within {} s", limit.as_secs_f64()),
+                        ));
+                    }
+                    thread::sleep(Duration::from_millis(20));
+                }
+            }
+        };
+        let (out, err) = (out.join().unwrap_or_default(), err.join().unwrap_or_default());
+        Ok(Output { status: status.code(), stdout: text(&out), stderr: text(&err) })
+    })
+}
+
+fn read_all(mut from: impl Read) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let _ = from.read_to_end(&mut bytes);
+    bytes
 }
 
 /// The id WSL's registry gives the distribution called `name` for this Windows account, if it is installed.

@@ -28,6 +28,8 @@ fn maps_requests_to_the_checker() {
     assert!(!allowed(&decide(&p, &req("WebFetch", json!({"url": "https://example.com"})))));
     assert!(allowed(&decide(&p, &req("Read", json!({"file_path": "/work/r1/repo/README.md"})))));
     assert!(allowed(&decide(&p, &req("Grep", json!({"pattern": "x", "path": "/work/r1/repo/src"})))));
+    // A choice of endings (`{rs,toml}`) stays inside the folder.
+    assert!(allowed(&decide(&p, &req("Glob", json!({"pattern": "**/*.{rs,toml}", "path": "/work/r1/repo"})))));
     assert!(!allowed(&decide(&p, &req("Write", json!({"file_path": "/work/r1/repo/.git/config", "content": "x"})))));
 }
 
@@ -55,6 +57,11 @@ fn anything_unclear_is_refused_with_a_reason() {
         ("Glob", json!({"pattern": "/etc/**", "path": "/work/r1/repo"})),
         ("Glob", json!({"pattern": "../../**", "path": "/work/r1/repo"})),
         ("Grep", json!({"pattern": "x", "path": "/work/r1/repo", "glob": "/home/**"})),
+        // A choice (`{a,b}`) whose alternative climbs out or starts at a root: a search may try every one.
+        ("Glob", json!({"pattern": "{..,x}/*", "path": "/work/r1/repo"})),
+        ("Glob", json!({"pattern": "{../../..,x}/etc/*", "path": "/work/r1/repo"})),
+        ("Glob", json!({"pattern": "src/{x,/etc}/*", "path": "/work/r1/repo"})),
+        ("Grep", json!({"pattern": "x", "path": "/work/r1/repo", "glob": "{a,~/.ssh}/*"})),
     ] {
         match decide(&p, &req(tool, input.clone())) {
             GateAnswer::Deny { message } => assert!(!message.is_empty(), "{tool} {input}: a refusal says why"),

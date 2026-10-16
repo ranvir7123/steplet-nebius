@@ -293,3 +293,19 @@ fn whatever_a_run_leaves_running_ends_with_it() {
     assert!(waited.elapsed() < Duration::from_secs(30), "wait does not hang on a leftover's open output");
     discard(&paths).unwrap();
 }
+
+/// Stopping a run calls into Steplet's Linux; a Linux that does not answer must not hold Steplet for ever (Task 9).
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn a_call_into_steplet_s_linux_that_does_not_answer_is_given_up_at_its_limit() {
+    let distro = support::steplet_linux();
+    let start = Instant::now();
+    let slow = steplet_run::wsl::run_within(&distro, "root", &["/usr/bin/sleep", "31"], b"", Duration::from_secs(2));
+    let took = start.elapsed();
+    println!("--- {slow:?} after {:.1} s", took.as_secs_f64());
+    assert_eq!(slow.unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+    assert!(took < Duration::from_secs(5), "{took:?}");
+    let quick = steplet_run::wsl::run_within(&distro, "root", &["/usr/bin/echo", "here"], b"", Duration::from_secs(30));
+    assert_eq!(quick.unwrap().stdout.trim(), "here", "a call that answers in time gives its output");
+    let _ = steplet_run::wsl::run(&distro, "root", &["/usr/bin/pkill", "-f", "sleep 31"], b"");
+}

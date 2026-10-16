@@ -165,6 +165,53 @@ fn the_checker_decides_each_request_and_the_service_records_who_asked() {
     }
 }
 
+/// What the tripwire watcher (Task 9) asks when a tool call's result arrives: was the gate asked about this call,
+/// and was any answer "allow"? Each answer is on record before it is sent, so no waiting is needed.
+#[test]
+fn the_service_says_for_each_tool_call_whether_it_was_asked_and_what_it_answered() {
+    let pipe = pipe_name();
+    let gate = service(&pipe, Duration::from_secs(5));
+    let declared = json!({"command": "touch declared.txt"});
+    let undeclared = json!({"command": "touch undeclared.txt"});
+    assert!(!is_refusal(&ask(&pipe, &decision("Bash", declared.clone(), "toolu_a")).unwrap()));
+    assert!(is_refusal(&ask(&pipe, &decision("Bash", undeclared.clone(), "toolu_b")).unwrap()));
+    // Asked twice about one call (a gate retrying): one "allow" is enough for it to have been allowed.
+    assert!(is_refusal(&ask(&pipe, &decision("Bash", undeclared, "toolu_c")).unwrap()));
+    assert!(!is_refusal(&ask(&pipe, &decision("Bash", declared.clone(), "toolu_c")).unwrap()));
+    let no_id = json!({"kind": "decide", "run_token": TOKEN, "tool_name": "Bash", "input": declared});
+    assert!(!is_refusal(&ask(&pipe, &no_id).unwrap()));
+
+    assert_eq!(gate.answered("toolu_a"), Some(true));
+    assert_eq!(gate.answered("toolu_b"), Some(false));
+    assert_eq!(gate.answered("toolu_c"), Some(true));
+    assert_eq!(gate.answered("toolu_never_asked"), None);
+    assert_eq!(gate.answered(""), None, "a request without an id matches no tool call");
+
+    let asked = gate.into_requests();
+    assert_eq!(asked.len(), 5, "{asked:#?}");
+    let after = connect(&pipe).map(drop);
+    assert_eq!(after.err().and_then(|e| e.raw_os_error()), Some(ERROR_FILE_NOT_FOUND), "the service has stopped");
+}
+
+/// Stopping a run takes a moment (Task 9 measured 1 to 2 s); from the tripwire on, nothing more is allowed.
+#[test]
+fn once_steplet_is_stopping_the_run_every_request_is_refused() {
+    let pipe = pipe_name();
+    let gate = service(&pipe, Duration::from_secs(5));
+    let declared = json!({"command": "touch declared.txt"});
+    assert!(!is_refusal(&ask(&pipe, &decision("Bash", declared.clone(), "toolu_a")).unwrap()));
+    gate.refuse_everything();
+    let refused = ask(&pipe, &decision("Bash", declared, "toolu_b")).unwrap();
+    assert!(is_refusal(&refused), "{refused}");
+    assert!(refused["message"].as_str().unwrap().contains("Steplet is stopping this run"), "{refused}");
+    assert_eq!(gate.answered("toolu_b"), Some(false), "the refusal is on record");
+    assert!(ask(&pipe, &key_request(TOKEN)).unwrap()["key"].is_string(), "the key is still served");
+    let asked = gate.into_requests();
+    assert_eq!(asked.len(), 3, "{asked:#?}");
+    let after = connect(&pipe).map(drop);
+    assert_eq!(after.err().and_then(|e| e.raw_os_error()), Some(ERROR_FILE_NOT_FOUND), "the service has stopped");
+}
+
 #[test]
 fn a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate() {
     let pipe = pipe_name();

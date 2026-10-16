@@ -17,6 +17,8 @@ use crate::wsl;
 
 const START_RUN: &str = include_str!("start-run.sh");
 const START_RUN_PATH: &str = "/opt/steplet/bin/start-run";
+/// The longest Steplet waits for one call into its Linux while stopping a run, or for the start script's install.
+const QUICK_CALL: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub enum LaunchError {
@@ -68,7 +70,7 @@ pub fn launch(
 
     // The start script is written fresh for every run, so the one in Linux is always this program's.
     let install = ["/usr/bin/install", "-D", "-o", "root", "-g", "root", "-m", "755", "/dev/stdin", START_RUN_PATH];
-    let out = wsl::run(paths.distro_id(), "root", &install, START_RUN.as_bytes())
+    let out = wsl::run_within(paths.distro_id(), "root", &install, START_RUN.as_bytes(), QUICK_CALL)
         .map_err(|e| start("could not reach Steplet's Linux", e))?;
     if out.status != Some(0) {
         return Err(LaunchError::Start(format!("could not install the start script: {}", out.stderr.trim())));
@@ -113,27 +115,53 @@ impl RunHandle {
 
     /// Stops the run (F37). For up to 10 s, once a second: the start script is killed if it has not yet become the
     /// agent (so the agent never starts), and the end signal goes to Claude Code and its time limit. Then every
-    /// program of the steplet account is killed, and `wsl.exe` itself last.
+    /// program of the steplet account is killed, and `wsl.exe` itself last. A call into Linux that fails, or does not
+    /// answer within 10 s, does not stop the rest: `wsl.exe` is still ended, and the first such error is returned.
     pub fn stop(&mut self) -> io::Result<()> {
+        let mut first_error = None;
         let start = Instant::now();
         while self.child.try_wait()?.is_none() && start.elapsed() < Duration::from_secs(10) {
-            self.root(&["/usr/bin/pkill", "-KILL", "-f", &self.start_marker])?;
-            self.root(&["/usr/bin/pkill", "-TERM", "-f", &self.marker])?;
+            let killed = self.root(&["/usr/bin/pkill", "-KILL", "-f", &self.start_marker]);
+            let ended = self.root(&["/usr/bin/pkill", "-TERM", "-f", &self.marker]);
+            first_error = first_error.or(killed.err()).or(ended.err());
             self.ended_within(Duration::from_secs(1))?;
         }
         if self.child.try_wait()?.is_none() {
-            self.root(&["/usr/bin/pkill", "-KILL", "-u", "steplet"])?;
+            first_error = first_error.or(self.root(&["/usr/bin/pkill", "-KILL", "-u", "steplet"]).err());
             if !self.ended_within(Duration::from_secs(5))? {
                 self.child.kill()?;
             }
         }
-        self.end_leftovers()
+        first_error = first_error.or(self.end_leftovers().err());
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Ends the run's `wsl.exe` at once, from Windows, without asking Steplet's Linux: for when Linux does not answer.
+    /// What the run started inside Linux is ended by `finish`, or by the next run's preparation.
+    pub fn kill(&mut self) -> io::Result<()> {
+        self.child.kill()
+    }
+
+    /// True once the run's `wsl.exe` has ended.
+    pub fn ended(&mut self) -> io::Result<bool> {
+        Ok(self.child.try_wait()?.is_some())
     }
 
     /// Waits for the run to end, then ends whatever it left running, which would otherwise keep its outputs open,
     /// and gives the readers up to 10 s to finish. Returns the exit code: 124 at the time limit, and also after a
     /// stop, so whether Steplet stopped the run is the caller's own record, not this code.
-    pub fn wait(mut self) -> io::Result<Option<i32>> {
+    pub fn wait(self) -> io::Result<Option<i32>> {
+        self.finish().0
+    }
+
+    /// As `wait`, and also returns the events not yet taken from `events`, including those read after the end.
+    pub fn finish(mut self) -> (io::Result<Option<i32>>, Vec<Event>) {
+        let code = self.end_and_read();
+        let rest = self.events.try_iter().collect();
+        (code, rest)
+    }
+
+    fn end_and_read(&mut self) -> io::Result<Option<i32>> {
         let status = self.child.wait()?;
         self.end_leftovers()?;
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -158,9 +186,10 @@ impl RunHandle {
         Ok(())
     }
 
-    /// Runs one program as root in Steplet's Linux; its exit code is not needed (`pkill` says 1 when nothing matched).
+    /// Runs one program as root in Steplet's Linux, waiting at most 10 s; its exit code is not needed (`pkill` says 1
+    /// when nothing matched).
     fn root(&self, argv: &[&str]) -> io::Result<()> {
-        wsl::run(&self.distro_id, "root", argv, b"").map(drop)
+        wsl::run_within(&self.distro_id, "root", argv, b"", QUICK_CALL).map(drop)
     }
 
     fn ended_within(&mut self, limit: Duration) -> io::Result<bool> {

@@ -1659,3 +1659,426 @@ mio                1.2.2                  published 2026-07-13    90 days old
 - **The gate's own timer through WSL:** tested with the gate started on Windows directly; through WSL only Steplet's own deadline was tested.
 - **The key in Steplet's memory** is not wiped after use.
 - **The cause of Task 7's "Invalid argument" path:** still unknown. A new name for each build avoids it.
+
+## Task 9: the checker wired in, and the tripwires
+
+Measured on 16 Oct 2026; built on 17 Oct 2026, on branch `claude/steplet-phase3-task9-272d85` (from `515c394`, which holds the measurement test, on top of Task 8's `1758645`).
+
+What was built:
+- **The tripwire watcher** (`crates/steplet-run/src/watch.rs`). It judges each event of a run and says when the run must stop. It needs no Linux, so its rules are tested on their own (`tests/watch.rs`).
+- **`run()`** (`crates/steplet-run/src/run.rs`): the whole run in one call. It starts the gate service, prepares the working copy, launches the agent, follows the run (`watch_run`), and removes the run at the end. It returns a `RunOutcome`: every event, everything the gate was asked, `stopped_by` (the first tripwire, if any), the exit code, and any fault around the run.
+- **`watch_run`** follows a run to its end. At the first tripwire the gate starts refusing everything, then the run is stopped. If Steplet's Linux does not stop it, the agent's `wsl.exe` is ended from Windows. If the run has not ended 30 s after its time limit, Steplet stops it itself. Its loop is tested with stand-in agents, with no Linux (`tests/watch_run.rs`).
+- **In the gate service:**
+  - `answered(id)`: whether the gate was asked about one tool call, and whether any answer was "allow";
+  - `into_requests()`: stop the service and hand over its record;
+  - `refuse_everything()`: from the tripwire on, every request is refused (added after a live finding, below).
+- **In the launch:** `RunHandle::ended()`, `kill()` and `finish()` (which also hands over the events that arrive after the end). `wait()` is now `finish()` without the events.
+- **Calls into Steplet's Linux with a time limit** (`wsl::run_within`), used where a Linux that does not answer must not hold Steplet for ever: each call while stopping a run (10 s), the start script's install (10 s), the clean-up (2 min) and the preparation (20 min; its clone and checkout have limits of their own inside).
+- **Each run's token and pipe name are random:** 32 and 8 bytes from Windows' own generator (`BCryptGenRandom`).
+
+### Before the code: what Claude Code sends through the gate
+
+The plan's rule was: a command that skipped the gate may run only if it is a harmless read inside the working copy; any other action that skipped the gate stops the run. Before writing it, a test measured what Claude Code 2.1.220 actually sends through the gate with Steplet's settings (`which_actions_ask_the_gate`, run three times on 16 Oct and again with the final code on 17 Oct; its output is in "The final runs" below):
+
+| Action | Asked the gate? | What happened |
+|---|---|---|
+| Read-only commands inside the copy: `ls`, `cat README`, `ls src`, `git status --short` | no | ran |
+| Chained read-only commands: `cat README; echo done`, `cat README \| wc -l` | no | ran |
+| `ls /var/lib/steplet` | no | refused by Claude Code: "Permission to use Bash with command ls /var/lib/steplet has been denied." |
+| `touch made.txt` | yes | refused by the checker |
+| Read, Glob, Grep inside the copy | no | ran |
+| Read `/etc/os-release` (outside the copy) | yes | refused by the checker |
+| Read of the run's settings file, Edit of `.git/config` | no | refused by Steplet's deny rules: "File is in a directory that is denied by your permission settings." |
+| Write inside the copy | yes | refused by the checker (the file declares no write folders) |
+
+Two things followed from this:
+1. **Read, Glob and Grep skip the gate too**, not only read-only commands. Under the plan's words ("any other un-gated action stops the run"), every read of the agent's own files would stop the run.
+2. **Chained read-only commands skip the gate.** Steplet's command reader (decisions R8, G1) reads only simple commands and never guesses what a shell would do, so `cat README; echo done` is "not understood". Under the plan's rule it stops the run.
+
+Also seen: inside the fence, `git status` lists the sandbox's placeholder names (`.bashrc`, `.claude/`, `.gitmodules`, `.mcp.json`, `.vscode`, and more) as untracked files. After the run, only `.claude/` is left in the copy. Task 10's list of changed files must not report it as the task's change.
+
+### Your decision (17 Oct 2026)
+
+**Accept the stops for milestone 1.** A chained command that skips the checker stops the run, as the plan says. No splitter for chained commands is written. (Recorded in `docs/decisions.md` at Task 12.)
+
+### The rule the watcher follows
+
+Each tool call is judged when its result arrives. By then the gate's record of it exists, because Steplet writes each record before it sends the answer.
+
+1. **The gate was asked:**
+   - it allowed the call: fine;
+   - it refused the call: the result must be an error. A result that is not an error means the call ran although Steplet refused it, and the run stops.
+2. **The gate was not asked (the call skipped it):**
+   - **a command:** fine only if the command reader reads it as a read-only command with no path outside the working copy. Anything else stops the run, chained commands included.
+   - **Read, Glob or Grep:** fine only if the checker would have allowed it. A search with no folder searches the working copy, as Claude Code does.
+   - **Write, Edit, WebFetch, any other tool, or a result for a call Steplet never saw:** the run stops.
+   - A call refused by Steplet's own deny rules stops the run too. Steplet does not read Claude Code's messages to decide this: a command's output could imitate a refusal.
+   - A harmless skip is kept as a record (`SkippedGate`, marked harmless), not dropped.
+3. **Any hook event** stops the run.
+
+### Changes from the plan, recorded here
+
+- **The rule above relaxes the plan's "any other un-gated action stops the run" for one case only:** reads by the agent's own file tools that the checker would allow. The measurement showed Claude Code never sends these to the gate.
+- **`run(req, paths, policy, setup)`**, not `run(req, paths, policy)`. `RunSetup` carries what the plan's three values do not: the gate program's Linux path, the logs folder, the key, the decision deadline, and (tests only) the scripted model's address. A run that cannot start returns a `RunError`; once the agent has started there is always a `RunOutcome`.
+- **`Tripwire::Hook` carries the hook's name**, so the report can say which hook ran.
+- **`Event::SkippedGate { tool, what, harmless }`** instead of the plan's `{ command, on_harmless_list }`, because the file tools skip the gate too. There is no `GateDecision` event: the decisions are in `RunOutcome.requests`.
+- **`watch_run` is public, and takes any running agent** (a small interface that `RunHandle` fills). Two of the three live tests need a hook or an allow rule in the run's settings, so they take `run()`'s own steps with the settings rewritten (as root, in the test only) between preparing and launching. The `ls src` test goes through `run()` itself. `run()` has no test-only option. The interface also lets the stop and backstop be tested without Linux.
+- **A tool call with no result by the end of the run is not judged.** A stopped or timed-out run cuts calls off, often before they reach the gate, so there is no evidence such a call ran. The events still show the call without a result, and Task 10 takes the changed files from Steplet's own `git status`.
+- **A backstop on Windows:** if the run has not ended 30 s after its time limit, Steplet stops it and records a fault. The time limit inside Linux normally ends it first.
+- **The gate refuses everything from the tripwire on** (`refuse_everything`), found live and described below.
+- **`run()` removes the run when it ends.** Task 10 adds the changed-files list and the trust check just before that.
+
+### The tests first
+
+The watcher's unit tests (`tests/watch.rs`), the three live tests (`tests/tripwires.rs`), a gate test for `answered` (`tests/gate.rs`) and a unit test for the random token were written first. None of it could build yet:
+
+```
+> cargo test -p steplet-run --offline --no-run     (each error line, counted)
+      5 error[E0599]: no method named `answered` found for struct `GateService` in the current scope
+      5 error[E0599]: no variant named `SkippedGate` found for enum `Event`
+      1 error: could not compile `steplet-run` (test "gate") due to 6 previous errors
+      1 error: could not compile `steplet-run` (test "tripwires") due to 3 previous errors
+      1 error: could not compile `steplet-run` (test "watch") due to 4 previous errors
+      1 error[E0432]: unresolved imports `steplet_run::RunOutcome`, `steplet_run::RunSetup`, `steplet_run::Tripwire`, `steplet_run::run`, `steplet_run::watch_run`
+      1 error[E0432]: unresolved imports `steplet_run::Tripwire`, `steplet_run::Verdict`, `steplet_run::Watcher`
+      1 error[E0599]: no method named `into_requests` found for struct `GateService` in the current scope
+```
+
+With the watcher, `run()` and the gate's lookup written, only the random token was still missing:
+
+```
+> cargo test -p steplet-run --offline --lib --no-run     (each error line, counted)
+      3 error[E0425]: cannot find function `random_hex` in module `super`
+      2 error[E0425]: cannot find function `random_hex` in this scope
+      1 error: could not compile `steplet-run` (lib test) due to 5 previous errors
+```
+
+Then the same tests passing:
+
+```
+> cargo test -p steplet-run --offline --lib --test watch --test gate     (each test line, sorted)
+test a_call_the_gate_allowed_is_not_noted_whatever_came_back ... ok
+test a_call_the_gate_refused_must_come_back_as_an_error ... ok
+test a_client_that_never_reads_its_answer_is_let_go ... ok
+test a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered ... ok
+test a_decision_that_never_comes_is_refused_at_steplet_s_deadline ... ok
+test a_harmless_read_command_that_skipped_the_gate_is_recorded_and_the_run_goes_on ... ok
+test a_hook_event_stops_the_run ... ok
+test a_program_other_than_the_gate_is_refused ... ok
+test a_read_or_search_inside_the_copy_that_skipped_the_gate_is_harmless ... ok
+test a_read_or_search_that_skipped_the_gate_and_reaches_outside_the_copy_stops_the_run ... ok
+test a_restricted_or_low_integrity_client_is_refused ... ok
+test a_result_for_a_call_never_seen_stops_the_run ... ok
+test a_write_an_edit_a_fetch_or_any_other_tool_that_skipped_the_gate_stops_the_run ... ok
+test a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate ... ok
+test an_answer_the_client_never_read_is_recorded_as_not_delivered ... ok
+test any_other_command_that_skipped_the_gate_stops_the_run ... ok
+test each_result_is_matched_to_its_own_call ... ok
+test prepare::tests::base64_gives_the_rfc_4648_test_vectors ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 12 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.15s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test run::tests::random_hex_is_fresh_lower_case_hexadecimal_of_the_length_asked ... ok
+test someone_holding_the_pipe_name_first_stops_the_gate_from_starting ... ok
+test the_checker_decides_each_request_and_the_service_records_who_asked ... ok
+test the_gate_program_s_windows_name_is_its_path_in_steplet_s_linux ... ok
+test the_other_events_are_not_judged ... ok
+test the_pipe_is_gone_once_the_service_stops ... ok
+test the_service_says_for_each_tool_call_whether_it_was_asked_and_what_it_answered ... ok
+```
+
+### What the first live runs found: the gate allowed a request while Steplet was stopping the run
+
+The three live cases passed at the first try. But their output showed that **stopping a run takes 1 to 2 s** (two calls into Linux to end the agent's programs), and the quick scripted model made 3 or 4 more calls in that time. Calls that skip the gate in that window are harmless reads, or the very breach that set off the tripwire. But a call that *asks* the gate could still be allowed.
+
+The hook test was changed so that, after the hook, the script runs a command the file declares (`touch allowed.txt`): the checker would allow it, and it asks the gate. It failed:
+
+```
+> cargo test -p steplet-run --offline --test tripwires -- --ignored --nocapture --test-threads=1 a_hook
+test a_hook_in_the_run_s_settings_stops_the_run ... --- the run's settings now say: {
+--- 2.4 s; exit code Some(124); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 2
+thread 'a_hook_in_the_run_s_settings_stops_the_run' (35316) panicked at crates\steplet-run\tests\tripwires.rs:291:9:
+from the tripwire on, the gate refuses everything: Allow { updated_input: Object {"command": String("touch allowed.txt"), "description": String("Step 0")} }
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 7.53s
+```
+
+**Fixed:** `GateService::refuse_everything()`. From the tripwire on, every decision is a refusal ("Steplet is stopping this run, so it refused this"); the key is still served. `watch_run` calls it before it begins the stop, at a tripwire and at the backstop. A Windows-only gate test checks it (`once_steplet_is_stopping_the_run_every_request_is_refused`). The same live test then:
+
+```
+test a_hook_in_the_run_s_settings_stops_the_run ... --- the run's settings now say: {
+--- 2.4 s; exit code Some(124); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 4
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 7.18s
+```
+
+### The code review, and what changed
+
+A separate reviewer read the whole change (read-only; it ran nothing) and found nothing critical. Three points were rated important, and two minor ones were raised to important here, because of what a person using Steplet would get:
+
+1. **A Linux that does not answer could hold a stop for ever.** Stopping called into Linux with no time limit, and a failed call returned before the final step that ends `wsl.exe` from Windows. After that, the backstop never tried again. **Fixed:**
+   - every call into Linux on the stop path has a 10 s limit (`wsl::run_within`), and so do the clean-up, the preparation and the start script's install;
+   - a failed call no longer skips the rest of the stop: `wsl.exe` is still ended, and the error is reported;
+   - when stopping fails, `watch_run` ends `wsl.exe` from Windows (`RunHandle::kill`) and records both faults.
+2. **A steady flow of events kept the watcher from ever checking whether the run had ended, or whether its time was up.** Those checks ran only when 200 ms passed with no event. **Fixed:** they now run every 200 ms whatever comes. Also (one of the reviewer's open questions): when the agent's outputs closed, the watch ended at once, before the agent itself had. It now keeps checking until the agent has ended.
+3. **A tiny gap in `refuse_everything`:** an "allow" checked just before the tripwire could still be recorded and sent just after it. **Changed:** the flag is now set while holding the record, and each decision checks the flag and is recorded in that same step. So every decision recorded after `refuse_everything()` returns is a refusal. An answer recorded a moment before can still be on its way; it answered a request asked before Steplet knew. No test can show this gap: it was a few instructions wide, on another thread.
+4. **(Raised from minor.) The live hook test could pass without showing anything about the gate during a stop:** if no request reached the gate, its check had nothing to check. It now also requires that at least one request reached the gate while Steplet was stopping the run.
+5. **(Raised from minor.) A search pattern with a choice, such as `{..,x}/*`, could reach outside the working copy and still count as harmless.** The checker's mapping looked for `..` and a leading `/` only outside choices. This was older code, but the watcher now trusts it for searches that skip the gate. **Fixed:** every alternative of a choice is checked as if it began the pattern. `**/*.{rs,toml}` is still allowed.
+
+The tests for 1, 2 and 5 were written first and failed:
+
+```
+> cargo test -p steplet-run --offline --test decide
+test anything_unclear_is_refused_with_a_reason ... FAILED
+thread 'anything_unclear_is_refused_with_a_reason' (4868) panicked at crates\steplet-run\tests\decide.rs:68:22:
+Glob {"path":"/work/r1/repo","pattern":"{..,x}/*"}: expected a refusal, got Allow { updated_input: Object {"path": String("/work/r1/repo"), "pattern": String("{..,x}/*")} }
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-run --offline --test watch
+test a_read_or_search_that_skipped_the_gate_and_reaches_outside_the_copy_stops_the_run ... FAILED
+thread 'a_read_or_search_that_skipped_the_gate_and_reaches_outside_the_copy_stops_the_run' (33776) panicked at crates\steplet-run\tests\watch.rs:116:9:
+assertion `left == right` failed: Glob {..,x}/* in /work/r1/repo
+  left: Verdict { skipped: Some(SkippedGate { tool: "Glob", what: "{..,x}/* in /work/r1/repo", harmless: true }), stop: None }
+ right: Verdict { skipped: Some(SkippedGate { tool: "Glob", what: "{..,x}/* in /work/r1/repo", harmless: false }), stop: Some(SkippedGate("Glob {..,x}/* in /work/r1/repo")) }
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-run --offline --test watch_run     (each test, each panic, the result)
+test the_watch_lasts_until_the_agent_has_ended_even_when_its_outputs_close_first ... FAILED
+test at_a_tripwire_the_gate_refuses_before_the_stop_begins ... ok
+test after_a_tripwire_a_stop_that_fails_ends_in_a_kill ... FAILED
+test a_run_whose_events_never_pause_is_still_stopped_at_the_backstop ... FAILED
+test a_run_that_steplet_s_linux_will_not_stop_is_ended_from_windows ... FAILED
+thread 'the_watch_lasts_until_the_agent_has_ended_even_when_its_outputs_close_first' (20556) panicked at crates\steplet-run\tests\watch_run.rs:186:5:
+  left: ["finish, ended: false"]
+ right: ["finish, ended: true"]
+thread 'after_a_tripwire_a_stop_that_fails_ends_in_a_kill' (30588) panicked at crates\steplet-run\tests\watch_run.rs:149:60:
+watch_run returned within 10 s: Timeout
+thread 'a_run_whose_events_never_pause_is_still_stopped_at_the_backstop' (15496) panicked at crates\steplet-run\tests\watch_run.rs:149:60:
+watch_run returned within 10 s: Timeout
+thread 'a_run_that_steplet_s_linux_will_not_stop_is_ended_from_windows' (29816) panicked at crates\steplet-run\tests\watch_run.rs:149:60:
+watch_run returned within 10 s: Timeout
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.01s
+> cargo test -p steplet-run --offline --test launch --no-run
+error[E0425]: cannot find function `run_within` in module `steplet_run::wsl`
+```
+
+(Three of the stand-in tests "panicked at watch_run.rs:149" with `watch_run returned within 10 s: Timeout`: `watch_run` never returned.) After the fixes:
+
+```
+> cargo test -p steplet-run --offline --test watch_run
+test after_a_tripwire_a_stop_that_fails_ends_in_a_kill ... ok
+test at_a_tripwire_the_gate_refuses_before_the_stop_begins ... ok
+test the_watch_lasts_until_the_agent_has_ended_even_when_its_outputs_close_first ... ok
+test a_run_that_steplet_s_linux_will_not_stop_is_ended_from_windows ... ok
+test a_run_whose_events_never_pause_is_still_stopped_at_the_backstop ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+```
+
+Left as they are, and noted for the final review (minor):
+- `finish()` can drop events from an output reader still blocked 10 s after the end, with no fault recorded.
+- If Claude Code ever sent tool results in another shape, every skipped call would count as "no result" and never be judged. A fault for unjudged calls, in a run that ended on its own, would catch that (phase 5, with any change of version).
+- A skipped command marked to run outside the fence (possible only with changed settings) is judged by its words alone.
+- A crash inside `watch_run` skips the clean-up (the next run's preparation clears it).
+
+The reviewer's open questions, answered:
+- *Tool results in other shapes:* the run offers only Bash, Read, Write, Edit, Glob, Grep and WebFetch (H5), no server tools, and the measurement saw all 16 results in the one known shape.
+- *Read-only commands in a hostile repository* (git's helper programs, links that point out of the copy): commands run inside the fence, `.git/config` is Steplet's own clone and cannot be written, and links reached by the agent's file tools are Task 3 (deferred on your word).
+- *A search with no folder:* Claude Code's folder can leave the copy only through a `cd`, which is not a read-only command. So it either stops the run (if it skipped the gate) or is refused (if it asked).
+
+### The final runs
+
+Every Linux-only test of the runner, on the final code (the launch, gate and working-copy tests again too, since `wait` now runs through `finish` and every stop goes through the time-limited calls):
+
+```
+> cargo test -p steplet-run --offline --no-fail-fast -- --ignored --nocapture --test-threads=1     (each test and result line)
+     Running unittests src\lib.rs (target\debug\deps\steplet_run-edb81ff285450e2f.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+     Running tests\decide.rs (target\debug\deps\decide-f984e75a8222c3ff.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+test a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run ... ok
+test a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not ... ok
+test a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 28.54s
+     Running tests\launch.rs (target\debug\deps\launch-2c821a776c9bbf7e.exe)
+test a_call_into_steplet_s_linux_that_does_not_answer_is_given_up_at_its_limit ... ok
+test a_scripted_run_streams_its_events_in_order ... ok
+test a_stop_right_after_launch_never_lets_the_agent_act ... ok
+test stop_ends_a_run_mid_command_and_leaves_nothing_running ... ok
+test the_time_limit_ends_a_run ... ok
+test whatever_a_run_leaves_running_ends_with_it ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 55.29s
+     Running tests\prepare.rs (target\debug\deps\prepare-ca0ff602a7cf43dc.exe)
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 11.49s
+     Running tests\settings.rs (target\debug\deps\settings-8f98eebba7e02420.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+     Running tests\stream.rs (target\debug\deps\stream-14a26201034b512e.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+     Running tests\tripwires.rs (target\debug\deps\tripwires-8535515b103c05f7.exe)
+test a_harmless_read_that_skips_the_gate_does_not_stop_the_run ... ok
+test a_hook_in_the_run_s_settings_stops_the_run ... ok
+test a_writing_command_made_to_skip_the_gate_stops_the_run ... ok
+test which_actions_ask_the_gate ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.04s
+     Running tests\watch.rs (target\debug\deps\watch-3da87fd5f880fdb0.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+     Running tests\watch_run.rs (target\debug\deps\watch_run-76ecdcace2e75d9b.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit 0
+```
+
+The tripwire tests' own output, unchanged except that the two settings files printed in full are cut to their changed part (marked):
+
+```
+     Running tests\tripwires.rs (target\debug\deps\tripwires-8535515b103c05f7.exe)
+
+running 4 tests
+test a_harmless_read_that_skips_the_gate_does_not_stop_the_run ... --- 4.0 s; exit code Some(0); stopped_by None; faults []; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_11ded416f7f44049bf89", name: "Bash", input: Object {"command": String("ls src"), "description": String("List src")} }
+    ToolResult { id: "toolu_test_11ded416f7f44049bf89", is_error: true, text: "Exit code 2\nls: cannot access 'src': No such file or directory" }
+    SkippedGate { tool: "Bash", what: "ls src", harmless: true }
+    AgentText("Task 9: the end of the script.")
+    Result { subtype: "success", is_error: false, stop_reason: "end_turn", models: ["claude-opus-5[1m]"], text: "Task 9: the end of the script." }
+--- the gate was asked:
+ok
+test a_hook_in_the_run_s_settings_stops_the_run ... --- the run's settings now say: (cut here to the changed part:) {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "true"}]}]}}
+--- 2.0 s; exit code Some(124); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_728e0724ed5e4fbc8b26", name: "Bash", input: Object {"command": String("ls"), "description": String("List")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_728e0724ed5e4fbc8b26", is_error: false, text: "README" }
+    SkippedGate { tool: "Bash", what: "ls", harmless: true }
+    ToolUse { id: "toolu_test_630676d6d7634b518a77", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 0")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_630676d6d7634b518a77", is_error: true, text: "Steplet is stopping this run, so it refused this" }
+    ToolUse { id: "toolu_test_768deaac43f247b29542", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 1")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_768deaac43f247b29542", is_error: true, text: "Steplet is stopping this run, so it refused this" }
+    ToolUse { id: "toolu_test_f65b9a7633fc4b86a1dc", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 2")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_f65b9a7633fc4b86a1dc", is_error: true, text: "Steplet is stopping this run, so it refused this" }
+    ToolUse { id: "toolu_test_88614f1fc4d04d4f8471", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 3")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_88614f1fc4d04d4f8471", is_error: true, text: "Steplet is stopping this run, so it refused this" }
+    ToolUse { id: "toolu_test_17d6d8a3acd9480bbb95", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 4")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_17d6d8a3acd9480bbb95", is_error: true, text: "Steplet is stopping this run, so it refused this" }
+    ToolUse { id: "toolu_test_f3837c9066b6471e8dc7", name: "Bash", input: Object {"command": String("touch allowed.txt"), "description": String("Step 5")} }
+    HookEvent { name: "PreToolUse:Bash" }
+    HookEvent { name: "PreToolUse:Bash" }
+    ToolResult { id: "toolu_test_f3837c9066b6471e8dc7", is_error: true, text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a
+    SkippedGate { tool: "Bash", what: "touch allowed.txt", harmless: false }
+    Other("user/text")
+    Result { subtype: "error_during_execution", is_error: true, stop_reason: "tool_use", models: ["claude-opus-5[1m]"], text: "" }
+--- the gate was asked:
+    toolu_test_630676d6d7634b518a77 Bash Deny { message: "Steplet is stopping this run, so it refused this" }
+    toolu_test_768deaac43f247b29542 Bash Deny { message: "Steplet is stopping this run, so it refused this" }
+    toolu_test_f65b9a7633fc4b86a1dc Bash Deny { message: "Steplet is stopping this run, so it refused this" }
+    toolu_test_88614f1fc4d04d4f8471 Bash Deny { message: "Steplet is stopping this run, so it refused this" }
+    toolu_test_17d6d8a3acd9480bbb95 Bash Deny { message: "Steplet is stopping this run, so it refused this" }
+--- the hook events, as Claude Code 2.1.220 sends them: [HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }, HookEvent { name: "PreToolUse:Bash" }]
+--- requests that reached the gate after the hook: 5
+ok
+test a_writing_command_made_to_skip_the_gate_stops_the_run ... --- the run's settings now say: (cut here to the changed part:) {"permissions.allow": ["Bash(touch:*)"]}
+--- 2.1 s; exit code Some(124); stopped_by Some(SkippedCommand("touch made.txt")); faults []; every event:
+    Started { model: "claude-opus-5[1m]", tools: ["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "Write"], gate_connected: true }
+    ToolUse { id: "toolu_test_576410354b454062b8a9", name: "Bash", input: Object {"command": String("touch made.txt"), "description": String("Write")} }
+    ToolResult { id: "toolu_test_576410354b454062b8a9", is_error: false, text: "(Bash completed with no output)" }
+    SkippedGate { tool: "Bash", what: "touch made.txt", harmless: false }
+    ToolUse { id: "toolu_test_2aaadd2ff2c64ce29683", name: "Bash", input: Object {"command": String("pwd"), "description": String("Step 0")} }
+    ToolResult { id: "toolu_test_2aaadd2ff2c64ce29683", is_error: false, text: "/work/t9c/repo" }
+    SkippedGate { tool: "Bash", what: "pwd", harmless: true }
+    ToolUse { id: "toolu_test_dd660af730084c5383e9", name: "Bash", input: Object {"command": String("pwd"), "description": String("Step 1")} }
+    ToolResult { id: "toolu_test_dd660af730084c5383e9", is_error: false, text: "/work/t9c/repo" }
+    SkippedGate { tool: "Bash", what: "pwd", harmless: true }
+    ToolUse { id: "toolu_test_7d6b6d11cef24d5bb5a6", name: "Bash", input: Object {"command": String("pwd"), "description": String("Step 2")} }
+    ToolResult { id: "toolu_test_7d6b6d11cef24d5bb5a6", is_error: false, text: "/work/t9c/repo" }
+    SkippedGate { tool: "Bash", what: "pwd", harmless: true }
+    ToolUse { id: "toolu_test_684a3207886c46e79f35", name: "Bash", input: Object {"command": String("pwd"), "description": String("Step 3")} }
+    ToolResult { id: "toolu_test_684a3207886c46e79f35", is_error: false, text: "/work/t9c/repo" }
+    SkippedGate { tool: "Bash", what: "pwd", harmless: true }
+    ToolUse { id: "toolu_test_a989c720c28b4d80a387", name: "Bash", input: Object {"command": String("pwd"), "description": String("Step 4")} }
+    ToolResult { id: "toolu_test_a989c720c28b4d80a387", is_error: true, text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a
+    SkippedGate { tool: "Bash", what: "pwd", harmless: true }
+    Other("user/text")
+    Result { subtype: "error_during_execution", is_error: true, stop_reason: "tool_use", models: ["claude-opus-5[1m]"], text: "" }
+--- the gate was asked:
+ok
+test which_actions_ask_the_gate ... --- exit code Some(0); each tool call, whether it asked the gate, and what came back:
+    Bash   "ls"                                           asked=NO  answer=-
+           is_error=false README
+    Bash   "cat README"                                   asked=NO  answer=-
+           is_error=false Hello World!
+    Bash   "ls src"                                       asked=NO  answer=-
+           is_error=true Exit code 2 | ls: cannot access 'src': No such file or directory
+    Bash   "git status --short"                           asked=NO  answer=-
+           is_error=false ?? .bash_profile | ?? .bashrc | ?? .claude/ | ?? .gitconfig | ?? .gitmodules | ?? .idea | ?? .mcp.json | ?? .profile | ?? .ripgreprc | ?? .vscode | ??
+    Bash   "cat README; echo done"                        asked=NO  answer=-
+           is_error=false Hello World! | done
+    Bash   "cat README | wc -l"                           asked=NO  answer=-
+           is_error=false 1
+    Bash   "ls /var/lib/steplet"                          asked=NO  answer=-
+           is_error=true Permission to use Bash with command ls /var/lib/steplet has been denied.
+    Bash   "touch made.txt"                               asked=yes answer=Deny { message: "this needs the receiver's yes, and no one c
+           is_error=true this needs the receiver's yes, and no one could answer: the file does not ask for this command
+    Read   "/work/t9m/repo/README"                        asked=NO  answer=-
+           is_error=false 1	Hello World! | 2	
+    Glob   "*"                                            asked=NO  answer=-
+           is_error=false .git/objects/pack/pack-755faf4b60c7641d1fa9a33a32bf2843850c45a7.idx | .git/objects/pack/pack-755faf4b60c7641d1fa9a33a32bf2843850c45a7.pack | .git/obje
+    Grep   "Hello"                                        asked=NO  answer=-
+           is_error=false Found 1 file | README
+    Read   "/etc/os-release"                              asked=yes answer=Deny { message: "this needs the receiver's yes, and no one c
+           is_error=true this needs the receiver's yes, and no one could answer: this path is outside the repository
+    Read   "/var/lib/steplet/runs/t9m/settings.json"      asked=NO  answer=-
+           is_error=true <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+    Read   "/work/t9m/repo/.git/config"                   asked=NO  answer=-
+           is_error=false 1	[core] | 2		repositoryformatversion = 0 | 3		filemode = true | 4		bare = false | 5		logallrefupdates = true | 6	[remote "origin"] | 7		url = https:/
+    Edit   "/work/t9m/repo/.git/config"                   asked=NO  answer=-
+           is_error=true <tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>
+    Write  "/work/t9m/repo/written.txt"                   asked=yes answer=Deny { message: "this needs the receiver's yes, and no one c
+           is_error=true this needs the receiver's yes, and no one could answer: the file does not ask to change files here
+--- the working copy holds: .claude .git README
+--- .git/config still has no test edit: true
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.04s
+```
+
+The time limit on calls into Linux:
+
+```
+test a_call_into_steplet_s_linux_that_does_not_answer_is_given_up_at_its_limit ... --- Err(Custom { kind: TimedOut, error: "Steplet's Linux did not answer within 2 s" }) after 2.0 s
+ok
+```
+
+### Checks
+
+```
+> cargo fmt --all -- --check
+fmt exit code: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.61s
+clippy exit code: 0
+> cargo test --workspace --offline     (every "test result" line, summed by awk)
+198 passed, 0 failed, 16 ignored, in 44 test programs, every one ok
+test exit code: 0
+```
+
+### What this task did not verify
+
+- **A hook has already run when Steplet sees it.** The stream shows a hook as it starts, so the tripwire stops the run after the hook's first run. In the test the hook was `true`. Preventing hooks is the job of the other two layers of D3 (Steplet's own settings sources, and agent settings files removed from the copy).
+- **Calls that skip the gate during the 1 to 2 s of a stop still run.** They are harmless reads, or more of the breach that set off the tripwire. Every call that asks the gate in that time is refused.
+- **The real model:** every run here used the scripted one, which is much quicker than a real model.
+- **A WSL that hangs:** the stop's time limits were tested with a slow command (`sleep 31`), not with a WSL that stops answering. The calls made before the run starts (installing the gate program) still have no limit.
+- **Tool calls cut off by a stop or the time limit are not judged** (no evidence they ran); the report (Task 10) can show them as calls with no result.
+- **A call cut off by the stop *with* a result can be recorded as skipping the gate.** In the final hook run above, the sixth `touch allowed.txt` was interrupted before it reached the gate. Claude Code reported it as rejected, and the watcher, which never reads Claude Code's messages, recorded `SkippedGate` (not harmless). `stopped_by` keeps the first tripwire, the hook. Task 10's report gives `stopped_by` as the reason and must not count records made during the stop as separate breaches.
+- **Links inside the working copy that point outside it**, reached by Read or Glob without asking the gate: Task 3, deferred.

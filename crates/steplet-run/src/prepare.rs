@@ -2,6 +2,8 @@
 //! agent, the agent settings files removed, and the run's private folders and settings files written. It all runs as
 //! root inside Steplet's own Linux, from the fixed script `prepare.sh`; `discard` removes the run when it ends.
 
+use std::time::Duration;
+
 use steplet_core::hosts;
 
 use crate::settings::{mcp_json, settings_json};
@@ -10,6 +12,10 @@ use crate::wsl;
 
 const PREPARE: &str = include_str!("prepare.sh");
 const DISCARD: &str = include_str!("discard.sh");
+/// The longest Steplet waits for `prepare.sh`: its clone may take 10 minutes and its checkout 5 (their own limits).
+const PREPARE_LIMIT: Duration = Duration::from_secs(20 * 60);
+/// The longest Steplet waits for `discard.sh`.
+const DISCARD_LIMIT: Duration = Duration::from_secs(2 * 60);
 
 /// P3: milestone 1 clones public repositories only, so only from these public code hosts (the user's choice, 14 Oct
 /// 2026). Any other name could be a home or company server that Steplet's own git would reach before any fence.
@@ -40,18 +46,18 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<()
     }
     let settings = base64(settings_json(&req.steplet, paths, gate).as_bytes());
     let mcp = base64(mcp_json(gate).as_bytes());
-    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp])
+    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp], PREPARE_LIMIT)
 }
 
 /// Ends whatever the run left running and deletes its working copy and private folders.
 pub fn discard(paths: &RunPaths) -> Result<(), PrepareError> {
-    as_root(paths, DISCARD, &[paths.run_id()])
+    as_root(paths, DISCARD, &[paths.run_id()], DISCARD_LIMIT)
 }
 
-fn as_root(paths: &RunPaths, script: &str, args: &[&str]) -> Result<(), PrepareError> {
+fn as_root(paths: &RunPaths, script: &str, args: &[&str], limit: Duration) -> Result<(), PrepareError> {
     let argv = [&["/bin/bash", "-s", "--"][..], args].concat();
-    let out =
-        wsl::run(paths.distro_id(), "root", &argv, script.as_bytes()).map_err(|e| PrepareError::Wsl(e.to_string()))?;
+    let out = wsl::run_within(paths.distro_id(), "root", &argv, script.as_bytes(), limit)
+        .map_err(|e| PrepareError::Wsl(e.to_string()))?;
     let step = match out.status {
         Some(0) => return Ok(()),
         Some(10) => "clear the last run",

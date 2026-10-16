@@ -29,9 +29,14 @@ pub fn decide(policy: &Policy, req: &GateRequest) -> GateAnswer {
     }
 }
 
-/// True for a search pattern that starts at a root or a home folder, or climbs out with `..`.
+/// True for a search pattern that starts at a root or a home folder, or climbs out with `..`. A choice such as
+/// `{a,b}` counts too: a search may try every alternative, so each is checked as if it began the pattern. (A comma
+/// outside a choice is read the same way, which can only refuse more.)
 fn climbs_out(pattern: &str) -> bool {
-    pattern.starts_with(['/', '\\', '~']) || pattern.split(['/', '\\']).any(|part| part == "..")
+    let starts_out = |p: &str| p.starts_with(['/', '\\', '~']);
+    starts_out(pattern)
+        || pattern.split(['{', ',']).skip(1).any(starts_out)
+        || pattern.split(['/', '\\', '{', '}', ',']).any(|part| part == "..")
 }
 
 fn deny(message: &str) -> GateAnswer {

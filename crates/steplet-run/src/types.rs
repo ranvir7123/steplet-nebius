@@ -240,6 +240,14 @@ pub enum Event {
         models: Vec<String>,
         text: String,
     },
+    /// A tool call that did not ask the gate, as the tripwire watcher judged it (Task 9). Steplet's own record, put
+    /// right after the call's result. `what` is its command, path or address; `harmless` means it was a harmless
+    /// read (G2) and the run went on.
+    SkippedGate {
+        tool: String,
+        what: String,
+        harmless: bool,
+    },
     /// One line of Claude Code's error output.
     Stderr(String),
     /// A line on the event stream that is not a JSON object.
