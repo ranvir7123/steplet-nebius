@@ -42,11 +42,34 @@ fn ask_host(pipe: &str, token: &str, a: &Value) -> Value {
     }
 }
 
+fn print_key(pipe: &str, token: &str) -> i32 {
+    let Ok(mut f) = std::fs::OpenOptions::new().read(true).write(true).open(pipe) else { return 1 };
+    if writeln!(f, "{}", json!({"kind": "key", "run_token": token})).is_err() {
+        return 1;
+    }
+    let mut line = String::new();
+    if BufReader::new(&f).read_line(&mut line).is_err() {
+        return 1;
+    }
+    match serde_json::from_str::<Value>(&line).ok().and_then(|v| v["key"].as_str().map(str::to_owned)) {
+        Some(key) => {
+            let mut out = std::io::stdout();
+            if out.write_all(key.as_bytes()).and_then(|()| out.flush()).is_ok() { 0 } else { 1 }
+        }
+        None => 1,
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
     let pipe = format!(r"\\.\pipe\{}", opt("--pipe").expect("--pipe"));
     let token = opt("--token").expect("--token");
+    if args.iter().any(|a| a == "--key") {
+        // Phase 3, Task 2: Claude Code's apiKeyHelper. Ask the host for the key over the pipe and print it, with no
+        // line ending, so the key is never written to a file inside Linux. Anything unclear prints nothing.
+        std::process::exit(print_key(&pipe, &token));
+    }
     let log_path = opt("--log").expect("--log");
     let crash_marker = format!("{log_path}.crashed");
     let crash_once = args.iter().any(|a| a == "--crash-once");

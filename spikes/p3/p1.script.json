@@ -1,0 +1,12 @@
+{
+  "about": "Phase 3 Task 1, Checks 1 and 5: five writes through the gate, then the shell's name and version inside the fence",
+  "steps": [
+    {"tool": "Write", "input": {"file_path": "/work/p1/repo/p3_marker_01.txt", "content": "p3\n"}},
+    {"tool": "Write", "input": {"file_path": "/work/p1/repo/p3_marker_02.txt", "content": "p3\n"}},
+    {"tool": "Write", "input": {"file_path": "/work/p1/repo/p3_marker_03.txt", "content": "p3\n"}},
+    {"tool": "Write", "input": {"file_path": "/work/p1/repo/p3_marker_04.txt", "content": "p3\n"}},
+    {"tool": "Write", "input": {"file_path": "/work/p1/repo/p3_marker_05.txt", "content": "p3\n"}},
+    {"tool": "Bash", "input": {"command": "echo \"shell=$(ps -o comm= -p $$) bash=$BASH_VERSION\"", "description": "Show the shell"}},
+    {"text": "P3 check 1: done."}
+  ]
+}

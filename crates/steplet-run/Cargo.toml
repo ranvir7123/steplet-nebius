@@ -1,0 +1,10 @@
+[package]
+name = "steplet-run"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+steplet-core = { path = "../steplet-core" }
+serde_json = "=1.0.151"
