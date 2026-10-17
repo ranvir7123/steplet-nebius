@@ -481,7 +481,8 @@ fn a_write_into_steplets_own_folder_is_refused_before_the_gate() {
             ("Write", planted.as_str(), &Check::NotAsked { harmless: false }, None),
         ]
     );
-    assert!(report.commands[1].output.contains("/"), "the command printed its file's path");
+    let made = &report.commands[1].output;
+    assert!(made.starts_with(&format!("{}/", paths.run_tmp())), "the file is in the fence's own folder: {made:?}");
     assert_eq!(
         report.stopped_by,
         Some(steplet_run::Tripwire::SkippedGate(format!("Write {planted}"))),
