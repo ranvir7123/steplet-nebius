@@ -20,6 +20,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::oneshot;
+use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
 
 use crate::client::{Client, MEDIUM_INTEGRITY, Permissions, wait_until_read};
 use crate::types::{GateAnswer, GateLink, GateRequest, is_guid};
@@ -32,6 +33,8 @@ const GATE_FOLDER: &str = "/opt/steplet/gate";
 const ERROR_ACCESS_DENIED: i32 = 5;
 /// How long sending one answer may take. The gate reads its answer at once; this only ends a client that never does.
 const SEND_LIMIT: Duration = Duration::from_secs(5);
+/// The longest stopping waits for Windows to close the free end of the pipe.
+const CLOSE_LIMIT: Duration = Duration::from_secs(1);
 
 /// The Anthropic key the gate's key mode hands to Claude Code (H2). It is never shown: its `Debug` says only that
 /// there is one.
@@ -78,7 +81,9 @@ pub enum GateError {
     Install(String),
 }
 
-/// The running service. Stopping it, or dropping it, closes the pipe.
+/// The running service. Stopping it, or dropping it, closes the pipe: once that returns, no client can connect, unless
+/// Windows has not closed the pipe's free end within 1 s (never seen). A connection still being answered then may stay
+/// open a while, but no new one can be made.
 pub struct GateService {
     records: Arc<Mutex<Vec<Asked>>>,
     stopping: Arc<AtomicBool>,
@@ -132,6 +137,8 @@ impl GateService {
     }
 
     fn end(&mut self) {
+        // From the stop on, every decision is a refusal, including one that finishes while the free end closes.
+        self.refuse_everything();
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
         }
@@ -202,9 +209,11 @@ where
     });
     let (stop, stopped) = oneshot::channel();
     let thread = std::thread::spawn(move || {
-        runtime.spawn(accept(first, name, permissions, rules));
-        // Runs the service until it is stopped (or the service value is gone); then every end of the pipe closes.
+        let accepting = runtime.spawn(accept(first, name.clone(), permissions, rules));
+        // Runs the service until it is stopped (or the service value is gone).
         let _ = runtime.block_on(stopped);
+        runtime.block_on(close_free_end(accepting, &name));
+        // A decision still being made is not waited for: its checker may never return.
         runtime.shutdown_background();
     });
     Ok(GateService { records, stopping, stop: Some(stop), thread: Some(thread) })
@@ -246,6 +255,30 @@ where
             tokio::spawn(answer(conn, rules.clone()));
         }
     }
+}
+
+/// Ends `accepting`, which holds the free end of the pipe, and waits until Windows says the pipe has no free end, so
+/// that no client can connect once the service has stopped. Dropping the end is not enough: tokio's pipe closes its
+/// handle only once the runtime has read Windows' word that the end's wait for a client was cancelled. After the
+/// runtime is shut down that happens only when its last thread is gone: a moment later, or, while a checker is stuck,
+/// never. Waits at most `CLOSE_LIMIT`.
+async fn close_free_end(accepting: tokio::task::JoinHandle<()>, name: &str) {
+    accepting.abort();
+    let _ = accepting.await;
+    let start = Instant::now();
+    while has_free_end(name) && start.elapsed() < CLOSE_LIMIT {
+        // Lets the runtime read what Windows has reported. tokio does not promise that it does, so Windows is asked
+        // each time.
+        tokio::task::yield_now().await;
+    }
+}
+
+/// True while the pipe has an end a client could connect to now. This only asks Windows; it connects nothing. While
+/// every end left is busy with a client, Windows takes one tick of its clock (about 15 ms) to say so.
+fn has_free_end(name: &str) -> bool {
+    let name: Vec<u16> = name.encode_utf16().chain([0]).collect();
+    // SAFETY: `name` is a NUL-terminated name that lives until the call returns.
+    unsafe { WaitNamedPipeW(name.as_ptr(), 1) != 0 }
 }
 
 fn record(records: &Mutex<Vec<Asked>>, asked: Asked) -> usize {
