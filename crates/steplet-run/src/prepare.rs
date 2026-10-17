@@ -33,10 +33,22 @@ pub enum PrepareError {
     Step { step: &'static str, detail: String },
 }
 
+/// What preparing a run did, for the prepare screen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Prepared {
+    /// The commit the working copy is at, as the script checked it.
+    pub commit: String,
+    /// The agent settings files and folders removed from the working copy (D3), in the script's fixed order.
+    pub removed: Vec<String>,
+}
+
+/// The agent settings files and folders `prepare.sh` knows, in the order it removes them.
+const AGENT_FILES: &[&str] = &[".claude", ".codex", ".cursor", ".gemini", ".mcp.json"];
+
 /// Prepares run `paths` for `req`. The repository address and the commit go into a script run as root, so they are
 /// checked here first: the address must be a plain `https://` address on one of `REPOSITORY_HOSTS`, and the commit
 /// 40 or 64 lower-case hexadecimal digits.
-pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<(), PrepareError> {
+pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Prepared, PrepareError> {
     if !is_plain_https(&req.repo_url) {
         return Err(PrepareError::Refused(BadValue("repository address")));
     }
@@ -48,7 +60,21 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<()
     }
     let settings = base64(settings_json(&req.steplet, paths, gate).as_bytes());
     let mcp = base64(mcp_json(gate).as_bytes());
-    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp], PREPARE_LIMIT).map(drop)
+    let args = ["prepare", paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp];
+    let out = as_root(paths, PREPARE, &args, PREPARE_LIMIT)?;
+    let ready = format!("steplet-prepare: ready at {}", req.commit);
+    if !out.stdout.lines().any(|line| line == ready) {
+        let detail = "the script ended without saying the copy was ready".into();
+        return Err(PrepareError::Step { step: "check out the commit inside the fence", detail });
+    }
+    Ok(Prepared { commit: req.commit.clone(), removed: removed_files(&out.stdout) })
+}
+
+/// The agent settings files `prepare.sh` says it removed (`removed: <name>` lines). Only names it knows count, each
+/// once and in its order, so a line from anything else it ran cannot add a name of its own.
+pub fn removed_files(stdout: &str) -> Vec<String> {
+    let said: Vec<&str> = stdout.lines().filter_map(|line| line.strip_prefix("removed: ")).collect();
+    AGENT_FILES.iter().filter(|f| said.contains(f)).map(|f| (*f).to_owned()).collect()
 }
 
 /// Ends whatever the run left running and deletes its working copy and private folders.

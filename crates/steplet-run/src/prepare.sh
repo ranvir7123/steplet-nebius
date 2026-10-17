@@ -1,9 +1,12 @@
 #!/bin/bash
 # Prepares one run inside Steplet's own Linux (plan Task 6, decision D6), in the layout of plan section 3. Runs as
 # root, sent on standard input by prepare.rs, which has checked every argument; nothing here is installed.
-# Arguments: run id, repository address (plain https), commit, settings.json and mcp.json (both in base64).
-# A failed step exits with its own code, which prepare.rs turns into words: 10 clear, 11 clone, 12 commit,
-# 13 checkout, 14 agent files, 15 run files.
+# Two entries, named by the first argument:
+#   prepare <run id> <repository address (plain https)> <commit> <settings.json> <mcp.json> (both in base64)
+#   strip <working copy>: only the removal of the agent settings files (phase 4 Task 2), which prepare also runs.
+# Each agent settings file removed is said on standard output as "removed: <name>", and a ready copy as
+# "steplet-prepare: ready at <commit>"; prepare.rs reads both. A failed step exits with its own code, which
+# prepare.rs turns into words: 10 clear, 11 clone, 12 commit, 13 checkout, 14 agent files, 15 run files.
 set -u
 
 fail() {
@@ -76,11 +79,7 @@ EOF
     stop_steplet || fail 13 "a program from the checkout would not stop"
 
     # 5. The agent settings files the repository carries are removed (D3), by the steplet account.
-    local f
-    for f in .claude .codex .gemini .cursor .mcp.json; do
-        "${AS[@]}" /bin/rm -rf -- "$REPO/$f"
-        if [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ]; then fail 14 "could not remove $f from the working copy"; fi
-    done
+    strip "$REPO"
 
     # 6. The run's settings file and MCP config, owned by root so the agent cannot change them.
     cd / && rm -rf -- "$C" "$R/srt-checkout.json" &&
@@ -91,6 +90,26 @@ EOF
     echo "steplet-prepare: ready at $COMMIT"
 }
 
-# The script comes on standard input, and bash reads it as it goes. All the work is in one function, which bash reads
-# whole before it runs it, and every program it starts gets /dev/null as its input, so none can read the script.
-main "$@" < /dev/null
+# Removes the agent settings files and folders from the working copy $1, as the steplet account with nobody's
+# settings, in a fixed order, saying each one it removed (D3).
+strip() {
+    local REPO=$1 f
+    for f in .claude .codex .cursor .gemini .mcp.json; do
+        [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ] || continue
+        setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs --             /usr/bin/env -i PATH=/usr/bin:/bin /bin/rm -rf -- "$REPO/$f"
+        if [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ]; then fail 14 "could not remove $f from the working copy"; fi
+        echo "removed: $f"
+    done
+}
+
+entry() {
+    case "${1-}" in
+        prepare) shift && main "$@" ;;
+        strip) shift && strip "$@" ;;
+        *) fail 10 "no such entry: ${1-}" ;;
+    esac
+}
+
+# The script comes on standard input, and bash reads it as it goes. All the work is in functions, which bash reads
+# whole before it runs them, and every program they start gets /dev/null as its input, so none can read the script.
+entry "$@" < /dev/null

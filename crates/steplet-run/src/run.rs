@@ -90,7 +90,7 @@ pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup
     let gate = serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r)).map_err(RunError::Gate)?;
     let started = prepare(req, paths, &link)
         .map_err(RunError::Prepare)
-        .and_then(|()| launch(req, paths, &setup.logs, setup.model_url.as_deref()).map_err(RunError::Launch));
+        .and_then(|_prepared| launch(req, paths, &setup.logs, setup.model_url.as_deref()).map_err(RunError::Launch));
     let handle = match started {
         Ok(handle) => handle,
         Err(e) => {

@@ -8,7 +8,7 @@ use std::time::Duration;
 use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_run::{
-    GateLink, PrepareError, RunPaths, RunRequest, changes, discard, mcp_json, prepare, settings_json, wsl,
+    GateLink, PrepareError, Prepared, RunPaths, RunRequest, changes, discard, mcp_json, prepare, settings_json, wsl,
 };
 
 /// Tiny and unchanged since 2011; phase 0's S4 used the same commit.
@@ -95,7 +95,7 @@ fn a_plain_request_gets_past_the_checks() {
         ("https://github.com/octocat/Hello-World", sha256.as_str()),
     ] {
         let got = prepare(&request(url, commit), &paths, &gate("t6x"));
-        assert!(!matches!(got, Err(PrepareError::Refused(_)) | Ok(())), "{url} {commit}: {got:?}");
+        assert!(!matches!(got, Err(PrepareError::Refused(_)) | Ok(_)), "{url} {commit}: {got:?}");
     }
 }
 
@@ -155,7 +155,8 @@ fn agent_settings_files_the_commit_carries_are_checked_out_then_removed() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let distro = steplet_linux();
     let paths = RunPaths::new(&distro, "t6b").unwrap();
-    prepare(&request(ACTION.0, ACTION.1), &paths, &gate("t6b")).unwrap();
+    let prepared = prepare(&request(ACTION.0, ACTION.1), &paths, &gate("t6b")).unwrap();
+    assert_eq!(prepared.removed, [".claude"], "the prepare screen lists what was removed");
 
     let repo = paths.work_repo();
     let git = |args: &[&str]| run(&distro, "steplet", &[&["/usr/bin/git", "-C", repo][..], args].concat());
@@ -246,4 +247,82 @@ rm -f /tmp/steplet-t10b-probe";
         [" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"],
         "the probe ran (README shows its made-up text), and nothing of the fence's own is listed"
     );
+}
+
+/// Phase 4 Task 2: only the names `prepare.sh` knows count, each once and in its order, whatever else was printed.
+#[test]
+fn removed_files_counts_only_names_it_knows() {
+    let said = "removed: .mcp.json
+removed: .claude
+removed: secrets
+removed: .claude
+ removed: .codex
+noise
+";
+    assert_eq!(steplet_run::removed_files(said), [".claude", ".mcp.json"]);
+    assert_eq!(
+        steplet_run::removed_files(
+            "steplet-prepare: ready at 7fd1a60b
+"
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// Phase 4 Task 2: `prepare` says which commit the copy is at, and that it removed nothing from Hello-World.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn prepare_reports_the_commit_and_no_removed_files_for_hello_world() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t2a").unwrap();
+    let prepared = prepare(&request(HELLO.0, HELLO.1), &paths, &gate("p4t2a"));
+    discard(&paths).unwrap();
+    let prepared = prepared.unwrap();
+    assert_eq!(prepared, Prepared { commit: HELLO.1.into(), removed: vec![] });
+}
+
+/// Phase 4 Task 2: the strip step of `prepare.sh`, on its own, on a made-up copy owned by the steplet account. It
+/// removes every agent settings file and folder it knows, prints one line for each it removed, in its fixed order,
+/// and leaves everything else.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn the_strip_step_lists_what_it_removed() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let copy = "/opt/steplet-test/strip-copy";
+    let plant = format!(
+        "set -e
+rm -rf {copy}
+mkdir -p {copy}/.claude {copy}/.codex {copy}/src
+echo '{{}}' > {copy}/.claude/settings.json
+echo '{{}}' > {copy}/.mcp.json
+echo 'made-up = true' > {copy}/.codex/config.toml
+echo 'kept' > {copy}/src/keep.txt
+chown -R steplet:steplet {copy}"
+    );
+    run(&distro, "root", &["/bin/sh", "-c", &plant]);
+    let script = include_bytes!("../src/prepare.sh");
+    let out = wsl::run(&distro, "root", &["/bin/bash", "-s", "--", "strip", copy], script).unwrap();
+    let left = run(&distro, "root", &["/usr/bin/find", copy, "-mindepth", "1"]);
+    run(&distro, "root", &["/usr/bin/rm", "-rf", copy]);
+    println!(
+        "--- the strip step said:
+{}{}
+--- left in the copy:
+{left}",
+        out.stdout, out.stderr
+    );
+    assert_eq!(out.status, Some(0), "{}", out.stderr);
+    assert_eq!(
+        out.stdout,
+        "removed: .claude
+removed: .codex
+removed: .mcp.json
+"
+    );
+    assert_eq!(steplet_run::removed_files(&out.stdout), [".claude", ".codex", ".mcp.json"]);
+    let mut left: Vec<&str> = left.lines().collect();
+    left.sort();
+    assert_eq!(left, [format!("{copy}/src"), format!("{copy}/src/keep.txt")], "everything else is left");
 }

@@ -274,3 +274,86 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; fini
 ```
 
 - **Minor, left:** a relative path with a secret name (such as `.ssh/x`) is now refused as `cap.outside-path`, not `block.secret-path`; it is refused either way.
+
+## Task 2: what the agent is told, and what preparing removed
+
+### Changes from the plan, recorded here
+
+- **Both entries of `prepare.sh` are named.** The plan added a second entry, `strip <copy>`. But `strip` is also a valid run id, so `prepare.sh strip` could have meant either. Now the first argument always names the entry: `prepare <run id> …` or `strip <copy>`.
+- **`removed_files` is public**, as `changed_files` already is: it reads the script's `removed: <name>` lines, and the strip test checks it on the script's real output. It counts only the five names the script knows, each once, in the script's order, so a line printed by anything else the script ran cannot add a name. Its own small test (`removed_files_counts_only_names_it_knows`) was written together with it, not before it.
+- **`prepare` also checks the script said the copy is ready** at the declared commit (`steplet-prepare: ready at <commit>`), and fails with "check out the commit inside the fence" otherwise.
+- **The existing test on a real repository that carries a `.claude` folder** (`agent_settings_files_the_commit_carries_are_checked_out_then_removed`, anthropics/claude-code-action) now also checks that `prepare` says it removed `.claude`.
+- The plan did not fix the words for an empty "never" list or an empty body; they are "Never: nothing listed." and "The sender's notes: none.".
+
+### The tests first
+
+```
+> cargo test -p steplet-run --offline --test task
+error[E0432]: unresolved import `steplet_run::task_text`
+ --> crates\steplet-run\tests\task.rs:6:5
+error: could not compile `steplet-run` (test "task") due to 1 previous error
+> cargo test -p steplet-run --offline --test prepare --no-run
+error[E0432]: unresolved import `steplet_run::Prepared`
+  --> crates\steplet-run\tests\prepare.rs:11:29
+error[E0425]: cannot find function `removed_files` in crate `steplet_run`
+   --> crates\steplet-run\tests\prepare.rs:298:29
+error[E0609]: no field `removed` on type `()`
+   --> crates\steplet-run\tests\prepare.rs:159:25
+error: could not compile `steplet-run` (test "prepare") due to 3 previous errors
+```
+
+(The lines starting with `error` or `-->`, as printed.)
+
+### The code
+
+- `crates/steplet-run/src/task.rs`: `task_text(s, commit)`, the fixed form of the plan (the steps numbered, the allowed commands and sites word for word, the never list, then the sender's body exactly as signed).
+- `crates/steplet-run/src/prepare.sh`: the `strip` entry removes `.claude .codex .cursor .gemini .mcp.json` in that order, as the `steplet` account, and prints `removed: <name>` for each one it removed; the `prepare` entry runs it as its step 5.
+- `crates/steplet-run/src/prepare.rs`: `prepare` returns `Prepared { commit, removed }`; `run` passes it on (Task 3 shows it on screen).
+
+### The tests pass
+
+```
+> cargo test -p steplet-run --offline --test task
+test task_text_keeps_the_body_exactly ... ok
+test task_text_is_steplets_fixed_form ... ok
+test task_text_says_when_nothing_is_allowed ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+```
+> cargo test -p steplet-run --offline --test prepare -- --ignored --nocapture --test-threads=1
+(the lines that name each test, the strip step's output, and the summary; unchanged)
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... --- https://github.com/octocat/steplet-test-no-such-repository.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d: could not clone the repository:
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... /var/lib/steplet/runs/t6a:
+test prepare_reports_the_commit_and_no_removed_files_for_hello_world ... ok
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... --- listed: Ok([" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"])
+test the_strip_step_lists_what_it_removed ... --- the strip step said:
+removed: .claude
+removed: .codex
+removed: .mcp.json
+
+--- left in the copy:
+/opt/steplet-test/strip-copy/src
+/opt/steplet-test/strip-copy/src/keep.txt
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 18.86s
+```
+
+The strip step removed exactly the three planted agent files and left `src/keep.txt`. Hello-World's copy reports its commit and an empty removed list.
+
+```
+> cargo test -p steplet-run --offline
+(14 summary lines, every one `ok`, `0 failed`; 80 passed, 26 ignored: the Linux-only ones; counted from the summary lines)
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.59s
+clippy exit 0
+```
+
+### What this task did not verify
+
+- That the other Linux-only tests (launch, gate, tripwires, contain) still pass with the renamed script entry: Task 3 Step 4 runs all of them.
+- Whether a real agent follows the task text better than phase 3's: only the real-model run of Task 15 sees a real agent.
