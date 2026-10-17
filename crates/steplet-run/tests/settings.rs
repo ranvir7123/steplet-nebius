@@ -70,7 +70,12 @@ fn the_settings_are_exactly_the_planned_shape() {
                 "network": {"allowedDomains": ["pypi.org", "files.pythonhosted.org"], "strictAllowlist": true}
             },
             "permissions": {
-                "deny": ["Read(//mnt/**)", "Read(//var/lib/steplet/**)", "Edit(//work/r1/repo/.git/**)"]
+                "deny": [
+                    "Read(//mnt/**)",
+                    "Read(//var/lib/steplet/**)",
+                    "Edit(//work/r1/repo/.git/**)",
+                    "Edit(//var/lib/steplet/**)"
+                ]
             },
             "switchModelsOnFlag": false,
             "apiKeyHelper": "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token 0123abcd --deadline-ms 30000"
@@ -81,11 +86,13 @@ fn the_settings_are_exactly_the_planned_shape() {
 #[test]
 fn the_settings_match_the_file_the_task_2_runs_used() {
     // The file Task 2's scripted and real-model runs used, with its token placeholder (spikes/p3/p2.settings.json).
-    // Since Task 8 the key mode also gets Steplet's deadline; the rest is unchanged.
+    // Since Task 8 the key mode also gets Steplet's deadline, and since phase 4 Task 1 Claude Code itself refuses
+    // writes into Steplet's own folder; the rest is unchanged.
     let g = gate("/opt/steplet/gate/spike-gate.exe", "steplet-p3-p2", "RUN_TOKEN");
     let mut used = read(include_str!("support/task2.settings.json"));
     let helper = format!("{} --deadline-ms 30000", used["apiKeyHelper"].as_str().unwrap());
     used["apiKeyHelper"] = helper.into();
+    used["permissions"]["deny"].as_array_mut().unwrap().push("Edit(//var/lib/steplet/**)".into());
     assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g)), used);
 }
 

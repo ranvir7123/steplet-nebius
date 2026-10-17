@@ -395,6 +395,101 @@ rm -f {STAMP} {FIND_CONTROL}",
     assert_eq!((report.stopped_by.clone(), report.trust), (None, Trust::NotRecorded));
 }
 
+/// Phase 4 Task 1, Step 1 (a record): every folder the steplet account can write outside a run, on every mounted file
+/// system. These are the places a yes to an agent's file-tool write outside the working copy could reach, which is
+/// why the checker now refuses such writes without a question (J1).
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn where_steplet_can_write() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let out = wsl::run(&distro, "steplet", &["/bin/bash", "-s"], include_bytes!("support/writable.sh")).unwrap();
+    println!("--- folders the steplet account can write:\n{}", out.stdout);
+    assert_eq!(out.status, Some(0), "{}", out.stderr);
+    let folders: Vec<&str> = out.stdout.lines().collect();
+    assert_eq!((folders.first(), folders.last()), (Some(&"account: steplet"), Some(&"end of list")));
+    for expected in ["/tmp", "/var/tmp", "/dev/shm", "/run/lock"] {
+        assert!(folders.contains(&expected), "{expected} is not in the list");
+    }
+}
+
+/// The declared command of the next test: it makes a file in the fence's own temporary folder and prints its path.
+const TEMPFILE: &str = r#"python3 -c "import tempfile; print(tempfile.mkstemp()[1])""#;
+
+/// Phase 4 Task 1 (J1): the agent's own file tools, which run outside the fence, cannot write outside the working
+/// copy. A write to `/tmp` reaches the gate and the checker refuses it without a question; a write into Steplet's own
+/// folder (here a settings file in the run's Claude Code config folder, which could load hooks) never reaches the
+/// gate, because Claude Code's own deny rule refuses it first. The watcher stops the run at such a refusal (H11), so
+/// that call comes last. Claude Code's documentation says its Edit deny rules also become part of the fence's write
+/// limits, so the declared command checks that the fence's own temporary folder still works. Judged from Steplet's
+/// records and from the disk, never from the agent's words.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_write_into_steplets_own_folder_is_refused_before_the_gate() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t1").unwrap();
+    let req = request(&format!("allow:\n  commands:\n    - '{TEMPFILE}'\n"));
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let planted = format!("{}/settings.json", paths.run_config());
+    let probe = "/tmp/steplet-probe.txt";
+    let script = json!({"steps": [
+        {"tool": "Write", "input": {"file_path": probe, "content": "made-up test text\n"}},
+        {"tool": "Bash", "input": {"command": TEMPFILE, "description": "Make a temporary file"}},
+        {"tool": "Write", "input": {"file_path": planted, "content": "{}\n"}},
+        {"text": THE_END}]});
+    let checker = policy.clone();
+    let (link, gate) = serve_gate(&distro, "p4t1", Duration::from_secs(10), move |r| decide(&checker, r));
+    let _model = scripted_model(&distro, "p4t1", &script.to_string(), 47953);
+    prepare(&req, &paths, &link).unwrap();
+    let present = |path: &str| root_sh(&distro, &format!("test -e {path} && echo present || echo absent"));
+    root_sh(&distro, &format!("rm -f {probe}"));
+    assert_eq!((present(probe), present(&planted)), ("absent".into(), "absent".into()), "neither is there before");
+
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47953")).unwrap();
+    let outcome = watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let after = (present(probe), present(&planted));
+    discard(&paths).unwrap();
+    let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);
+    println!("--- the gate's records:\n{:#?}", outcome.requests);
+    println!("--- the report:\n{report:#?}");
+    println!("--- afterwards, {probe}: {}; {planted}: {}", after.0, after.1);
+
+    let asked: Vec<(String, String)> = outcome
+        .requests
+        .iter()
+        .filter_map(|a| match a {
+            steplet_run::Asked::Decision { request, answer, .. } => {
+                Some((request.input["file_path"].as_str().unwrap_or("").to_owned(), format!("{answer:?}")))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        asked.iter().any(|(path, answer)| path == probe
+            && answer.contains("the agent's file tools may change files only inside the working copy")),
+        "the write to /tmp reached the gate and was refused with J1's reason: {asked:?}"
+    );
+    assert!(!asked.iter().any(|(path, _)| path == &planted), "the write into Steplet's folder never reached the gate");
+    let calls: Vec<(&str, &str, &Check, Option<i32>)> =
+        report.commands.iter().map(|c| (c.tool.as_str(), c.command.as_str(), &c.check, c.exit_code)).collect();
+    assert_eq!(
+        calls,
+        [
+            ("Write", probe, &Check::Refused, None),
+            ("Bash", TEMPFILE, &Check::Allowed, Some(0)),
+            ("Write", planted.as_str(), &Check::NotAsked { harmless: false }, None),
+        ]
+    );
+    assert!(report.commands[1].output.contains("/"), "the command printed its file's path");
+    assert_eq!(
+        report.stopped_by,
+        Some(steplet_run::Tripwire::SkippedGate(format!("Write {planted}"))),
+        "a refusal by Steplet's own deny rule stops the run (H11)"
+    );
+    assert_eq!(after, ("absent".into(), "absent".into()), "neither file was written");
+}
+
 /// Step 3: a web fetch is decided at the gate. To a site the file does not declare it is refused; to a declared one it
 /// is allowed. The refused site is a real one, so a fetch that went ahead anyway would come back with no error and
 /// show as "refused, but it ran anyway".

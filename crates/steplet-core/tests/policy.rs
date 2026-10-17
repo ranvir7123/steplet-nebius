@@ -85,3 +85,22 @@ fn sites_and_bad_work_folders() {
     }
     assert!(Policy::from_steplet(&s, "/w/r1").is_ok());
 }
+
+#[test]
+fn a_file_tool_write_outside_the_working_copy_is_refused_without_a_question() {
+    let p = policy(
+        "  write:
+    - target
+",
+    );
+    let outside = Decision::Deny {
+        rule: "cap.outside-path",
+        reason: "the agent's file tools may change files only inside the working copy",
+    };
+    assert_eq!(p.check(&Action::Write("/tmp/x")), outside);
+    assert_eq!(p.check(&Action::Write("/var/lib/steplet/runs/r1/config/settings.json")), outside);
+    assert_eq!(p.check(&Action::Write("src/main.rs")), outside, "not a plain absolute path, so not known to be inside");
+    assert!(denies(p.check(&Action::Write("/home/tester/.ssh/authorized_keys")), "block.secret-path"));
+    assert!(asks(p.check(&Action::Read("/etc/hostname"))), "reading outside still asks");
+    assert!(asks(p.check(&Action::Write(&format!("{WORK}/src/main.rs")))), "inside, undeclared: still asks");
+}

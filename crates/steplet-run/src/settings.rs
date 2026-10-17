@@ -35,8 +35,10 @@ pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink) -> String {
         },
         "permissions": {
             // For the agent's own file tools, which run outside the fence. No `Read` rule on `/work`: one refused the
-            // agent's own copy (C9), and other runs' copies do not exist, since `/work` holds one run at a time.
-            "deny": [rule("Read", MOUNTS), rule("Read", STATE_ROOT), rule("Edit", &git)],
+            // agent's own copy (C9), and other runs' copies do not exist, since `/work` holds one run at a time. The
+            // `Edit` rule on Steplet's own folder is a second lock behind the checker's J1 answer: Claude Code itself
+            // refuses such a write, before any question.
+            "deny": [rule("Read", MOUNTS), rule("Read", STATE_ROOT), rule("Edit", &git), rule("Edit", STATE_ROOT)],
         },
         // E1: the run stays on the model the receiver approved; a refusal ends it.
         "switchModelsOnFlag": false,

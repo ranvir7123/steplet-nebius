@@ -105,8 +105,15 @@ impl Policy {
         }
     }
 
+    /// A file the agent's own tools read or write. Those tools run outside the fence, so a write outside the working
+    /// copy is refused without a question (J1): nothing of the receiver's is out there, and a file left there could
+    /// change the next run (a settings file in the run's own folder could load hooks). Reads outside still ask.
     fn path(&self, path: &str, write: bool) -> Decision {
-        let Some(p) = paths::normalize(path) else { return ask("this is not a plain absolute path") };
+        let outside =
+            || deny(rules::CAP_OUTSIDE_PATH, "the agent's file tools may change files only inside the working copy");
+        let Some(p) = paths::normalize(path) else {
+            return if write { outside() } else { ask("this is not a plain absolute path") };
+        };
         match paths::below(&self.work, &p) {
             Some(rel) if write && paths::is_protected(rel) => {
                 deny(rules::BLOCK_WRITE_PROTECTED, "no task may change .git or the agents' settings")
@@ -126,6 +133,7 @@ impl Policy {
                     rules::BLOCK_SECRET_PATH,
                     "this place holds keys, passwords or sign-ins, which no task may touch",
                 ),
+                None if write => outside(),
                 None => ask("this path is outside the repository"),
             },
         }
