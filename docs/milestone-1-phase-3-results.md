@@ -2636,3 +2636,68 @@ A code-reviewer agent read the task's diff (read-only). It found nothing blockin
 - **The web fetch's own traffic.** The allowed fetch is made by Claude Code itself, outside the fence, so it is the gate that limits it, not the fence. Whether Claude Code also asks Anthropic about the site first was not looked at.
 - **The agent's own file tools** against links that point out of the copy: still Task 3, deferred on your word.
 - **A Write by the agent's file tools into its own config folder.** Task 8 noted that the run's settings deny reading `/var/lib/steplet` but not writing there, so the checker alone refuses such a write. Today it always refuses, because no one can answer its question. Once phase 4 lets you answer, a deny rule for writing there should be added and tested. Not done here.
+
+## Summary: phase 3
+
+Phase 3 built Steplet's runner, `steplet-run`, and the gate program, `steplet-gate`. Steplet now:
+- installs and owns its own Linux, where nothing of the receiver's is present;
+- makes a fresh, hardened working copy of a public repository at the declared commit;
+- starts Claude Code in it, inside the fence, with deny-only settings;
+- answers every permission request through its one checker, over a pipe with Steplet's own deadline;
+- stops the run when a hook runs or an action skips the checker;
+- after the run, ends in an honest report built from its own records.
+
+Tasks 1, 2 and 4 to 12 are done. Task 3 was deferred on your word.
+
+### The phase's lines on screen, one by one (plan section 8)
+
+| Line on screen | Result | Where the output is |
+|---|---|---|
+| "Steplet checks the agent's shell commands that change something, its file writes and its web fetches before they happen. If Steplet's checker fails, the action is refused." | **PASS** | Task 8 (the gate refuses on a crash, a stall, a wrong reply or a wrong token); Task 9 (an action that skips the checker stops the run); Task 11 Step 3 |
+| "The agent can fetch only these web addresses: …" | **PASS** | Task 11 Step 3 |
+| "Programs this task runs can change files only inside this folder." | **PASS** | Task 11 Step 2; Tasks 2 and 6 (`.git` cannot be written from inside the fence) |
+| "Programs this task runs cannot read these paths: …", and the receiver's own files are not even present | **PASS for the programs a task runs.** For the agent's own file tools it rests on option D (nothing of the receiver's is present), not on a direct test: Task 3 was not run | Task 1 Check 3; Task 2; Task 11 Steps 1 and 2 |
+| "Programs this task runs cannot connect to the internet, or to other programs on this computer." | **PASS** for the internet and for a program listening in Steplet's Linux. A program listening on the Windows side was not tried | Task 11 Step 2; Task 1 Check 4 |
+| "Programs this task runs cannot start Windows programs." | **PASS** | Task 11 Step 2 |
+| Prepare: "Steplet tells the agent not to load agent settings" | **PASS** | Task 6 (the agent settings files are removed); Task 10 (no trust recorded after the run) |
+| "Interrupted; the folder was reset; run again?" | **PASS** on the runner's side (the words are phase 4's) | Task 7 (a stop ends the run cleanly and leaves nothing running); Tasks 9 and 10 (a tripwire ends the run, and the report says why) |
+| Report: every model used, and refusals | **PASS** | Task 10; Task 11 Step 3 (two models listed) |
+| Report and live log are safe to read | **PASS for the report.** The live log is a phase 4 screen | Task 10; Task 11 Step 2 |
+
+The phase's "done means" in the milestone plan is that the scripted-model layer of the suite passes for every item of its section 7 that this phase covers. **It passes,** with the two gaps named in the table: Task 3 (the agent's own file tools against links out of the copy) and a program listening on the Windows side.
+
+### Changes from the plan
+
+Each task's section lists its own. The main ones (rows H1 to H13 in `docs/decisions.md`):
+- The gate program is a root-owned copy on the Linux disk, named after its contents, not a mounted Windows folder (H8).
+- `.git` stays owned by `steplet` (H7 reversed).
+- Closing WSL's shared folders moved into every launch: root first, then `steplet` (H1).
+- The `steplet-gate` crate was made in Task 8, not Task 4.
+- Each run's token and the random part of its pipe name come from Windows' random number source.
+- `run()` takes the gate program, the logs folder, the key, the decision deadline and (in tests) the model address as one more argument, and returns the report.
+- An action that skipped the gate is judged by a rule designed from Task 9's measurement, which lets harmless reads by the file tools through (H11).
+- Steplet's own listing of the changed files runs inside the fence (H12), and exit codes come from Claude Code's own marks (H13).
+- The fixture run takes `run()`'s steps by hand, because Steplet clones only from public code hosts; and the fixture's Windows program is a copy of `cmd.exe` placed on the Linux disk, with a control start outside the fence (Task 11).
+
+### What phase 3 did not verify (plan section 9, brought up to date)
+
+- **One machine, one Windows, WSL 2.6.3, Claude Code 2.1.220 only, and mostly the scripted model.** One real-model run (Task 2). The live-model layer is phase 5.
+- **The desktop app and its screens** (phase 4). Until the ask screen exists, a checker "ask" is a refusal with its reason.
+- **How often a real agent's commands match the file word for word** (G1).
+- **Tools beyond the base set** (H4).
+- **The image pinned by its hash** (H3): a launch blocker.
+- **The gate's new cases in full depth** (phase 5). A known limit: another program of the same Windows account can add its own end to Steplet's pipe (Task 8).
+- **`srt`'s own extra write paths** on this layout: recorded, not fully probed.
+- **A WSL update in the middle of a run.**
+- **The Anthropic terms question (P1).**
+- **What the fence cannot report:** a blocked attempt is not visible to Steplet (phase 0 S6), so the report says so and never claims the fence stopped a particular thing.
+- **New in this phase:**
+  - **Task 3:** the agent's own file tools against links that point out of the copy, deferred on your word.
+  - **A program listening on the Windows side**, and **why** a Windows program cannot reach Windows from inside the fence (Task 11).
+  - **A deny rule for writing into the run's own folder**, needed before phase 4 lets you answer the checker's questions (Tasks 8 and 11).
+  - **Exit-code marks of later Claude Code versions** (Task 10).
+  - **The minor review points left for later:** 4 from Task 8, 4 from Task 9, 6 from Task 10 and 2 from Task 11, each in the ledger and in its task's section.
+
+### Checks
+
+CHECKS_BLOCK

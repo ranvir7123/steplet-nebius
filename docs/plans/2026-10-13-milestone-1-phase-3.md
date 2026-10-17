@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans, run inline in one session (the user's choice since phase 0: not through separate agents). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Written 13 Oct 2026. Status: **approved by the user on 13 Oct 2026 with the recommended option for H3 and H4 (A, A); H1, H2 and H5 to H7 kept.** Nothing in it had been built, installed or run at approval. The folder layout (decision E3) was chosen by the user on 13 Oct 2026: **Steplet installs and owns its own WSL Linux system** (option D below). This plan is written around that choice.
+Written 13 Oct 2026. Status: **approved by the user on 13 Oct 2026 with the recommended option for H3 and H4 (A, A); H1, H2 and H5 to H7 kept.** Nothing in it had been built, installed or run at approval. The folder layout (decision E3) was chosen by the user on 13 Oct 2026: **Steplet installs and owns its own WSL Linux system** (option D below). This plan is written around that choice. **Run from 13 to 17 Oct 2026 and finished on 17 Oct 2026; results in `docs/milestone-1-phase-3-results.md` (summary at its end). Task 3 was deferred by the user; decisions made during the run are H7's reversal and H8 to H13 in `docs/decisions.md`.**
 
 **Goal:** run a signed `.steplet` file's task with Claude Code inside a Linux sandbox that Steplet owns, so that the stranger's code and the agent's own tools can touch only this run's working copy, and every action the agent proposes is allowed, refused or brought to the receiver by Steplet's one checker (`Policy::check`, built in phase 2).
 
