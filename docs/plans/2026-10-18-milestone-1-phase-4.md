@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans, run inline in one session (the owner's choice since phase 0: not through separate agents). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Written 18 Oct 2026. Status: **written, not approved.** Nothing in it has been built, installed or run, apart from the read-only checks in section 3.6. The choices in section 4 (J1 to J9) wait for the owner.
+Written 18 Oct 2026. Status: **approved by the owner on 18 Oct 2026 with the recommended option for every choice: J1 A, J2 B, J3 A, J4 A, J5 A, J6 A, J7 A, J8 A, J9 A; the smaller choices S1 to S13 kept.** Nothing in it had been built, installed or run at approval, apart from the read-only checks in section 3.6. The items of section 5 (Z2 to Z6) still each need the owner's yes when their task reaches them.
 
 **Goal:** a Windows app in which a receiver opens a `.steplet` file, sees everything it asks for, chooses to run it, answers the agent's questions while it runs, and saves an honest report; driving phase 3's runner, never adding a second checker.
 
