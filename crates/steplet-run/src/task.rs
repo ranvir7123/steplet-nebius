@@ -3,7 +3,9 @@
 
 use steplet_core::header::{Scalar, Steplet};
 
-/// The task text Claude Code is given for a run of `s` in a working copy at `commit`.
+/// The task text Claude Code is given for a run of `s` in a working copy at `commit`. The sender's body comes last and
+/// exactly as signed, so text in it may look like the headings above (by design: it is the sender's own task), but
+/// nothing of Steplet's own comes after it.
 pub fn task_text(s: &Steplet, commit: &str) -> String {
     let mut t = String::from(
         "You are doing a task that someone sent as a .steplet file. Steplet, the app running you, checks every action \

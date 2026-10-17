@@ -357,3 +357,22 @@ clippy exit 0
 
 - That the other Linux-only tests (launch, gate, tripwires, contain) still pass with the renamed script entry: Task 3 Step 4 runs all of them.
 - Whether a real agent follows the task text better than phase 3's: only the real-model run of Task 15 sees a real agent.
+
+### The code review, and what changed
+
+A code-reviewer agent read the diff (read-only). No critical or important findings; it checked that nothing the repository controls can make the root script remove something outside the copy (links are removed as links, never followed) or add a name to the removed list. Four small points, fixed:
+- In `prepare.sh`, the strip step's command had lost its line break (it worked, but read as one long line); it is two lines again, with a comment on why it needs only a PATH.
+- The strip entry now refuses an empty or missing folder, or `/`, on its own, instead of relying on its caller.
+- A missing "ready" line is now said as "could not confirm the working copy is ready", not as a failed checkout.
+- `task_text`'s comment says the sender's body may look like Steplet's headings by design, and that nothing of Steplet's own comes after it.
+
+```
+> cargo test -p steplet-run --offline --test prepare -- --ignored --test-threads=1
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... ok
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... ok
+test prepare_reports_the_commit_and_no_removed_files_for_hello_world ... ok
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... ok
+test the_strip_step_lists_what_it_removed ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 18.75s
+```

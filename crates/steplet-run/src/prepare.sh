@@ -90,13 +90,16 @@ EOF
     echo "steplet-prepare: ready at $COMMIT"
 }
 
-# Removes the agent settings files and folders from the working copy $1, as the steplet account with nobody's
-# settings, in a fixed order, saying each one it removed (D3).
+# Removes the agent settings files and folders from the working copy $1, in a fixed order, saying each one it removed
+# (D3). The removal runs as the steplet account with only a PATH (it starts no git, so it needs none of main's git
+# settings). It expects nothing of the steplet account to be running, as main makes sure before it calls it.
 strip() {
-    local REPO=$1 f
+    local REPO=${1-} f
+    [ -d "$REPO" ] && [ "$REPO" != / ] || fail 14 "no working copy to remove the agent settings files from"
     for f in .claude .codex .cursor .gemini .mcp.json; do
         [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ] || continue
-        setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs --             /usr/bin/env -i PATH=/usr/bin:/bin /bin/rm -rf -- "$REPO/$f"
+        setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs -- \
+            /usr/bin/env -i PATH=/usr/bin:/bin /bin/rm -rf -- "$REPO/$f"
         if [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ]; then fail 14 "could not remove $f from the working copy"; fi
         echo "removed: $f"
     done

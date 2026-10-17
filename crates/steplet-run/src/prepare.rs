@@ -64,8 +64,8 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Pr
     let out = as_root(paths, PREPARE, &args, PREPARE_LIMIT)?;
     let ready = format!("steplet-prepare: ready at {}", req.commit);
     if !out.stdout.lines().any(|line| line == ready) {
-        let detail = "the script ended without saying the copy was ready".into();
-        return Err(PrepareError::Step { step: "check out the commit inside the fence", detail });
+        let detail = "the script ended without saying the copy was ready at the declared commit".into();
+        return Err(PrepareError::Step { step: "confirm the working copy is ready", detail });
     }
     Ok(Prepared { commit: req.commit.clone(), removed: removed_files(&out.stdout) })
 }
