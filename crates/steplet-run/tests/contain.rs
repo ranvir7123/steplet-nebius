@@ -1,0 +1,426 @@
+//! The containment battery (plan Task 11). Steplet exists so that its owner can run a stranger's task file without
+//! trusting it. These runs check that promise from Steplet's own records and from outside the fence, never from what
+//! the agent says (F47):
+//! - use case 1, end to end, with nothing of the receiver's present in Steplet's Linux;
+//! - milestone 0's test fixture, whose test setup tries to reach outside its working copy and writes down whether each
+//!   try worked (`support/m0_fixture/`); every try must be contained;
+//! - a web fetch is allowed only to a site the file declares.
+//!
+//! The fixture is test data and inert: the secret it looks for is made up for each run, the listener only counts what
+//! reaches it, and the Windows program it tries to start would only write a marker file in Steplet's logs folder.
+//!
+//! Every test needs Steplet's Linux and the network, and they run one at a time:
+//! `cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1`.
+
+mod support;
+
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use steplet_core::canon::canonicalize;
+use steplet_core::header::parse;
+use steplet_core::policy::Policy;
+use steplet_run::{
+    ApiKey, BACKSTOP, Check, Report, RunPaths, RunRequest, RunSetup, Trust, build_report, changes, decide, discard,
+    launch, prepare, read_trust, run, run_config, watch_run, wsl,
+};
+use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model, serve_gate};
+
+static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+const HELLO: (&str, &str) = ("https://github.com/octocat/Hello-World.git", "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d");
+
+/// The scripted model's last words.
+const THE_END: &str = "Task 11: the end of the script.";
+
+/// A request for Hello-World, whose file holds `allow` (the lines under `allow:`, if any).
+fn request(allow: &str) -> RunRequest {
+    let f = format!("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n{allow}---\n");
+    RunRequest {
+        steplet: parse(&canonicalize(f.as_bytes()).unwrap()).unwrap(),
+        repo_url: HELLO.0.into(),
+        commit: HELLO.1.into(),
+        task_text: "Follow the script.".into(),
+        max_turns: 20,
+        deadline: Duration::from_secs(180),
+    }
+}
+
+/// What `run` needs besides the request: the gate program installed as Steplet does, and the scripted model.
+fn setup(distro: &str, port: u16) -> RunSetup {
+    RunSetup {
+        gate_exe: support::install_gate(distro),
+        logs: logs_dir(),
+        key: Some(ApiKey::new(MADE_UP_KEY.into())),
+        decision_deadline: Duration::from_secs(10),
+        model_url: Some(format!("http://127.0.0.1:{port}")),
+    }
+}
+
+/// Every piece of text in the report, so a test can check all of them at once.
+fn every_text(r: &Report) -> Vec<String> {
+    let mut all = vec![r.agent_says.clone()];
+    all.extend(r.commands.iter().flat_map(|c| [c.tool.clone(), c.command.clone(), c.output.clone()]));
+    all.extend(r.refused.iter().cloned());
+    all.extend(r.models.iter().cloned());
+    all.extend(r.changed_files.iter().flatten().cloned());
+    all.extend(r.faults.iter().cloned());
+    all
+}
+
+/// Nothing of the receiver's is in Steplet's Linux (decision E3, option D): no Windows drive is mounted (the only
+/// Windows-backed folder is WSL's own read-only GPU drivers), and `/home` and `/mnt/c` are empty.
+fn assert_nothing_of_the_receiver_s_is_present(distro: &str, when: &str) {
+    // findmnt exits with 1 when it finds nothing, and with more on an error.
+    let mounts = root_sh(distro, "findmnt -rn -t 9p,drvfs,virtiofs -o TARGET,FSTYPE,OPTIONS; test $? -le 1");
+    println!("--- {when}: Windows-backed mounts:\n{mounts}");
+    // The control: the GPU drivers folder is always there, so the listing does see such mounts.
+    assert!(mounts.contains("/usr/lib/wsl/drivers 9p"), "{when}: findmnt saw no Windows-backed mount at all");
+    for line in mounts.lines() {
+        assert!(line.starts_with("/usr/lib/wsl/") && line.contains(" ro,"), "{when}: a Windows-backed mount: {line}");
+    }
+    assert_eq!(root_sh(distro, "ls -A /home"), "", "{when}: /home is empty");
+    assert_eq!(root_sh(distro, "ls -A /mnt/c"), "", "{when}: no Windows drive at /mnt/c");
+}
+
+/// Step 1: use case 1, end to end through `run`, with the scripted model. The receiver's files are not even present
+/// in Steplet's Linux, before or after the run. The report says the run completed and shows the test command's real
+/// exit code (Hello-World has no tests: Python's runner says so and exits 5), and a harmless read that skipped the
+/// gate.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn use_case_1_runs_with_none_of_the_receiver_s_files_present() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    assert_nothing_of_the_receiver_s_is_present(&distro, "before the run");
+    let paths = RunPaths::new(&distro, "t11a").unwrap();
+    let req = request("allow:\n  commands:\n    - python3 -m unittest discover\n");
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": "python3 -m unittest discover", "description": "Run the tests"}},
+        {"tool": "Bash", "input": {"command": "cat README", "description": "Read the readme"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "t11a", &script.to_string(), 47950);
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let start = Instant::now();
+    let r = run(&req, &paths, &policy, &setup(&distro, 47950)).unwrap();
+    println!("--- {:.1} s; the report:\n{r:#?}", start.elapsed().as_secs_f64());
+
+    let tests = &r.commands[0];
+    assert_eq!(
+        (tests.command.as_str(), &tests.check, tests.exit_code),
+        ("python3 -m unittest discover", &Check::Allowed, Some(5))
+    );
+    assert!(tests.output.contains("NO TESTS RAN"), "{:?}", tests.output);
+    let read = &r.commands[1];
+    assert_eq!(
+        (read.command.as_str(), &read.check, read.exit_code),
+        ("cat README", &Check::NotAsked { harmless: true }, Some(0))
+    );
+    assert!(read.output.contains("Hello World!"), "{:?}", read.output);
+    assert!(r.completed, "the run ended on its own");
+    assert_eq!((r.stopped_by.clone(), r.changed_files.clone(), r.trust), (None, Some(vec![]), Trust::NotRecorded));
+    assert_eq!(r.agent_says, THE_END);
+    assert_eq!(r.faults, Vec::<String>::new());
+    assert_nothing_of_the_receiver_s_is_present(&distro, "after the run");
+}
+
+/// The fixture's files, as they go into the working copy. Its `.gitignore` is kept as `gitignore` in Steplet's own
+/// repository, so that it does not apply there.
+const FIXTURE: &[(&str, &[u8])] = &[
+    (".gitignore", include_bytes!("support/m0_fixture/gitignore")),
+    ("README.md", include_bytes!("support/m0_fixture/README.md")),
+    ("calc/__init__.py", include_bytes!("support/m0_fixture/calc/__init__.py")),
+    ("tests/__init__.py", include_bytes!("support/m0_fixture/tests/__init__.py")),
+    ("tests/fixtures.py", include_bytes!("support/m0_fixture/tests/fixtures.py")),
+    ("tests/test_calc.py", include_bytes!("support/m0_fixture/tests/test_calc.py")),
+];
+
+/// The command the fixture's file declares: its tests, whose setup makes the tries.
+const FIXTURE_TESTS: &str = "python3 -m unittest discover -s tests -t .";
+/// A Windows program on Steplet's Linux disk: a copy of `cmd.exe`. WSL's interop can start a Windows program from
+/// Linux, so the fixture's try to start one is a real try only if one is there.
+const CMD: &str = "/opt/steplet-test/cmd.exe";
+/// Where the fixture tries to write outside its working copy: a folder every account can write, outside the fence.
+const OUTSIDE: &str = "/tmp/steplet-t11b-outside.txt";
+const LISTENER_PORT: u16 = 47831;
+const LISTENER_LOG: &str = "/opt/steplet-test/t11b.listener.log";
+/// Set by root just before the launch: files changed after it were written during the run. A file's change time
+/// ("ctime"), unlike its modification time, cannot be set back by a program.
+const STAMP: &str = "/var/lib/steplet/t11b.stamp";
+/// Written by the steplet account after the run, outside the fence: the search for files written must list it.
+const FIND_CONTROL: &str = "/tmp/steplet-t11b-find-control";
+/// What Claude Code and srt write for a run below its own folder, outside the fence (as seen in this test's runs,
+/// Claude Code 2.1.220): exact names, then beginnings of names. Anything else the steplet account writes during the
+/// run, outside the working copy, is a breach.
+const CLAUDE_CODE_S_OWN: &[&str] = &[
+    "home",
+    "home/.config",
+    "home/.config/git",
+    "home/.config/git/ignore",
+    "home/.cache",
+    "home/.cache/claude-cli-nodejs",
+    "tmp",
+    "config",
+    "config/session-env",
+    "config/sessions",
+    "config/backups",
+    "config/shell-snapshots",
+    "config/projects",
+    "config/.cc-writes",
+    "config/.claude.json",
+];
+const CLAUDE_CODE_S_OWN_BEGINNINGS: &[&str] = &[
+    "home/.cache/claude-cli-nodejs/",
+    "tmp/srt-mux-",
+    "tmp/claude-",
+    "config/session-env/",
+    "config/sessions/",
+    "config/backups/.claude.json.backup.",
+    "config/shell-snapshots/",
+    "config/projects/",
+];
+
+/// Removes a file from Steplet's Linux when the test ends, whether it passed or failed.
+struct RemovedAtTheEnd<'a> {
+    distro: &'a str,
+    path: &'a str,
+}
+
+impl Drop for RemovedAtTheEnd<'_> {
+    fn drop(&mut self) {
+        let _ = wsl::run(self.distro, "root", &["/usr/bin/rm", "-f", self.path], b"");
+    }
+}
+
+/// Whether the steplet account, outside the fence, can open a connection to `host:port`.
+fn reaches(distro: &str, host: &str, port: u16) -> bool {
+    let py = format!("import socket; socket.create_connection(({host:?}, {port}), 5).close()");
+    wsl::run(distro, "steplet", &["/usr/bin/python3", "-I", "-c", &py], b"").unwrap().status == Some(0)
+}
+
+/// Puts `bytes` at `path` in Steplet's Linux, owned by the steplet account, with `mode`.
+fn put_as_steplet(distro: &str, bytes: &[u8], path: &str, mode: &str) {
+    let argv = ["/usr/bin/install", "-D", "-o", "steplet", "-g", "steplet", "-m", mode, "/dev/stdin", path];
+    let out = wsl::run(distro, "root", &argv, bytes).unwrap();
+    assert_eq!(out.status, Some(0), "install {path}: {}", out.stderr);
+}
+
+/// Replaces the prepared working copy's files with the fixture's, as a new commit, so the copy is clean at the
+/// fixture (test only: P3 lets Steplet clone only from public code hosts, and the fixture is on none). Git runs as the
+/// steplet account with nobody's settings, as in `prepare.sh`.
+fn plant_fixture(distro: &str, paths: &RunPaths) {
+    for (path, bytes) in FIXTURE {
+        support::install(distro, bytes, &format!("/opt/steplet-test/m0-fixture/{path}"), "644");
+    }
+    let repo = paths.work_repo();
+    let body = format!(
+        r#"set -e
+AS="setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs -- /usr/bin/env -i PATH=/usr/bin:/bin HOME=/nonexistent GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null"
+GIT="git -c core.hooksPath=/dev/null -c user.name=steplet-test -c user.email=test@example.invalid -C {repo}"
+$AS $GIT rm -q -r -- .
+cp -r /opt/steplet-test/m0-fixture/. {repo}/
+chown -R steplet:steplet {repo}
+chmod -R go-w {repo}
+$AS $GIT add -A
+$AS $GIT commit -q -m "The milestone 0 test fixture (test data)"
+$AS $GIT log --oneline -1
+$AS $GIT status --porcelain"#
+    );
+    println!("--- the fixture, committed in the working copy:\n{}", root_sh(distro, &body));
+}
+
+/// Step 2: milestone 0's fixture, run by the scripted model through the gate. Its test setup tries to read a planted
+/// made-up secret (and its child process tries too), read a Windows file, write outside the working copy, connect to
+/// a listener on this machine and to the internet, and start a Windows program. Every try is judged from the
+/// fixture's own record and from outside the fence (the listener's log, the files on both sides), never from the
+/// agent's words. Its setup also prints a forged "success" result and terminal control characters, which the report
+/// must show only as the command's output, cleaned.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn every_try_of_the_hostile_fixture_is_contained() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "t11b").unwrap();
+    let req = request(&format!("allow:\n  commands:\n    - {FIXTURE_TESTS}\n"));
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+
+    // The Windows program, and the marker files it would write in Steplet's logs folder on Windows. The copy is removed
+    // when the test ends: no later run should find a Windows program on the disk.
+    support::install(&distro, &std::fs::read(r"C:\Windows\System32\cmd.exe").unwrap(), CMD, "755");
+    let _cmd = RemovedAtTheEnd { distro: &distro, path: CMD };
+    std::fs::create_dir_all(logs_dir()).unwrap();
+    let control = logs_dir().join("t11b-control-outside-the-fence.txt");
+    let marker = logs_dir().join("t11b-from-inside-the-fence.txt");
+    for file in [&control, &marker] {
+        let _ = std::fs::remove_file(file);
+        assert!(!file.to_string_lossy().contains(' '), "cmd.exe's echo needs a path without spaces: {file:?}");
+    }
+    // The control: outside the fence, the steplet account can start it, so the fixture's try below is a real one.
+    let started = wsl::run(&distro, "steplet", &[CMD, "/c", &format!("echo x> {}", control.display())], b"").unwrap();
+    let waited = Instant::now();
+    while !control.exists() && waited.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    println!("--- control, outside the fence: {started:?}; marker written: {}", control.exists());
+    assert!(control.exists(), "outside the fence, Steplet's Linux can start the copied cmd.exe");
+
+    let checker = policy.clone();
+    let (link, gate) = serve_gate(&distro, "t11b", Duration::from_secs(10), move |r| decide(&checker, r));
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": FIXTURE_TESTS, "description": "Run the tests"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "t11b", &script.to_string(), 47951);
+    let _listener = support::listener(&distro, LISTENER_PORT, LISTENER_LOG);
+    prepare(&req, &paths, &link).unwrap();
+    plant_fixture(&distro, &paths);
+    // The made-up secret, in the run's own home: a folder the fence hides from the task's programs.
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
+    let canary = format!("STEPLET-TEST-MADE-UP-CANARY-{nanos:08x}");
+    let canary_path = format!("{}/canary_key", paths.run_home());
+    put_as_steplet(&distro, canary.as_bytes(), &canary_path, "600");
+    let sha: String = Sha256::digest(canary.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    let planted = format!("{}/steplet-test-planted.txt", paths.run_config());
+    let config = json!({
+        "canary_path": canary_path, "canary_sha256": sha, "outside_path": OUTSIDE,
+        "run_config_path": planted, "system_file": "/mnt/c/Windows/win.ini", "listener_port": LISTENER_PORT,
+        "external_host": "1.1.1.1", "external_port": 443,
+        "wsl_windows_marker": marker.to_string_lossy(), "windows_cmd": CMD, "noisy": true,
+    });
+    put_as_steplet(
+        &distro,
+        config.to_string().as_bytes(),
+        &format!("{}/tests/m0_config.json", paths.work_repo()),
+        "644",
+    );
+    // Controls, outside the fence: from Steplet's Linux the listener and the internet can be reached, so the
+    // fixture's tries are real ones. The listener's log then holds this one connection.
+    assert!(reaches(&distro, "127.0.0.1", LISTENER_PORT), "outside the fence, the listener can be reached");
+    assert!(reaches(&distro, "1.1.1.1", 443), "outside the fence, the internet can be reached");
+    let lines = || root_sh(&distro, &format!("cat {LISTENER_LOG} 2> /dev/null || true")).lines().count();
+    let waited = Instant::now();
+    while lines() != 1 && waited.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    assert_eq!(lines(), 1, "the listener logged the control's connection");
+    root_sh(&distro, &format!("rm -f {OUTSIDE} {FIND_CONTROL}; touch {STAMP}"));
+
+    let start = Instant::now();
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47951")).unwrap();
+    let outcome = watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let took = start.elapsed();
+    // Steplet's own looks, as `run` makes them; then the evidence, all before the run is removed.
+    let changed = changes(&paths);
+    let config_file = run_config(&paths);
+    let record = root_sh(&distro, &format!("cat {}/m0_results.jsonl", paths.work_repo()));
+    let listened = root_sh(&distro, &format!("cat {LISTENER_LOG} 2> /dev/null || true"));
+    let outside = root_sh(&distro, &format!("test -e {OUTSIDE} && echo present || echo absent"));
+    let in_config = root_sh(&distro, &format!("test -e {planted} && echo present || echo absent"));
+    // The search's own control: a file the steplet account writes now, outside the fence, must be listed.
+    support::run(&distro, "steplet", &["/usr/bin/touch", FIND_CONTROL]);
+    let written = root_sh(
+        &distro,
+        &format!(
+            r"set -e
+find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /mnt -o -path {} \) -prune -o -user steplet -cnewer {STAMP} -print
+find /tmp /var/tmp /dev/shm /run/lock -user steplet -cnewer {STAMP} -print
+rm -f {STAMP} {FIND_CONTROL}",
+            paths.work_repo()
+        ),
+    );
+    discard(&paths).unwrap();
+    let report = build_report(
+        &outcome,
+        changed.as_ref().ok().map(Vec::as_slice),
+        read_trust(config_file.as_ref().ok().map(String::as_str)),
+        &[MADE_UP_KEY, link.token()],
+    );
+    println!("--- {:.1} s; the report:\n{report:#?}", took.as_secs_f64());
+    println!("--- m0_results.jsonl (the fixture's own record):\n{record}");
+    println!("--- the listener's log: {listened:?}");
+    println!("--- the write outside the copy: {outside}");
+    println!("--- the write into Claude Code's own config folder for the run: {in_config}");
+    println!("--- the Windows marker from inside the fence: {}", if marker.exists() { "present" } else { "absent" });
+    println!("--- files the steplet account wrote during the run, outside the working copy:\n{written}");
+
+    let tries: Vec<(String, bool, String)> = record
+        .lines()
+        .map(|line| {
+            let v: Value = serde_json::from_str(line).unwrap();
+            (v["attempt"].as_str().unwrap().into(), v["ok"].as_bool().unwrap(), v["detail"].as_str().unwrap().into())
+        })
+        .collect();
+    let worked = |name: &str| {
+        tries.iter().find(|t| t.0 == name).unwrap_or_else(|| panic!("the fixture recorded no {name}: {tries:?}")).1
+    };
+    // The fixture ran, wrote its own copy and started a child, so the tries below were made.
+    assert!(worked("A_write_inside_workspace") && worked("F_child_process"), "{tries:?}");
+    for name in [
+        "B_read_canary",
+        "child_read_canary",
+        "H_read_system_file",
+        "C_write_outside_workspace",
+        "D_connect_listener",
+        "child_connect_listener",
+        "E_connect_external",
+        "G_launch_windows_program",
+    ] {
+        assert!(!worked(name), "{name} worked: {tries:?}");
+    }
+    assert!(tries.iter().any(|t| t.0 == "I_write_run_config"), "the fixture tried to write the run's config");
+    assert_eq!(listened.lines().count(), 1, "only the control reached the listener: {listened:?}");
+    assert_eq!(outside, "absent", "nothing landed outside the working copy, whatever the fixture's record says");
+    assert_eq!(in_config, "absent", "nothing landed in Claude Code's own config folder for the run");
+    assert!(!marker.exists(), "no Windows program started from inside the fence");
+    assert!(written.lines().any(|p| p == FIND_CONTROL), "the search lists a file written after the stamp");
+    for path in written.lines().filter(|p| *p != FIND_CONTROL) {
+        let own = path.strip_prefix("/var/lib/steplet/runs/t11b/").is_some_and(|p| {
+            CLAUDE_CODE_S_OWN.contains(&p) || CLAUDE_CODE_S_OWN_BEGINNINGS.iter().any(|b| p.starts_with(b))
+        });
+        assert!(own, "written outside the working copy, and not by Claude Code for the run: {path}");
+    }
+
+    // The report, from Steplet's own records.
+    let tests = &report.commands[0];
+    assert_eq!((tests.command.as_str(), &tests.check, tests.exit_code), (FIXTURE_TESTS, &Check::Allowed, Some(0)));
+    assert!(tests.output.contains("FORGED-FINAL-RESULT"), "the forged line is only the command's output");
+    assert!(report.completed, "the run ended on its own");
+    assert_eq!(report.agent_says, THE_END, "the forged result is not taken as the agent's words or the outcome");
+    for text in every_text(&report) {
+        assert!(!text.contains(['\u{1b}', '\r']), "a control character is left in {text:?}");
+    }
+    assert!(!format!("{report:?}").contains(&canary), "the made-up secret appears nowhere in the report");
+    assert_eq!(report.changed_files, Some(vec![]), "the fixture's own files are all ignored by its .gitignore");
+    assert_eq!((report.stopped_by.clone(), report.trust), (None, Trust::NotRecorded));
+}
+
+/// Step 3: a web fetch is decided at the gate. To a site the file does not declare it is refused; to a declared one it
+/// is allowed. The refused site is a real one, so a fetch that went ahead anyway would come back with no error and
+/// show as "refused, but it ran anyway".
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_web_fetch_is_allowed_only_to_a_site_the_file_declares() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "t11c").unwrap();
+    let req = request("allow:\n  domains:\n    - example.com\n");
+    let script = json!({"steps": [
+        {"tool": "WebFetch", "input": {"url": "https://example.org/", "prompt": "Summarise it."}},
+        {"tool": "WebFetch", "input": {"url": "https://example.com/", "prompt": "Summarise it."}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "t11c", &script.to_string(), 47952);
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let r = run(&req, &paths, &policy, &setup(&distro, 47952)).unwrap();
+    println!("--- the report:\n{r:#?}");
+
+    let calls: Vec<(&str, &str, &Check)> =
+        r.commands.iter().map(|c| (c.tool.as_str(), c.command.as_str(), &c.check)).collect();
+    assert_eq!(
+        calls,
+        [("WebFetch", "https://example.org/", &Check::Refused), ("WebFetch", "https://example.com/", &Check::Allowed),]
+    );
+    assert_eq!(r.refused.len(), 1, "{:?}", r.refused);
+    assert!(r.refused[0].contains("the file does not ask for this site"), "{:?}", r.refused);
+    assert_eq!(r.stopped_by, None);
+}

@@ -133,6 +133,25 @@ impl Drop for Helper {
     }
 }
 
+/// The listener (`listener.py`), inside Steplet's Linux as root on `127.0.0.1:<port>`: it logs every connection that
+/// reaches it in `log`. A program the task runs must never reach it.
+pub fn listener(distro: &str, port: u16, log: &str) -> Helper {
+    install(distro, include_bytes!("listener.py"), "/opt/steplet-test/listener.py", "644");
+    run(distro, "root", &["/usr/bin/rm", "-f", log]);
+    let port = port.to_string();
+    let mut child =
+        wsl::spawn(distro, "root", &["/usr/bin/python3", "-I", "/opt/steplet-test/listener.py", &port, log]).unwrap();
+    drop(child.stdin.take());
+    // It says when it listens; a test connection would be logged as one that reached it.
+    let mut first = String::new();
+    std::io::BufRead::read_line(&mut std::io::BufReader::new(child.stdout.take().unwrap()), &mut first).unwrap();
+    assert!(first.starts_with("listening on"), "the listener did not start: {first:?}");
+    Helper {
+        child,
+        end_in_linux: Some((distro.into(), vec!["/usr/bin/pkill".into(), "-f".into(), format!("listener.py {port} ")])),
+    }
+}
+
 /// The scripted model, inside Steplet's Linux as root on `127.0.0.1:<port>`, following `script` (JSON).
 pub fn scripted_model(distro: &str, name: &str, script: &str, port: u16) -> Helper {
     install(distro, include_bytes!("fake_model.py"), "/opt/steplet-test/fake_model.py", "644");
