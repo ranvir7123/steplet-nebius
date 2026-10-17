@@ -513,6 +513,31 @@ fn calls_cut_short_by_the_stop_are_marked_and_the_tripwire_stays_the_reason() {
     assert!(!r.completed);
 }
 
+/// A call that skipped the checker, was no harmless read, and came back with no error ran outside the checker. Even
+/// when its result came while Steplet was stopping the run (two calls at once, or one started during the stop), it is
+/// a breach of its own, not something the stop cut short. One that came back with an error was cut short.
+#[test]
+fn a_call_that_skipped_the_checker_and_ran_during_the_stop_is_not_marked_as_cut_short() {
+    let mut o = outcome(vec![
+        started(),
+        bash("u1", "cat a | head"),
+        tool_result("u1", false, "a"),
+        skipped("u1", "cat a | head", false),
+        bash("u2", "cat b; ls"),
+        tool_result("u2", false, "b"),
+        skipped("u2", "cat b; ls", false),
+        bash("u3", "touch c.txt"),
+        tool_result("u3", true, "made-up interrupted"),
+        skipped("u3", "touch c.txt", false),
+    ]);
+    o.stopped_by = Some(Tripwire::SkippedCommand("cat a | head".into()));
+    o.stopped_at = Some(4);
+    o.exit_code = Some(124);
+    let r = report(&o);
+    let marked: Vec<(&str, bool)> = r.commands.iter().map(|c| (c.command.as_str(), c.after_stop)).collect();
+    assert_eq!(marked, [("cat a | head", false), ("cat b; ls", false), ("touch c.txt", true)]);
+}
+
 /// Phase 0 S6: the fence stops a blocked attempt without telling Steplet, so the report says so and never claims the
 /// fence stopped a particular thing.
 #[test]

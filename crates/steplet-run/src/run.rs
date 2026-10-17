@@ -175,11 +175,14 @@ pub fn watch_run(
     };
     let backstop = Instant::now() + stop_after;
     let mut backstopped = false;
+    // Neither Steplet's Linux nor Windows could end the run, so waiting for its end could take for ever.
+    let mut gave_up = false;
     let mut next_look = Instant::now();
     loop {
         match handle.next_event(POLL) {
             Ok(event) => {
                 if outcome.judge(&mut watcher, event, &gate) && !stop_now(&mut handle, &gate, &mut outcome.faults) {
+                    gave_up = true;
                     break;
                 }
             }
@@ -197,6 +200,9 @@ pub fn watch_run(
             Ok(false) => {}
             Err(e) => {
                 outcome.faults.push(format!("Steplet could not tell whether the run had ended: {e}"));
+                // It may still be running: it is stopped, as at a tripwire, before Steplet waits for its end.
+                outcome.stopped_at.get_or_insert(outcome.events.len());
+                gave_up = !stop_now(&mut handle, &gate, &mut outcome.faults);
                 break;
             }
         }
@@ -205,11 +211,18 @@ pub fn watch_run(
             outcome.faults.push("the run did not end at its time limit, so Steplet stopped it".into());
             outcome.stopped_at.get_or_insert(outcome.events.len());
             if !stop_now(&mut handle, &gate, &mut outcome.faults) {
+                gave_up = true;
                 break;
             }
         }
     }
-    let (code, rest) = handle.finish();
+    let (code, rest) = if gave_up {
+        // Only what has already come is read; `run` then goes on to remove the run's folders and make the report.
+        outcome.faults.push("Steplet did not wait for the run to end, since it could not end it".into());
+        (Ok(None), already_come(&mut handle))
+    } else {
+        handle.finish()
+    };
     for event in rest {
         outcome.judge(&mut watcher, event, &gate);
     }
@@ -235,6 +248,20 @@ fn stop_now(agent: &mut impl RunningAgent, gate: &GateService, faults: &mut Vec<
             false
         }
     }
+}
+
+/// The events that have already come, read without waiting for more, and for at most a second, since an agent that
+/// could not be ended may go on talking.
+fn already_come(agent: &mut impl RunningAgent) -> Vec<Event> {
+    let until = Instant::now() + Duration::from_secs(1);
+    let mut events = Vec::new();
+    while Instant::now() < until {
+        match agent.next_event(Duration::ZERO) {
+            Ok(event) => events.push(event),
+            Err(_) => break,
+        }
+    }
+    events
 }
 
 /// `N` random bytes from Windows' own generator, as lower-case hexadecimal.

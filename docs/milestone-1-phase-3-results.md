@@ -2244,94 +2244,6 @@ The seventh (no test put hostile content in the working copy) is covered by the 
 
 **The gate test that failed once, again:** `the_pipe_is_gone_once_the_service_stops` failed once more in a full run in this session. Its cause is now visible: when the gate service stops, its thread ends with `shutdown_background()` (`src/gate.rs`), which does not wait for the waiting end of the pipe to be closed, so `stop()` can return while that end is still open. That is Task 8's code, so it is not fixed here; it is a follow-up.
 
-### Afterwards: the gate test that sometimes failed, fixed (17 Oct 2026)
-
-**What was wrong.** Stopping the gate service could return while the pipe's free end (the one waiting for the next gate to connect) was still open, so for a moment after the stop a client could still connect.
-
-**Why, read from the libraries' own code** (tokio 1.53.1 and mio 1.2.2, the library under tokio's pipes, in the local cargo cache). The paragraph above was close but not quite right: the free end *was* dropped before `stop()` returned; its Windows handle was not closed. mio closes that handle only once the runtime has read Windows' notice that the end's wait for a client was cancelled. The old stop shut the runtime down without reading it, so it was read only when the runtime's last thread was gone. Those are the background threads that send answers and run the checker, which `shutdown_background()` does not wait for: a moment later, or never while a checker is stuck.
-
-**The fix** (`src/gate.rs`). Before the runtime is shut down, the service ends the task that holds the free end and waits until that task is dropped. Then it asks Windows whether the pipe still has a free end (`WaitNamedPipeW`, which only asks and connects nothing), letting the runtime read Windows' notices between asks, for at most 1 s. A decision still being made is still not waited for, so a stuck checker cannot hold up the stop. The stop now also starts by refusing everything (as `refuse_everything` does), so a decision that finishes in that last moment is a refusal.
-
-**The tests first** (`tests/gate.rs`). `the_pipe_is_gone_once_the_service_stops` now starts, asks, stops and connects 500 times over. 50 rounds were not enough: run alone on the old code, they found 2, 3, then 0 bad rounds. The new `the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns` has a checker that sleeps for an hour; the stop must take under 0.5 s, the pipe must then be gone, and the same name must serve again (a new pipe cannot have the name while any end of the old one is open). On the old code (`cargo test -p steplet-run --offline --test gate the_pipe_is_gone -- --nocapture`):
-
-```
---- the pipe was still there after stop in 31 of 500 rounds, first [(8, Ok(())), (22, Ok(())), (30, Ok(())), (41, Ok(())), (56, Ok(()))]
-thread 'the_pipe_is_gone_once_the_service_stops' (29656) panicked at crates\steplet-run\tests\gate.rs:605:5:
-assertion failed: still_there.is_empty()
-test the_pipe_is_gone_once_the_service_stops ... FAILED
---- stop took 0 ms; after stop: Ok(())
-thread 'the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns' (47048) panicked at crates\steplet-run\tests\gate.rs:630:5:
-assertion `left == right` failed
-  left: None
- right: Some(2)
-test the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns ... FAILED
-test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.50s
-```
-
-With the stuck checker the old stop did not close the free end at all, and by the code it would not until the stuck thread ended: that thread holds on to the runtime, so Windows' notice is never read. Earlier runs of the 500 rounds on the old code found 52, 54, 37, 36 and 55 bad rounds.
-
-On the fixed code, the same command:
-
-```
---- stop took 14 ms; after stop: Err(Os { code: 2, kind: NotFound, message: "The system cannot find the file specified." })
-test the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns ... ok
---- the pipe was still there after stop in 0 of 500 rounds, first []
-test the_pipe_is_gone_once_the_service_stops ... ok
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 6.55s
-```
-
-It also passed in each of the 7 earlier runs while the fix was being made (0 of 500 each time).
-
-**What the stop now costs, and what is left open, measured.** These numbers come from timing and counting lines added for a moment (then removed). The counts are of the pipe's open ends, read with `FindFirstFileW`, which lists them without connecting.
-
-- In 1,503 stops over three runs, Windows' first answer was already "no free end", so the asking never had to repeat.
-- In about 9 stops in 10, that first answer took about 14 ms, and one end of the pipe was still open and busy. While every end left is busy, Windows takes one tick of its clock to say there is no free end.
-- That busy end is the connection just answered, still finishing. When the test waited for each answer to be read in full before stopping, all 100 of 100 stops had no end left open at all once the free end was dropped.
-- After the runtime's shutdown, no end was left in any of 501 stops, nor in the stuck checker's stop.
-
-So the stop costs about 14 ms once per run. It is also why the 500 rounds take about 7 s, which does not lengthen the run of the gate tests: another of them already takes 9 s.
-
-**The code review, and what changed.** A reviewer read the diff.
-
-- It said the ask checks for a free end, not a closed one. The counts above show that the free end is closed. The comments now say exactly what is checked, and that the stop gives up after 1 s.
-- It said the extra moment the runtime now runs could let a decision already being made be answered "allow" after the stop was called. The stop now refuses everything first.
-- It said the 2 s limit in the stuck checker's test was looser than needed, and that the test did not check the name could serve again. The limit is now 0.5 s (stops took 0 to 31 ms), and the name check is added.
-- Its guess that, with a stuck checker, the old free end stays open until Steplet ends was wrong: the counts show none left after the shutdown, and the name check passes.
-- Not taken: checking Windows' error code on each ask, and an extra runtime turn after the drop. The first matters only if the ask itself breaks, and then the stop behaves as before the fix (the tests would show a pipe left open). The counts show the second is not needed.
-
-**The runner crate's tests, three runs in a row** (`cargo test -p steplet-run --offline`, run 3's summary lines; runs 1 and 2 had the same counts, and times within 0.1 s):
-
-```
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 14 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.14s
-test result: ok. 1 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 2 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.70s
-test result: ok. 18 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-```
-
-Each run: 12 test programs, 73 passed, 0 failed, 19 ignored (the Linux-only ones).
-
-```
-> cargo fmt --all -- --check
-(no output; exit 0)
-> cargo clippy --workspace --all-targets --offline -- -D warnings
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.53s
-(exit 0, no warnings)
-```
-
-**What this fix did not verify:**
-
-- **A connection still being answered when the service stops.** The stop closes the free end, not a connection whose decision is still being made. By the code (this was not measured), that one may close only when the runtime's last thread ends, which is never while a checker is stuck. No new client can connect to it (Windows says it is busy), so it cannot be used to ask anything, but its handle is left open. Closing it too would mean ending the answer tasks at the stop, which needs care: an answer being sent hands the pipe's handle to a background thread that must finish before the handle closes.
-- **That Windows always reports the cancelled wait at once.** The stop does not rely on it: it asks Windows, and gives up after 1 s. Giving up never happened in 1,503 stops.
-- **The Linux-only tests** were not run for this fix.
-
 ### The final runs
 
 Every Linux-only runner test, on the final code (`cargo test -p steplet-run --offline --no-fail-fast -- --ignored --nocapture --test-threads=1`; the test names in the order they ran, then each file's summary line):
@@ -2439,7 +2351,7 @@ assertion `left == right` failed
 test result: FAILED. 12 passed; 1 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.14s
 ```
 
-In this session that test failed in 3 of the 5 full runs. So the test suite is not reliably clean until the gate service's stop is fixed (see "The gate test that failed once, again" above).
+In this session that test failed in 3 of the 5 full runs. So the test suite was not reliably clean until the gate service's stop was fixed; it was fixed afterwards (see "Afterwards: the gate test that sometimes failed, fixed" below).
 
 ### What this task did not verify
 
@@ -2449,7 +2361,95 @@ In this session that test failed in 3 of the 5 full runs. So the test suite is n
 - **The listing fence and the network.** The listing's fence has the same "no network" settings as the checkout's (Task 6), but this task's test checks only what the probe could read and write, not a network connection.
 - **Every special exit-code meaning Claude Code has.** The rule reads the marks Claude Code 2.1.220 sets (`returnCodeInterpretation`, `backgroundTaskId`, `backgroundedByUser`, `timedOutAfterMs`, `interrupted`). A later version could add another; Steplet would then show exit code 0 where it should show none, until the rule is updated (phase 5 checks each new version).
 - **The six minor points** above, left for later.
-- **The gate test that sometimes fails** (`the_pipe_is_gone_once_the_service_stops`): its cause is found but not fixed.
+- **The gate test that sometimes failed** (`the_pipe_is_gone_once_the_service_stops`): not fixed in this task; fixed afterwards, see the next section.
+
+### Afterwards: the gate test that sometimes failed, fixed (17 Oct 2026)
+
+**What was wrong.** Stopping the gate service could return while the pipe's free end (the one waiting for the next gate to connect) was still open, so for a moment after the stop a client could still connect.
+
+**Why, read from the libraries' own code** (tokio 1.53.1 and mio 1.2.2, the library under tokio's pipes, in the local cargo cache). The paragraph above was close but not quite right: the free end *was* dropped before `stop()` returned; its Windows handle was not closed. mio closes that handle only once the runtime has read Windows' notice that the end's wait for a client was cancelled. The old stop shut the runtime down without reading it, so it was read only when the runtime's last thread was gone. Those are the background threads that send answers and run the checker, which `shutdown_background()` does not wait for: a moment later, or never while a checker is stuck.
+
+**The fix** (`src/gate.rs`). Before the runtime is shut down, the service ends the task that holds the free end and waits until that task is dropped. Then it asks Windows whether the pipe still has a free end (`WaitNamedPipeW`, which only asks and connects nothing), letting the runtime read Windows' notices between asks, for at most 1 s. A decision still being made is still not waited for, so a stuck checker cannot hold up the stop. The stop now also starts by refusing everything (as `refuse_everything` does), so a decision that finishes in that last moment is a refusal.
+
+**The tests first** (`tests/gate.rs`). `the_pipe_is_gone_once_the_service_stops` now starts, asks, stops and connects 500 times over. 50 rounds were not enough: run alone on the old code, they found 2, 3, then 0 bad rounds. The new `the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns` has a checker that sleeps for an hour; the stop must take under 0.5 s, the pipe must then be gone, and the same name must serve again (a new pipe cannot have the name while any end of the old one is open). On the old code (`cargo test -p steplet-run --offline --test gate the_pipe_is_gone -- --nocapture`):
+
+```
+--- the pipe was still there after stop in 31 of 500 rounds, first [(8, Ok(())), (22, Ok(())), (30, Ok(())), (41, Ok(())), (56, Ok(()))]
+thread 'the_pipe_is_gone_once_the_service_stops' (29656) panicked at crates\steplet-run\tests\gate.rs:605:5:
+assertion failed: still_there.is_empty()
+test the_pipe_is_gone_once_the_service_stops ... FAILED
+--- stop took 0 ms; after stop: Ok(())
+thread 'the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns' (47048) panicked at crates\steplet-run\tests\gate.rs:630:5:
+assertion `left == right` failed
+  left: None
+ right: Some(2)
+test the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns ... FAILED
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.50s
+```
+
+With the stuck checker the old stop did not close the free end at all, and by the code it would not until the stuck thread ended: that thread holds on to the runtime, so Windows' notice is never read. Earlier runs of the 500 rounds on the old code found 52, 54, 37, 36 and 55 bad rounds.
+
+On the fixed code, the same command:
+
+```
+--- stop took 14 ms; after stop: Err(Os { code: 2, kind: NotFound, message: "The system cannot find the file specified." })
+test the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns ... ok
+--- the pipe was still there after stop in 0 of 500 rounds, first []
+test the_pipe_is_gone_once_the_service_stops ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 6.55s
+```
+
+It also passed in each of the 7 earlier runs while the fix was being made (0 of 500 each time).
+
+**What the stop now costs, and what is left open, measured.** These numbers come from timing and counting lines added for a moment (then removed). The counts are of the pipe's open ends, read with `FindFirstFileW`, which lists them without connecting.
+
+- In 1,503 stops over three runs, Windows' first answer was already "no free end", so the asking never had to repeat.
+- In about 9 stops in 10, that first answer took about 14 ms, and one end of the pipe was still open and busy. While every end left is busy, Windows takes one tick of its clock to say there is no free end.
+- That busy end is the connection just answered, still finishing. When the test waited for each answer to be read in full before stopping, all 100 of 100 stops had no end left open at all once the free end was dropped.
+- After the runtime's shutdown, no end was left in any of 501 stops, nor in the stuck checker's stop.
+
+So the stop costs about 14 ms once per run. It is also why the 500 rounds take about 7 s, which does not lengthen the run of the gate tests: another of them already takes 9 s.
+
+**The code review, and what changed.** A reviewer read the diff.
+
+- It said the ask checks for a free end, not a closed one. The counts above show that the free end is closed. The comments now say exactly what is checked, and that the stop gives up after 1 s.
+- It said the extra moment the runtime now runs could let a decision already being made be answered "allow" after the stop was called. The stop now refuses everything first.
+- It said the 2 s limit in the stuck checker's test was looser than needed, and that the test did not check the name could serve again. The limit is now 0.5 s (stops took 0 to 31 ms), and the name check is added.
+- Its guess that, with a stuck checker, the old free end stays open until Steplet ends was wrong: the counts show none left after the shutdown, and the name check passes.
+- Not taken: checking Windows' error code on each ask, and an extra runtime turn after the drop. The first matters only if the ask itself breaks, and then the stop behaves as before the fix (the tests would show a pipe left open). The counts show the second is not needed.
+
+**The runner crate's tests, three runs in a row** (`cargo test -p steplet-run --offline`, run 3's summary lines; runs 1 and 2 had the same counts, and times within 0.1 s):
+
+```
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 14 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.14s
+test result: ok. 1 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.70s
+test result: ok. 18 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+Each run: 12 test programs, 73 passed, 0 failed, 19 ignored (the Linux-only ones).
+
+```
+> cargo fmt --all -- --check
+(no output; exit 0)
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.53s
+(exit 0, no warnings)
+```
+
+**What this fix did not verify:**
+
+- **A connection still being answered when the service stops.** The stop closes the free end, not a connection whose decision is still being made. By the code (this was not measured), that one may close only when the runtime's last thread ends, which is never while a checker is stuck. No new client can connect to it (Windows says it is busy), so it cannot be used to ask anything, but its handle is left open. Closing it too would mean ending the answer tasks at the stop, which needs care: an answer being sent hands the pipe's handle to a background thread that must finish before the handle closes.
+- **That Windows always reports the cancelled wait at once.** The stop does not rely on it: it asks Windows, and gives up after 1 s. Giving up never happened in 1,503 stops.
+- **The Linux-only tests** were not run for this fix.
 
 ## Task 11: the containment battery
 
@@ -2741,7 +2741,7 @@ Tasks 1, 2 and 4 to 12 are done. Task 3 was deferred on your word.
 
 | Line on screen | Result | Where the output is |
 |---|---|---|
-| "Steplet checks the agent's shell commands that change something, its file writes and its web fetches before they happen. If Steplet's checker fails, the action is refused." | **PASS** | Task 8 (the gate refuses on a crash, a stall, a wrong reply or a wrong token); Task 9 (an action that skips the checker stops the run); Task 11 Step 3 |
+| "Steplet checks the agent's shell commands that change something, its file writes and its web fetches before they happen. If Steplet's checker fails, the action is refused." | **PASS.** An action that asks the gate is checked before it happens. One that skips the checker (Claude Code runs some reads without asking) is judged right after, and stops the run unless it was a harmless read | Task 8 (the gate refuses on a crash, a stall, a wrong reply or a wrong token); Task 9 (an action that skips the checker stops the run); Task 11 Step 3 |
 | "The agent can fetch only these web addresses: …" | **PASS** | Task 11 Step 3 |
 | "Programs this task runs can change files only inside this folder." | **PASS** | Task 11 Step 2; Tasks 2 and 6 (`.git` cannot be written from inside the fence) |
 | "Programs this task runs cannot read these paths: …", and the receiver's own files are not even present | **PASS for the programs a task runs.** For the agent's own file tools it rests on option D (nothing of the receiver's is present), not on a direct test: Task 3 was not run | Task 1 Check 3; Task 2; Task 11 Steps 1 and 2 |
@@ -2750,7 +2750,7 @@ Tasks 1, 2 and 4 to 12 are done. Task 3 was deferred on your word.
 | Prepare: "Steplet tells the agent not to load agent settings" | **PASS** | Task 6 (the agent settings files are removed); Task 10 (no trust recorded after the run) |
 | "Interrupted; the folder was reset; run again?" | **PASS** on the runner's side (the words are phase 4's) | Task 7 (a stop ends the run cleanly and leaves nothing running); Tasks 9 and 10 (a tripwire ends the run, and the report says why) |
 | Report: every model used, and refusals | **PASS** | Task 10; Task 11 Step 3 (two models listed) |
-| Report and live log are safe to read | **PASS for the report.** The live log is a phase 4 screen | Task 10; Task 11 Step 2 |
+| Report and live log are safe to read | **PASS for the report.** Control characters and forged text were shown in live runs; hiding the key and the run's token is shown by the unit tests only, since no live run printed them. The live log is a phase 4 screen, and the raw logs Steplet keeps on Windows are not cleaned | Task 10; Task 11 Step 2 |
 
 The phase's "done means" in the milestone plan is that the scripted-model layer of the suite passes for every item of its section 7 that this phase covers. **It passes,** with the two gaps named in the table: Task 3 (the agent's own file tools against links out of the copy) and a program listening on the Windows side.
 
@@ -2784,8 +2784,87 @@ Each task's section lists its own. The main ones (rows H1 to H13 in `docs/decisi
   - **A program listening on the Windows side**, and **why** a Windows program cannot reach Windows from inside the fence (Task 11).
   - **A deny rule for writing into the run's own folder**, needed before phase 4 lets you answer the checker's questions (Tasks 8 and 11).
   - **Exit-code marks of later Claude Code versions** (Task 10).
-  - **The minor review points left for later:** 4 from Task 8, 4 from Task 9, 6 from Task 10 and 2 from Task 11, each in the ledger and in its task's section.
+  - **The raw logs on Windows** (`<run>.jsonl` and `<run>.stderr.txt` in Steplet's logs folder) are written as they come, not cleaned: if a run ever printed the key, the report would hide it but those files would not (final review).
+  - **The minor review points left for later:** 4 from Task 8, 4 from Task 9, 6 from Task 10, 2 from Task 11 and 3 from the final review, each in the ledger (and in its task's section, or the final review below).
 
 ### Checks
 
-CHECKS_BLOCK
+Run on 17 Oct 2026 on the final code: the gate fix merged in (`9ae2d90`, on your word), plus the final review's two fixes below, which this commit adds.
+
+```
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.03s
+clippy exit 0
+> cargo test --workspace --offline --no-fail-fast
+workspace tests exit 0
+(46 test programs; every summary line says "ok": 220 passed, 0 failed, 22 ignored)
+> cargo test -p steplet-run --offline --no-fail-fast -- --ignored --nocapture --test-threads=1
+     Running tests\contain.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 37.08s
+     Running tests\gate.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 27.30s
+     Running tests\launch.rs
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 57.02s
+     Running tests\prepare.rs
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 15.45s
+     Running tests\report.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 21.97s
+     Running tests\tripwires.rs
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.62s
+Linux-only tests exit 0
+> rustc --version; cargo --version
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+```
+
+The 22 ignored tests in the workspace run are the Linux-only ones, which the next command ran: **22 of 22 passed** (the other test files have no Linux-only tests). An earlier try of that command, on the merged code before the final review's fixes, could not build once because McAfee held a freshly built test program (`LNK1104`, the known trap); with the build retried first it passed 22 of 22 as well.
+
+The lock files (F12), checked with a copy of `lock_ages.py` dated 17 Oct 2026 (the script's own date was 11 Oct). It asks crates.io for each package's publish date:
+
+```
+> python -I lock_ages_1017.py Cargo.lock
+110 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+> python -I lock_ages_1017.py crates\steplet-core\fuzz\Cargo.lock
+40 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+```
+
+(The last line of each run; every package's line is in the ledger's log.) `spikes/Cargo.lock`, the throwaway phase 0 programs' lock file, was not checked; Task 8 noted it holds mio 1.2.4, published 3 Oct 2026, which is 14 days old today.
+
+### The final review, and what changed
+
+A code-reviewer agent read the whole branch since GitHub's `main` (`56d0433..9ae2d90`, read-only), looking for problems between the tasks, which each task's own review could not see. It found nothing blocking.
+
+- **Important, fixed: a command that skipped the checker and ran while Steplet was stopping the run was marked as "cut short by the stop, not a breach".** Two calls can be under way at once, or one can start during the stop. If such a call was no harmless read and came back with no error, it ran outside the checker, which is a breach whatever the timing. The report now never marks it as part of the stop, as already for a refused call that ran. The test (`a_call_that_skipped_the_checker_and_ran_during_the_stop_is_not_marked_as_cut_short`) failed first:
+
+```
+thread 'a_call_that_skipped_the_checker_and_ran_during_the_stop_is_not_marked_as_cut_short' (26460) panicked at crates\steplet-run\tests\report.rs:538:5:
+assertion `left == right` failed
+  left: [("cat a | head", false), ("cat b; ls", true), ("touch c.txt", true)]
+ right: [("cat a | head", false), ("cat b; ls", false), ("touch c.txt", true)]
+test result: FAILED. 18 passed; 1 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+- **Raised from minor and fixed, because Steplet would hang: two rare paths where watching the run never ended.** If Windows could not say whether the run had ended, or if neither Steplet's Linux nor Windows could end it, the watch waited for the run's end with no limit. `run()` then never returned: no report, the run's folders not removed, the gate never stopped. Now, when Windows cannot say, Steplet stops the run first, as at a tripwire. When nothing can end it, Steplet does not wait: it reads what has already come, says so in the faults, and goes on. Both tests (`tests/watch_run.rs`, with stand-in agents whose wait for the end really waits) failed first:
+
+```
+thread 'a_run_that_neither_linux_nor_windows_can_end_does_not_hold_steplet_for_ever' (29240) panicked at crates\steplet-run\tests\watch_run.rs:163:60:
+watch_run returned within 10 s: Timeout
+thread 'when_steplet_cannot_tell_whether_the_run_ended_it_stops_it_first' (47108) panicked at crates\steplet-run\tests\watch_run.rs:163:60:
+watch_run returned within 10 s: Timeout
+test result: FAILED. 5 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.01s
+```
+
+  and then passed, with the rest of the file:
+
+```
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+```
+
+- **Kept, with its description corrected:** faults found in Steplet's own looks after the run (and in removing it) do not change `completed` (Task 10's ruling). The field's description said "no fault", and now says this.
+- **Fixed as text:** this summary claimed a little more than the output shows. The first row now says that an action which skips the checker is judged right after it, not before. The "safe to read" row now says that hiding the key is shown by the unit tests only, and that the raw logs on Windows are not cleaned.
+- **Minor, left for later** (in the ledger):
+  - a call the gate turned away before deciding (the wrong program, token or no request in time) shows as "did not ask the gate", while `refused` lists the connection; stopping the run is right, the label is not;
+  - an empty tool call id is read differently by the watcher and the report;
+  - the raw logs on Windows are not cleaned of the key or the token (the key would first have to be readable inside the run).

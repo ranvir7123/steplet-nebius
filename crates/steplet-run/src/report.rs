@@ -30,8 +30,9 @@ const FENCE_NOTE: &str = "Blocked fence attempts are not visible to Steplet: the
 #[derive(Clone, Debug, PartialEq)]
 pub struct Report {
     /// The run ended on its own and without an error, by Steplet's records: exactly one result, with `success`, no
-    /// error and `end_turn`; no tripwire; not stopped at its time limit; no fault; Claude Code's exit code 0. It says
-    /// nothing about whether the task's own tests passed: their exit codes are in `commands`.
+    /// error and `end_turn`; no tripwire; not stopped at its time limit; no fault during the run; Claude Code's exit
+    /// code 0. Faults in Steplet's own looks after the run and in removing it are listed in `faults` but do not change
+    /// it. It says nothing about whether the task's own tests passed: their exit codes are in `commands`.
     pub completed: bool,
     /// Why Steplet stopped the run, if a tripwire did (D3, D8, row 38).
     pub stopped_by: Option<Tripwire>,
@@ -70,7 +71,8 @@ pub struct ReportCommand {
     /// What came back, as Claude Code gave it.
     pub output: String,
     /// Steplet was already stopping the run before this call's result came (or none came): what it shows was cut
-    /// short or refused by the stop, and it is not a breach of its own.
+    /// short or refused by the stop, and it is not a breach of its own. Never set for a call that ran outside the
+    /// checker (refused but it ran, or not asked and no harmless read, with no error): that is a breach, stop or not.
     pub after_stop: bool,
 }
 
@@ -253,9 +255,11 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                 Some(r) if name == "Bash" && input["run_in_background"] != Value::Bool(true) => exit_code(r),
                 _ => None,
             };
-            // A call that ran although Steplet refused it is a breach of its own, stop or not.
-            let after_stop =
-                check != Check::RefusedButRan && stop.is_some_and(|stop| result.is_none_or(|r| r.event >= stop));
+            // A call that ran although Steplet refused it, or ran without asking and was no harmless read, is a breach
+            // of its own, stop or not.
+            let ran = result.is_some_and(|r| !r.is_error);
+            let breach = check == Check::RefusedButRan || (check == Check::NotAsked { harmless: false } && ran);
+            let after_stop = !breach && stop.is_some_and(|stop| result.is_none_or(|r| r.event >= stop));
             Some(ReportCommand {
                 tool: scrub.text(name),
                 command: scrub.text(&what(name, input)),

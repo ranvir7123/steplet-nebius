@@ -34,6 +34,11 @@ struct Stand {
     outputs_closed: bool,
     ends_at: Option<Instant>,
     stop_fails: bool,
+    kill_fails: bool,
+    /// Asking whether it has ended fails.
+    ended_fails: bool,
+    /// `finish` waits until it has ended, as the real one's wait for `wsl.exe` does: for ever, if it never ends.
+    wait_in_finish: bool,
     /// The gate's pipe, asked once when the stop begins.
     ask_on_stop: Option<String>,
     ended: bool,
@@ -67,6 +72,9 @@ impl RunningAgent for Stand {
     }
 
     fn ended(&mut self) -> io::Result<bool> {
+        if self.ended_fails {
+            return Err(io::Error::other("Windows gave no answer"));
+        }
         Ok(self.has_ended())
     }
 
@@ -85,12 +93,18 @@ impl RunningAgent for Stand {
 
     fn kill(&mut self) -> io::Result<()> {
         self.note("kill".into());
+        if self.kill_fails {
+            return Err(io::Error::other("access is denied"));
+        }
         self.ended = true;
         Ok(())
     }
 
     fn finish(self) -> (io::Result<Option<i32>>, Vec<Event>) {
         self.note(format!("finish, ended: {}", self.has_ended()));
+        while self.wait_in_finish && !self.has_ended() {
+            thread::sleep(Duration::from_millis(50));
+        }
         (Ok(Some(124)), Vec::new())
     }
 }
@@ -176,6 +190,42 @@ fn after_a_tripwire_a_stop_that_fails_ends_in_a_kill() {
     assert_eq!(notes, ["stop", "kill", "finish, ended: true"]);
     assert_eq!(outcome.stopped_by, Some(Tripwire::Hook("PreToolUse:Bash".into())));
     assert_eq!(outcome.faults, [COULD_NOT_STOP]);
+}
+
+/// When neither Steplet's Linux nor Windows can end the run, waiting for its end could take for ever. Steplet then
+/// reads only what has come, says so, and goes on, so the run's folders are still removed and a report is made.
+#[test]
+fn a_run_that_neither_linux_nor_windows_can_end_does_not_hold_steplet_for_ever() {
+    let hook = Event::HookEvent { name: "PreToolUse:Bash".into() };
+    let stand = Stand {
+        script: VecDeque::from([hook]),
+        stop_fails: true,
+        kill_fails: true,
+        wait_in_finish: true,
+        ..Stand::default()
+    };
+    let (outcome, notes) = watch(stand, Duration::from_secs(60));
+    assert_eq!(notes, ["stop", "kill"], "never waited for an end that cannot come");
+    assert_eq!(
+        outcome.faults,
+        [
+            COULD_NOT_STOP,
+            "Steplet could not end the run from Windows either: access is denied",
+            "Steplet did not wait for the run to end, since it could not end it",
+        ]
+    );
+    assert_eq!(outcome.exit_code, None);
+}
+
+/// When Steplet cannot tell whether the run has ended, it may still be running: Steplet stops it, as at a tripwire,
+/// before waiting for it.
+#[test]
+fn when_steplet_cannot_tell_whether_the_run_ended_it_stops_it_first() {
+    let stand = Stand { ended_fails: true, wait_in_finish: true, ..Stand::default() };
+    let (outcome, notes) = watch(stand, Duration::from_secs(60));
+    assert_eq!(notes, ["stop", "finish, ended: true"]);
+    assert_eq!(outcome.faults, ["Steplet could not tell whether the run had ended: Windows gave no answer"]);
+    assert_eq!(outcome.stopped_at, Some(0), "what came after was shaped by the stop");
 }
 
 #[test]
