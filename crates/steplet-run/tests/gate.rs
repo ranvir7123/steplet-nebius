@@ -587,13 +587,48 @@ fn a_client_that_never_reads_its_answer_is_let_go() {
 
 #[test]
 fn the_pipe_is_gone_once_the_service_stops() {
+    // Many times over: before 17 Oct 2026 the free end of the pipe outlived `stop` in about 1 round in 10.
+    const ROUNDS: usize = 500;
+    let pipes: Vec<String> = (0..ROUNDS).map(|_| pipe_name()).collect();
+    let mut still_there = Vec::new();
+    for (round, pipe) in pipes.iter().enumerate() {
+        let gate = service(pipe, Duration::from_secs(5));
+        assert!(ask(pipe, &key_request(TOKEN)).is_ok(), "round {round}");
+        gate.stop();
+        let after = connect(pipe).map(drop);
+        if after.as_ref().err().and_then(io::Error::raw_os_error) != Some(ERROR_FILE_NOT_FOUND) {
+            still_there.push((round, after));
+        }
+    }
+    let first = &still_there[..still_there.len().min(5)];
+    println!("--- the pipe was still there after stop in {} of {ROUNDS} rounds, first {first:?}", still_there.len());
+    assert!(still_there.is_empty());
+    let pipe = &pipes[ROUNDS - 1];
+    let again = service(pipe, Duration::from_secs(5));
+    assert!(ask(pipe, &key_request(TOKEN)).is_ok(), "the same name can serve again");
+    drop(again);
+}
+
+#[test]
+fn the_pipe_is_gone_once_the_service_stops_even_with_a_checker_that_never_returns() {
+    // The stuck checker keeps one of the service's threads for good: stopping must still close the pipe, and must
+    // not wait for that thread.
     let pipe = pipe_name();
-    let gate = service(&pipe, Duration::from_secs(5));
-    assert!(ask(&pipe, &key_request(TOKEN)).is_ok());
+    let stall = |_: &GateRequest| {
+        thread::sleep(Duration::from_secs(3600));
+        GateAnswer::Deny { message: "too late".into() }
+    };
+    let gate = serve(&link(&pipe, Duration::from_millis(500)), &this_program(), None, stall).unwrap();
+    let late = ask(&pipe, &decision("Bash", json!({"command": "touch declared.txt"}), "toolu_stuck")).unwrap();
+    assert!(is_refusal(&late), "{late}");
+    let started = Instant::now();
     gate.stop();
+    let took = started.elapsed();
     let after = connect(&pipe).map(drop);
-    println!("--- after stop: {after:?}");
+    println!("--- stop took {} ms; after stop: {after:?}", took.as_millis());
+    assert!(took < Duration::from_millis(500), "stop did not wait for the stuck checker: {took:?}");
     assert_eq!(after.err().and_then(|e| e.raw_os_error()), Some(ERROR_FILE_NOT_FOUND));
+    // No end of the old pipe is left: the first end of a new one can have the name.
     let again = service(&pipe, Duration::from_secs(5));
     assert!(ask(&pipe, &key_request(TOKEN)).is_ok(), "the same name can serve again");
     drop(again);
