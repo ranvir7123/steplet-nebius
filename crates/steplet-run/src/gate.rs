@@ -42,6 +42,11 @@ impl ApiKey {
     pub fn new(key: String) -> ApiKey {
         ApiKey(key)
     }
+
+    /// The key's text, for the report to hide it (F48).
+    pub(crate) fn text(&self) -> &str {
+        &self.0
+    }
 }
 
 impl fmt::Debug for ApiKey {

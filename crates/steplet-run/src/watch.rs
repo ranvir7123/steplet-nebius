@@ -93,7 +93,7 @@ impl<'a> Watcher<'a> {
                     "Bash" => Some(Tripwire::SkippedCommand(what.clone())),
                     _ => Some(Tripwire::SkippedGate(described(&tool, &what))),
                 };
-                Verdict { skipped: Some(Event::SkippedGate { tool, what, harmless }), stop: tripwire }
+                Verdict { skipped: Some(Event::SkippedGate { id: id.into(), tool, what, harmless }), stop: tripwire }
             }
         }
     }
@@ -125,7 +125,7 @@ fn stop(why: Tripwire) -> Verdict {
 }
 
 /// The part of a call a person needs to see: its command, path or address, or a search's pattern and folder.
-fn what(tool: &str, input: &Value) -> String {
+pub(crate) fn what(tool: &str, input: &Value) -> String {
     match tool {
         "Bash" => text(input, "command").into(),
         "Read" | "Write" | "Edit" => text(input, "file_path").into(),
@@ -136,7 +136,7 @@ fn what(tool: &str, input: &Value) -> String {
 }
 
 /// A call in a few words: the tool, then what it was.
-fn described(tool: &str, what: &str) -> String {
+pub(crate) fn described(tool: &str, what: &str) -> String {
     format!("{tool} {what}").trim_end().into()
 }
 

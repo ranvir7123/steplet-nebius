@@ -84,6 +84,7 @@ fn tool_results_say_whether_they_failed() {
             is_error: false,
             text: "fatal: Unable to create '/home/tester/steplet-work/L1/repo/.git/index.lock': Read-only file system\nEXIT=128"
                 .into(),
+            plain_end: true,
         }]
     );
     assert_eq!(
@@ -92,13 +93,14 @@ fn tool_results_say_whether_they_failed() {
             id: "toolu_spike_7194c2d2c7104b749582".into(),
             is_error: true,
             text: "Steplet's checker refused: no answer".into(),
+            plain_end: false,
         }]
     );
     let blocks = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"a"},{"type":"image","source":{}},{"type":"text","text":"b"}]}]}}"#;
     assert_eq!(
         parse_line(blocks),
-        vec![Event::ToolResult { id: "t1".into(), is_error: false, text: "a\nb".into() }],
-        "text blocks joined, other blocks left out, a missing is_error read as false"
+        vec![Event::ToolResult { id: "t1".into(), is_error: false, text: "a\nb".into(), plain_end: false }],
+        "text blocks joined, other blocks left out, a missing is_error read as false, no record of the end"
     );
 }
 

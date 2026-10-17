@@ -1,5 +1,5 @@
-//! One whole run (plan Task 9): the gate, the working copy, the launch and the tripwire watcher, joined. The
-//! receiver's report is built from its outcome (Task 10).
+//! One whole run (plan Task 9): the gate, the working copy, the launch and the tripwire watcher, joined, ending in the
+//! receiver's report (Task 10).
 
 use std::io;
 use std::path::PathBuf;
@@ -14,7 +14,8 @@ use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG
 use crate::decide::decide;
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_on_windows, serve};
 use crate::launch::{LaunchError, RunHandle, launch};
-use crate::prepare::{PrepareError, discard, prepare};
+use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
+use crate::report::{Report, Scrubber, build_report, read_trust};
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
 use crate::watch::{Tripwire, Watcher};
 
@@ -63,6 +64,9 @@ pub struct RunOutcome {
     pub requests: Vec<Asked>,
     /// The first tripwire seen. The run was stopped at once, or had already ended when it was seen.
     pub stopped_by: Option<Tripwire>,
+    /// How many of `events` had come when Steplet began to stop the run (at a tripwire, or at its time limit). A call
+    /// whose result came after that was cut short or refused by the stop.
+    pub stopped_at: Option<usize>,
     /// Claude Code's exit code. It is 124 at the time limit and also after a stop, so whether Steplet stopped the
     /// run is `stopped_by` and `faults`, not this.
     pub exit_code: Option<i32>,
@@ -71,9 +75,11 @@ pub struct RunOutcome {
     pub faults: Vec<String>,
 }
 
-/// Runs `req` as run `paths`, with `policy` deciding every request, and removes the run afterwards. The gate's pipe
-/// gets a name and a token no one can guess, made for this run.
-pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup) -> Result<RunOutcome, RunError> {
+/// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report. Before the run
+/// is removed, Steplet's own `git status` lists what it changed and the run's config is checked for trust (D3). The
+/// gate's pipe gets a name and a token no one can guess, made for this run; neither the token nor the key shows in
+/// the report (F48).
+pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup) -> Result<Report, RunError> {
     let pipe = format!("steplet-{}-{}", paths.run_id(), random_hex::<8>().map_err(RunError::Random)?);
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
@@ -93,11 +99,22 @@ pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup
             return Err(e);
         }
     };
-    let mut outcome = watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let outcome = watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP);
+    // Steplet's own looks after the run. They come after the run, so they do not change whether it completed.
+    let mut after = Vec::new();
+    let changed =
+        changes(paths).map_err(|e| after.push(format!("Steplet could not list the files the run changed: {e:?}"))).ok();
+    let config = run_config(paths)
+        .map_err(|e| after.push(format!("Steplet could not read the run's config for the trust check: {e:?}")))
+        .ok();
     if let Err(e) = discard(paths) {
-        outcome.faults.push(format!("the run's folders could not be removed: {e:?}"));
+        after.push(format!("the run's folders could not be removed: {e:?}"));
     }
-    Ok(outcome)
+    let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
+    let mut report = build_report(&outcome, changed.as_deref(), read_trust(config.as_deref()), &secrets);
+    let scrub = Scrubber::new(&secrets);
+    report.faults.extend(after.iter().map(|fault| scrub.text(fault)));
+    Ok(report)
 }
 
 /// A running agent, as `watch_run` follows it. `RunHandle` is the real one; the tests also use stand-ins.
@@ -148,8 +165,14 @@ pub fn watch_run(
     stop_after: Duration,
 ) -> RunOutcome {
     let mut watcher = Watcher::new(policy, work);
-    let mut outcome =
-        RunOutcome { events: Vec::new(), requests: Vec::new(), stopped_by: None, exit_code: None, faults: Vec::new() };
+    let mut outcome = RunOutcome {
+        events: Vec::new(),
+        requests: Vec::new(),
+        stopped_by: None,
+        stopped_at: None,
+        exit_code: None,
+        faults: Vec::new(),
+    };
     let backstop = Instant::now() + stop_after;
     let mut backstopped = false;
     let mut next_look = Instant::now();
@@ -180,6 +203,7 @@ pub fn watch_run(
         if !backstopped && Instant::now() >= backstop {
             backstopped = true;
             outcome.faults.push("the run did not end at its time limit, so Steplet stopped it".into());
+            outcome.stopped_at.get_or_insert(outcome.events.len());
             if !stop_now(&mut handle, &gate, &mut outcome.faults) {
                 break;
             }
@@ -233,6 +257,7 @@ impl RunOutcome {
         match verdict.stop {
             Some(why) if self.stopped_by.is_none() => {
                 self.stopped_by = Some(why);
+                self.stopped_at.get_or_insert(self.events.len());
                 true
             }
             _ => false,

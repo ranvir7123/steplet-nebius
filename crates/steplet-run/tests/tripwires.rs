@@ -12,8 +12,8 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Asked, BACKSTOP, Event, GateAnswer, RunOutcome, RunPaths, RunRequest, RunSetup, Tripwire, decide, discard,
-    launch, prepare, run, watch_run,
+    ApiKey, Asked, BACKSTOP, Check, Event, GateAnswer, ReportCommand, RunOutcome, RunPaths, RunRequest, RunSetup,
+    Tripwire, decide, discard, launch, prepare, run, watch_run,
 };
 use support::{MADE_UP_KEY, logs_dir, scripted_model, serve_gate};
 
@@ -87,7 +87,7 @@ fn which_actions_ask_the_gate() {
             _ => None,
         });
         let result = events.iter().find_map(|r| match r {
-            Event::ToolResult { id: rid, is_error, text } if rid == id => Some((*is_error, text.clone())),
+            Event::ToolResult { id: rid, is_error, text, .. } if rid == id => Some((*is_error, text.clone())),
             _ => None,
         });
         let what =
@@ -244,20 +244,20 @@ fn a_harmless_read_that_skips_the_gate_does_not_stop_the_run() {
     let req = request();
     let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
     let start = Instant::now();
-    let outcome = run(&req, &paths, &policy, &setup(&distro, 47931)).unwrap();
-    print_outcome(&outcome, start.elapsed());
+    // `run` returns the receiver's report (Task 10); the skip is read from it.
+    let report = run(&req, &paths, &policy, &setup(&distro, 47931)).unwrap();
+    println!("--- {:.1} s; the report:\n{report:#?}", start.elapsed().as_secs_f64());
 
-    assert_eq!(outcome.stopped_by, None);
-    let id = id_of(&outcome, "ls src");
-    assert!(!asked_the_gate(&outcome, &id), "`ls src` skipped the gate");
-    assert!(outcome.events.iter().any(|e| matches!(e, Event::ToolResult { id: r, .. } if *r == id)), "and it ran");
-    let note = Event::SkippedGate { tool: "Bash".into(), what: "ls src".into(), harmless: true };
-    assert!(outcome.events.contains(&note), "the skip is recorded, not dropped");
-    assert!(reached_the_end(&outcome), "the run went on to its end");
-    let results: Vec<&Event> = outcome.events.iter().filter(|e| matches!(e, Event::Result { .. })).collect();
-    assert!(matches!(results[..], [Event::Result { is_error: false, .. }]), "{results:?}");
-    assert_eq!(outcome.exit_code, Some(0));
-    assert_eq!(outcome.faults, Vec::<String>::new());
+    assert_eq!(report.stopped_by, None);
+    let ls: Vec<&ReportCommand> = report.commands.iter().filter(|c| c.command == "ls src").collect();
+    assert!(
+        matches!(ls[..], [ReportCommand { check: Check::NotAsked { harmless: true }, after_stop: false, .. }]),
+        "`ls src` skipped the gate as a harmless read, and the skip is recorded, not dropped: {ls:?}"
+    );
+    assert_eq!(ls[0].exit_code, Some(2), "and it ran: the folder is not there");
+    assert_eq!(report.agent_says, NOT_REACHED, "the run went on to its end");
+    assert!(report.completed);
+    assert_eq!(report.faults, Vec::<String>::new());
     let left = support::root_sh(&distro, "ls -A /work; ls -A /var/lib/steplet/runs");
     assert_eq!(left, "", "run() removed the run");
 }
@@ -314,7 +314,8 @@ fn a_writing_command_made_to_skip_the_gate_stops_the_run() {
     let id = id_of(&outcome, "touch made.txt");
     assert!(!asked_the_gate(&outcome, &id), "the command skipped the gate");
     assert_eq!(outcome.stopped_by, Some(Tripwire::SkippedCommand("touch made.txt".into())));
-    let note = Event::SkippedGate { tool: "Bash".into(), what: "touch made.txt".into(), harmless: false };
+    let note =
+        Event::SkippedGate { id: id.clone(), tool: "Bash".into(), what: "touch made.txt".into(), harmless: false };
     assert!(outcome.events.contains(&note));
     assert!(!reached_the_end(&outcome), "the run was stopped before the script's end");
     assert!(tool_calls(&outcome) < 31, "{} of 31 tool calls were made", tool_calls(&outcome));

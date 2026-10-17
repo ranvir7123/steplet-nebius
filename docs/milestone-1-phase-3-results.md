@@ -2082,3 +2082,283 @@ test exit code: 0
 - **Tool calls cut off by a stop or the time limit are not judged** (no evidence they ran); the report (Task 10) can show them as calls with no result.
 - **A call cut off by the stop *with* a result can be recorded as skipping the gate.** In the final hook run above, the sixth `touch allowed.txt` was interrupted before it reached the gate. Claude Code reported it as rejected, and the watcher, which never reads Claude Code's messages, recorded `SkippedGate` (not harmless). `stopped_by` keeps the first tripwire, the hook. Task 10's report gives `stopped_by` as the reason and must not count records made during the stop as separate breaches.
 - **Links inside the working copy that point outside it**, reached by Read or Glob without asking the gate: Task 3, deferred.
+
+## Task 10: the run's report
+
+Built on 17 Oct 2026, on branch `claude/compassionate-wilbur-a876dd` (from Task 9's `fb0c120`); its code review was answered and the task committed the same day on branch `claude/competent-haslett-269a91`. The first attempt, earlier the same day, was stopped by a safety check on the assistant's side while it wrote the tests; nothing of it was kept. On your word the work went on with the same rules as before: test data short, inert and labelled as made up (the made-up key `support::MADE_UP_KEY`), and the defensive purpose said in the comments.
+
+What was built:
+- **The report** (`crates/steplet-run/src/report.rs`): `build_report(outcome, changed, trust, secrets) -> Report`. It is built only from Steplet's own records, never from what the agent says. It needs no Linux, so it is tested on its own from made-up events (`tests/report.rs`).
+- **`run()` now returns the report.** After the run ends and before the run is removed, Steplet looks twice, through a fixed script (`src/after.sh`, run as root):
+  - it ends anything the run left running, then its own `git status` lists the files the run changed. That listing runs **inside the same fence as the checkout** (no network, nothing readable but the working copy, nothing writable), as the `steplet` account, with nobody's settings, no hooks, and without writing anything. The agent wrote the working copy, so whatever git starts while it lists it must reach no more than the agent could (see "The code review" below);
+  - it reads the run's Claude Code config (as the `steplet` account, at most 4 MiB) for the trust check (D3).
+- **Every text field is made safe to read** the same way: invisible and control characters are removed (newlines and tabs stay), characters that look like a space become a plain space, and then the key and the run's token are replaced by `[hidden by Steplet]`.
+
+What the report holds:
+
+| Field | What it says | Taken from |
+|---|---|---|
+| `completed` | The run ended on its own and without an error. True only with exactly one result that says `success`, no error and `end_turn`; no tripwire; not stopped at its time limit; no fault; Claude Code's exit code 0. It does not say whether the task's own tests passed: their exit codes are in `commands`. | Steplet's records (F35, E1) |
+| `stopped_by` | The tripwire that stopped the run, if one did. | Steplet's watcher |
+| `commands` | Every tool call: the tool, its command, path or address, Steplet's check (allowed, refused, refused but it ran anyway, not asked as a harmless read, or not judged), its exit code, its output, and whether Steplet was already stopping the run. | The event stream and the gate's record |
+| `refused` | Everything the gate refused, with Steplet's reason, marked "(it ran anyway)" if it did. | The gate's record |
+| `models`, `refusals` | Every model used, and every refusal with its category and explanation. | The stream (D7, E1) |
+| `changed_files` | Each changed file, with git's two status letters. `None` if Steplet could not look. | Steplet's own `git status` |
+| `trust` | Whether the run's config marked any folder as trusted: not recorded, recorded, or unknown. | The run's config (D3) |
+| `agent_says` | The agent's own summary, and only here. | The result's text, or the agent's last text |
+| `faults` | What went wrong around the run, in Steplet's words. | Steplet |
+| `notes` | "Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing." | Phase 0 S6 |
+
+How a command's exit code is read: from Claude Code's own marks, never from what the program printed. "No error" means 0 only when Claude Code's own record of the call shows a plain end: not interrupted, not moved to the background, and no meaning of Claude Code's own given to the exit code (Claude Code calls exit code 1 of `grep`, `find`, `diff` or `test` "no error"; see "The code review" below). With an error, Claude Code's first line `Exit code N` gives N. Anything else (a refusal, an interruption, a special meaning) has no exit code. So a program that succeeds cannot print its way to a failure, nor one that fails to a success. The exit code is the whole command line's: a line such as `make test; true` ends in 0 whatever the tests did.
+
+### Changes from the plan, recorded here
+
+- **`build_report(outcome, changed, trust, secrets)`**, not `build_report(outcome, changed)`: the trust check and the texts to hide are not in the outcome.
+- **The report has more fields than the plan's list:** `stopped_by`, `trust` and `faults`. "Steplet stopped it" must come from Steplet's own record, because a stopped run and a timed-out run both exit with 124.
+- **`commands` lists every tool call, not only commands** (each has a `tool`). Otherwise an allowed web fetch or file write would be missing from the report.
+- **A command left running in the background has no exit code:** Claude Code's "no error" then means only that it started. Tools other than commands have none either.
+- **`changed_files` can be `None`:** when Steplet's own `git status` fails, the report says it could not look, instead of "nothing changed".
+- **`RunOutcome.stopped_at`** (new): how many events had come when Steplet began to stop the run, at a tripwire or at its time limit. A call whose result came after that is marked `after_stop`. Its result was cut short or refused by the stop, and it is not counted as a breach of its own (Task 9's last "did not verify" point).
+- **`Event::SkippedGate` gains the call's `id`**, so the report matches each skip record to its call by id, not by its place in the list.
+- **The look after the run does not change `completed`.** Faults from it (and from removing the run) are added to the report's faults after it is built.
+- **Task 9's live test that goes through `run()`** now checks the report instead of the outcome.
+- **`wsl::Output` gains `stdout_bytes`**, the output exactly as it came. `git status -z` separates files with zero bytes, which the text form drops (it drops them because `wsl.exe` writes its own messages in UTF-16).
+- **Steplet's own listing after the run runs inside the fence** (from the code review): the plan said only "Steplet's own post-run `git status`".
+- **`Event::ToolResult` gains `plain_end`** (from the code review): whether Claude Code's own record of the call shows a plain end, so "no error" is read as exit code 0 only then.
+- **The check "refused, but it ran anyway"** (`Check::RefusedButRan`, from the code review).
+
+### The tests first
+
+`tests/report.rs` was written before `report.rs`. The first run could not build, because nothing it tests existed yet:
+
+```
+> cargo test -p steplet-run --offline --test report
+error[E0432]: unresolved imports `steplet_run::Check`, `steplet_run::Refusal`, `steplet_run::Report`, `steplet_run::ReportCommand`, `steplet_run::Trust`, `steplet_run::build_report`, `steplet_run::changed_files`, `steplet_run::read_trust`
+  --> crates\steplet-run\tests\report.rs:17:12
+error[E0560]: struct `RunOutcome` has no field named `stopped_at`
+  --> crates\steplet-run\tests\report.rs:33:66
+error[E0559]: variant `Event::SkippedGate` has no field named `id`
+  --> crates\steplet-run\tests\report.rs:63:26
+error[E0609]: no field `stopped_at` on type `RunOutcome`
+   --> crates\steplet-run\tests\report.rs:162:7
+error: could not compile `steplet-run` (test "report") due to 7 previous errors
+```
+
+With `report.rs` written, 15 of 16 passed. The one failure was a mistake in the test itself: its result had an empty text, and the result's text is what the agent says. With the test's data fixed:
+
+```
+> cargo test -p steplet-run --offline --no-fail-fast      (the report's tests)
+     Running tests\report.rs (target\debug\deps\report-ff7dc5d64e57faad.exe)
+test a_run_that_ended_on_its_own_is_completed_with_the_command_s_real_exit_code ... ok
+test the_report_says_that_blocked_fence_attempts_are_not_visible_to_steplet ... ok
+test invisible_and_control_characters_are_removed_from_every_text_field ... ok
+test calls_cut_short_by_the_stop_are_marked_and_the_tripwire_stays_the_reason ... ok
+test each_call_shows_steplet_s_check_and_every_refusal_is_listed ... ok
+test completed_is_false_when_the_result_reports_an_error_whatever_its_subtype_says ... ok
+test an_empty_secret_hides_nothing_and_a_secret_inside_another_is_hidden_whole ... ok
+test changed_files_are_read_from_steplet_s_own_git_status ... ok
+test completed_needs_exactly_one_result_exit_code_0_no_fault_and_no_stop ... ok
+test the_agent_s_words_are_shown_only_as_the_agent_says ... ok
+test a_program_s_output_cannot_change_its_exit_code ... ok
+test completed_is_false_when_a_tripwire_fired_even_if_the_result_says_success ... ok
+test trust_is_read_from_the_run_s_config ... ok
+test without_a_result_the_agent_says_its_last_text ... ok
+test every_model_used_and_every_refusal_is_listed ... ok
+test the_key_and_the_run_s_token_are_hidden_in_every_field ... ok
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+In the same run, one test from Task 8 failed once: `the_pipe_is_gone_once_the_service_stops` (after the gate service stopped, a connection still opened). Task 10 does not change the gate service. The test then passed 6 times out of 6 on its own and 5 times out of 5 with its whole file. Its cause was not found then; see "The code review" below.
+
+### The code review, and what changed
+
+A code-reviewer agent read the finished diff (read-only), twice: once in the session that built it, and once again in this session, so each finding had its exact file and line. It found 1 critical point, 3 important points and 7 minor ones. Each critical and important point was fixed test first: a test that shows the problem, run and seen to fail, then the fix, then the test seen to pass.
+
+**Critical: Steplet's own listing ran on the agent's working copy outside the fence** (`src/after.sh`). The agent writes the working copy. Git reads things in it while it lists it, and some of them can make git start a program (the reviewer's route: a submodule's own `.git` folder, which the agent can write, naming a "filter" program). That program would have run as the `steplet` account, but outside the fence: with the network, and able to read Steplet's run folders, which the agent cannot. **You chose the fix:** the listing now runs inside the same fence that `prepare.sh` uses for the checkout, with nothing writable: no network, nothing readable but the working copy. Like the checkout, it starts in an empty folder of its own, and everything the `steplet` account runs is ended again after it.
+
+The test (`tests/prepare.rs`, `steplet_s_own_listing_of_the_copy_runs_inside_the_fence`, Linux only) plants a made-up "probe" program in a fresh working copy. Root does that, in the test only, and writes the copy's own git settings as if every guard on `.git` had failed. Git then starts the probe as a filter while it lists the copy. The probe notes whether it could read the run's settings file and write outside the copy, then hands git a made-up text, so the listing shows that it ran. Before the fix:
+
+```
+> cargo test -p steplet-run --offline --test prepare -- --ignored --nocapture --test-threads=1 steplet_s_own_listing
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... --- listed: Ok([" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"])
+thread 'steplet_s_own_listing_of_the_copy_runs_inside_the_fence' (24904) panicked at 
+crates\steplet-run\tests\prepare.rs:241:5:
+assertion `left == right` failed: what the probe reached outside the working copy
+  left: "read-the-run-s-settings\nwrote-outside-the-copy"
+ right: ""
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 3.37s
+```
+
+After the fix, the probe still ran (README shows its made-up text), but it reached nothing outside the copy:
+
+```
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... --- listed: Ok([" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"])
+--- the probe reached: ""
+ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 6.52s
+```
+
+**Important: a failed command could be shown with exit code 0, because Claude Code's "no error" does not always mean exit code 0.** The reviewer suspected this and could not settle it from the recorded streams. It is now settled, twice:
+- **From Claude Code's own program** (2.1.220, in Steplet's Linux): it gives `grep`, `rg`, `egrep`, `fgrep`, `find`, `diff`, `test` and `[` an exit-code meaning of its own. Exit code 1 is not an error for them (`isError:t>=2,message:t===1?e:void 0`), and the call's record then carries `returnCodeInterpretation` ("No matches found", "Files differ", "Condition is false", "Some directories were inaccessible").
+- **Live, through Steplet** (`tests/report.rs`, `no_error_from_claude_code_does_not_always_mean_exit_code_0`): `grep -c made-up-absent-text README` prints 0 and exits 1, and Claude Code called it "no error". `tail -f README`, given a 2-second limit, was moved to the background by Claude Code, also as "no error":
+
+```
+> cargo test -p steplet-run --offline --test report -- --ignored --nocapture --test-threads=1 no_error_from_claude_code
+--- Claude Code's record: is_error false {"interrupted":false,"isImage":false,"noOutputExpected":false,"returnCodeInterpretation":"No matches found","stderr":"","stdout":"0"}
+--- Claude Code's record: is_error false {"backgroundTaskId":"bghi8d1rg","interrupted":false,"isImage":false,"noOutputExpected":false,"stderr":"","stdout":"","timedOutAfterMs":2000}
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 21.52s
+```
+
+The old rule would have shown both as exit code 0. Now "no error" means 0 only when Claude Code's record of the call shows a plain end (one result on the line, not interrupted, none of `returnCodeInterpretation`, `backgroundTaskId`, `backgroundedByUser`, `timedOutAfterMs`); otherwise the report shows no exit code. In that live run the report showed `exit_code: None` for both, with the output `0` and Claude Code's "moved to the background" message. The unit test (`no_error_means_exit_code_0_only_when_claude_code_s_record_shows_a_plain_end`, made-up lines in Claude Code's shape) failed first:
+
+```
+thread 'no_error_means_exit_code_0_only_when_claude_code_s_record_shows_a_plain_end' (39328) panicked at crates\steplet-run\tests\report.rs:416:9:
+assertion `left == right` failed: {"message":{"content":[{"content":"0","is_error":false,"tool_use_id":"u1","type":"tool_result"}],"role":"user"},"tool_use_result":{"interrupted":false,"isImage":false,"noOutputExpected":false,"returnCodeInterpretation":"No matches found","stderr":"","stdout":"0"},"type":"user"}
+  left: Some(0)
+ right: None
+```
+
+The exit code is also described now as the whole command line's: `make test; true` ends in 0 whatever the tests did, and the report cannot see inside the line.
+
+**Important: a call Steplet refused that ran anyway was listed only as "refused".** The watcher already stops the run for it (Task 9), but the report's row said "refused", and during a stop it was even marked as "not a breach of its own". Now the row says `RefusedButRan`, it is never marked as part of the stop, and its line in `refused` ends "(it ran anyway)". The test (`a_refused_call_that_ran_anyway_is_shown_as_having_run`) failed first:
+
+```
+thread 'a_refused_call_that_ran_anyway_is_shown_as_having_run' (35260) panicked at crates\steplet-run\tests\report.rs:438:9:
+assertion `left == right` failed: stopping: false
+  left: (Refused, false)
+ right: (RefusedButRan, false)
+test result: FAILED. 16 passed; 2 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+One older test's made-up data had a refused call whose result had no error, so the new mark showed up there too. Its result is now an error, as a real refusal's is.
+
+**Minor points, left for later** (each is in the ledger):
+1. If a gate decision and a skip record exist for the same call, the report shows the decision; in a rare timing case the watcher saw it the other way.
+2. The key is hidden only whole. If Claude Code cuts a long output inside the key, the part before the cut shows. The key cannot be reached from inside the run (Task 2), so this needs the fence broken first.
+3. Newlines stay in file names, commands and refusals. Once phase 4 shows one entry per line, a file name with a newline could look like two entries.
+4. The listing's size has no cap, and it is held twice in memory.
+5. Some faults show Rust's own form of an error rather than plain words.
+6. The listing does not fix git's folder (`GIT_DIR`); if `.git` could not be read, git would look in the folders above (which are root's, so it finds nothing today).
+
+The seventh (no test put hostile content in the working copy) is covered by the critical point's test.
+
+**The gate test that failed once, again:** `the_pipe_is_gone_once_the_service_stops` failed once more in a full run in this session. Its cause is now visible: when the gate service stops, its thread ends with `shutdown_background()` (`src/gate.rs`), which does not wait for the waiting end of the pipe to be closed, so `stop()` can return while that end is still open. That is Task 8's code, so it is not fixed here; it is a follow-up.
+
+### The final runs
+
+Every Linux-only runner test, on the final code (`cargo test -p steplet-run --offline --no-fail-fast -- --ignored --nocapture --test-threads=1`; the test names in the order they ran, then each file's summary line):
+
+```
+test a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run
+test a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not
+test a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 24.02s
+test a_call_into_steplet_s_linux_that_does_not_answer_is_given_up_at_its_limit
+test a_scripted_run_streams_its_events_in_order
+test a_stop_right_after_launch_never_lets_the_agent_act
+test stop_ends_a_run_mid_command_and_leaves_nothing_running
+test the_time_limit_ends_a_run
+test whatever_a_run_leaves_running_ends_with_it
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 55.46s
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 15.05s
+test no_error_from_claude_code_does_not_always_mean_exit_code_0
+test use_case_1_report_shows_the_test_command_s_real_exit_code_and_no_trust
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 21.14s
+test a_harmless_read_that_skips_the_gate_does_not_stop_the_run
+test a_hook_in_the_run_s_settings_stops_the_run
+test a_writing_command_made_to_skip_the_gate_stops_the_run
+test which_actions_ask_the_gate
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 24.55s
+exit 0
+```
+
+19 of 19 passed. Use case 1's report, from that run (`use_case_1_report_shows_the_test_command_s_real_exit_code_and_no_trust`), with the tests' own exit code 5, the file the declared command made, and no trust recorded:
+
+```
+--- 4.8 s; the report:
+Report {
+    completed: true,
+    stopped_by: None,
+    commands: [
+        ReportCommand {
+            tool: "Bash",
+            command: "python3 -m unittest discover",
+            check: Allowed,
+            exit_code: Some(
+                5,
+            ),
+            output: "Exit code 5\n\n----------------------------------------------------------------------\nRan 0 tests in 0.000s\n\nNO TESTS RAN",
+            after_stop: false,
+        },
+        ReportCommand {
+            tool: "Bash",
+            command: "touch made.txt",
+            check: Allowed,
+            exit_code: Some(
+                0,
+            ),
+            output: "(Bash completed with no output)",
+            after_stop: false,
+        },
+    ],
+    refused: [],
+    models: [
+        "claude-opus-5[1m]",
+    ],
+    refusals: [],
+    changed_files: Some(
+        [
+            "?? made.txt",
+        ],
+    ),
+    trust: NotRecorded,
+    agent_says: "Task 10: the end of the script.",
+    faults: [],
+    notes: [
+        "Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.",
+    ],
+}
+```
+
+### Checks
+
+```
+> cargo fmt --all -- --check
+(no output; exit 0)
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 07s
+(exit 0, no warnings)
+> cargo test --workspace --offline --no-fail-fast
+(45 test programs; every summary line says "ok")
+passed 216 failed 0 ignored 19
+```
+
+The 19 ignored tests are the Linux-only ones above.
+
+Run again just before the commit, after only this file had changed, the runner crate's tests failed on the gate test that sometimes fails, and on nothing else (the run stops at the first failing test program):
+
+```
+> cargo test -p steplet-run --offline
+--- after stop: Ok(())
+thread 'the_pipe_is_gone_once_the_service_stops' (37752) panicked at crates\steplet-run\tests\gate.rs:596:5:
+assertion `left == right` failed
+  left: None
+ right: Some(2)
+test result: FAILED. 12 passed; 1 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.14s
+```
+
+In this session that test failed in 3 of the 5 full runs. So the test suite is not reliably clean until the gate service's stop is fixed (see "The gate test that failed once, again" above).
+
+### What this task did not verify
+
+- **The real model.** Every run here used the scripted model; only Task 2 ran the real one.
+- **The key hidden in a real run's output.** The live runs do not print the made-up key: it would have to be in the scripted model's script, which stays on Steplet's Linux disk and would break Task 2's count of 0. Hiding it is shown by the unit tests (every field, and a key split by a zero-width space).
+- **The reviewer's submodule route itself.** The listing test plants the filter program in the copy's own git settings, as root, rather than building a submodule the way an agent would. Either way, git now starts it inside the fence.
+- **The listing fence and the network.** The listing's fence has the same "no network" settings as the checkout's (Task 6), but this task's test checks only what the probe could read and write, not a network connection.
+- **Every special exit-code meaning Claude Code has.** The rule reads the marks Claude Code 2.1.220 sets (`returnCodeInterpretation`, `backgroundTaskId`, `backgroundedByUser`, `timedOutAfterMs`, `interrupted`). A later version could add another; Steplet would then show exit code 0 where it should show none, until the rule is updated (phase 5 checks each new version).
+- **The six minor points** above, left for later.
+- **The gate test that sometimes fails** (`the_pipe_is_gone_once_the_service_stops`): its cause is found but not fixed.

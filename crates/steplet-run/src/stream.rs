@@ -28,7 +28,12 @@ pub fn parse_line(line: &str) -> Vec<Event> {
     let typ = text(&e, "type");
     if typ == "assistant" || typ == "user" {
         return match e.get("message").and_then(|m| m.get("content")).and_then(Value::as_array) {
-            Some(blocks) => blocks.iter().filter_map(|b| block(typ, b)).collect(),
+            Some(blocks) => {
+                // The line's record belongs to its result only when the line holds just one.
+                let results = blocks.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_result"));
+                let plain = results.count() == 1 && plain_end(e.get("tool_use_result"));
+                blocks.iter().filter_map(|b| block(typ, b, plain)).collect()
+            }
             None => vec![Event::Other(kind)],
         };
     }
@@ -70,8 +75,18 @@ fn started(e: &Map<String, Value>) -> Event {
     Event::Started { model: text(e, "model").into(), tools: tools.unwrap_or_default(), gate_connected }
 }
 
-/// One block of an `assistant` or `user` message.
-fn block(kind: &str, b: &Value) -> Option<Event> {
+/// Claude Code's own record of a command (`tool_use_result`) shows a plain end: not interrupted, and none of the marks
+/// Claude Code sets when the exit code does not mean what "no error" says (its own meaning for the exit code, a move to
+/// the background, a time-out).
+fn plain_end(record: Option<&Value>) -> bool {
+    let Some(Value::Object(r)) = record else { return false };
+    let set = |k: &&str| r.get(*k).is_some_and(|v| !matches!(v, Value::Null | Value::Bool(false)) && v != "");
+    r.get("interrupted") == Some(&Value::Bool(false))
+        && !["returnCodeInterpretation", "backgroundTaskId", "backgroundedByUser", "timedOutAfterMs"].iter().any(set)
+}
+
+/// One block of an `assistant` or `user` message. `plain_end` is the line's record of a result (see `plain_end`).
+fn block(kind: &str, b: &Value, plain_end: bool) -> Option<Event> {
     let field = |name: &str| b.get(name).and_then(Value::as_str).unwrap_or("").to_owned();
     match (kind, b.get("type").and_then(Value::as_str).unwrap_or("")) {
         (_, "thinking" | "redacted_thinking") => None,
@@ -95,6 +110,7 @@ fn block(kind: &str, b: &Value) -> Option<Event> {
                     .join("\n"),
                 _ => String::new(),
             },
+            plain_end,
         }),
         (_, t) => Some(Event::Other(format!("{kind}/{t}"))),
     }

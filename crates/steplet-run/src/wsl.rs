@@ -15,6 +15,9 @@ pub struct Output {
     pub status: Option<i32>,
     pub stdout: String,
     pub stderr: String,
+    /// Standard output exactly as it came, zero bytes included, for output that uses them as separators (`git status
+    /// -z`). `stdout` drops them.
+    pub stdout_bytes: Vec<u8>,
 }
 
 /// Starts `argv` as `user` in the distribution `distro_id`, in `/`, with its input and both outputs piped.
@@ -75,7 +78,7 @@ fn finish(mut child: Child, stdin: &[u8], limit: Option<Duration>) -> io::Result
             }
         };
         let (out, err) = (out.join().unwrap_or_default(), err.join().unwrap_or_default());
-        Ok(Output { status: status.code(), stdout: text(&out), stderr: text(&err) })
+        Ok(Output { status: status.code(), stdout: text(&out), stderr: text(&err), stdout_bytes: out })
     })
 }
 

@@ -215,10 +215,15 @@ pub enum Event {
         name: String,
         input: Value,
     },
+    /// A tool call's result. `plain_end`: Claude Code's own record of the call (the line's `tool_use_result`, one
+    /// result on the line) says it was not interrupted, not moved to the background, and its exit code was given no
+    /// meaning of Claude Code's own (Claude Code marks exit code 1 of grep, find, diff or test as no error). Only then
+    /// does "no error" mean exit code 0.
     ToolResult {
         id: String,
         is_error: bool,
         text: String,
+        plain_end: bool,
     },
     /// A hook started, ran or answered. Any of them stops the run (D3).
     HookEvent {
@@ -241,9 +246,10 @@ pub enum Event {
         text: String,
     },
     /// A tool call that did not ask the gate, as the tripwire watcher judged it (Task 9). Steplet's own record, put
-    /// right after the call's result. `what` is its command, path or address; `harmless` means it was a harmless
-    /// read (G2) and the run went on.
+    /// right after the call's result. `id` is the call's; `what` is its command, path or address; `harmless` means it
+    /// was a harmless read (G2) and the run went on.
     SkippedGate {
+        id: String,
         tool: String,
         what: String,
         harmless: bool,

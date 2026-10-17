@@ -6,15 +6,17 @@ use std::time::Duration;
 
 use steplet_core::hosts;
 
+use crate::report::changed_files;
 use crate::settings::{mcp_json, settings_json};
 use crate::types::{BadValue, GateLink, RunPaths, RunRequest};
 use crate::wsl;
 
 const PREPARE: &str = include_str!("prepare.sh");
 const DISCARD: &str = include_str!("discard.sh");
+const AFTER: &str = include_str!("after.sh");
 /// The longest Steplet waits for `prepare.sh`: its clone may take 10 minutes and its checkout 5 (their own limits).
 const PREPARE_LIMIT: Duration = Duration::from_secs(20 * 60);
-/// The longest Steplet waits for `discard.sh`.
+/// The longest Steplet waits for `discard.sh`, and for each look of `after.sh`.
 const DISCARD_LIMIT: Duration = Duration::from_secs(2 * 60);
 
 /// P3: milestone 1 clones public repositories only, so only from these public code hosts (the user's choice, 14 Oct
@@ -46,20 +48,33 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<()
     }
     let settings = base64(settings_json(&req.steplet, paths, gate).as_bytes());
     let mcp = base64(mcp_json(gate).as_bytes());
-    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp], PREPARE_LIMIT)
+    as_root(paths, PREPARE, &[paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp], PREPARE_LIMIT).map(drop)
 }
 
 /// Ends whatever the run left running and deletes its working copy and private folders.
 pub fn discard(paths: &RunPaths) -> Result<(), PrepareError> {
-    as_root(paths, DISCARD, &[paths.run_id()], DISCARD_LIMIT)
+    as_root(paths, DISCARD, &[paths.run_id()], DISCARD_LIMIT).map(drop)
 }
 
-fn as_root(paths: &RunPaths, script: &str, args: &[&str], limit: Duration) -> Result<(), PrepareError> {
+/// What the run changed in its working copy, from Steplet's own `git status` after the run and before `discard`
+/// (Task 10): one entry per file, its two status letters and its path. Whatever the run left running is ended first.
+pub fn changes(paths: &RunPaths) -> Result<Vec<String>, PrepareError> {
+    let out = as_root(paths, AFTER, &[paths.run_id(), "status"], DISCARD_LIMIT)?;
+    Ok(changed_files(&String::from_utf8_lossy(&out.stdout_bytes)))
+}
+
+/// The run's Claude Code config file (`.claude.json`, at most 4 MiB), for the trust check (D3), read after the run
+/// and before `discard`.
+pub fn run_config(paths: &RunPaths) -> Result<String, PrepareError> {
+    Ok(as_root(paths, AFTER, &[paths.run_id(), "config"], DISCARD_LIMIT)?.stdout)
+}
+
+fn as_root(paths: &RunPaths, script: &str, args: &[&str], limit: Duration) -> Result<wsl::Output, PrepareError> {
     let argv = [&["/bin/bash", "-s", "--"][..], args].concat();
     let out = wsl::run_within(paths.distro_id(), "root", &argv, script.as_bytes(), limit)
         .map_err(|e| PrepareError::Wsl(e.to_string()))?;
     let step = match out.status {
-        Some(0) => return Ok(()),
+        Some(0) => return Ok(out),
         Some(10) => "clear the last run",
         Some(11) => "clone the repository",
         Some(12) => "find the declared commit",
@@ -67,6 +82,9 @@ fn as_root(paths: &RunPaths, script: &str, args: &[&str], limit: Duration) -> Re
         Some(14) => "remove the agent settings files",
         Some(15) => "write the run's settings",
         Some(20) => "remove the run",
+        Some(30) => "end what the run left running",
+        Some(31) => "list the files the run changed",
+        Some(32) => "read the run's config",
         _ => "reach Steplet's Linux",
     };
     // The script writes to its error output; `wsl.exe` writes its own failures to standard output.

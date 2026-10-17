@@ -21,7 +21,7 @@ fn call(id: &str, name: &str, input: Value) -> Event {
 }
 
 fn result(id: &str, is_error: bool) -> Event {
-    Event::ToolResult { id: id.into(), is_error, text: "output".into() }
+    Event::ToolResult { id: id.into(), is_error, text: "output".into(), plain_end: true }
 }
 
 /// One tool call and its result, seen by a fresh watcher. `gate` is what Steplet answered the gate about this call:
@@ -34,13 +34,21 @@ fn judge(name: &str, input: Value, gate: Option<bool>, is_error: bool) -> Verdic
     w.see(&result("u1", is_error), &asked)
 }
 
+/// The record of call `u1`, a harmless read that skipped the gate.
 fn harmless(tool: &str, what: &str) -> Verdict {
-    Verdict { skipped: Some(Event::SkippedGate { tool: tool.into(), what: what.into(), harmless: true }), stop: None }
+    harmless_call("u1", tool, what)
+}
+
+fn harmless_call(id: &str, tool: &str, what: &str) -> Verdict {
+    Verdict {
+        skipped: Some(Event::SkippedGate { id: id.into(), tool: tool.into(), what: what.into(), harmless: true }),
+        stop: None,
+    }
 }
 
 fn stopped(tool: &str, what: &str, why: Tripwire) -> Verdict {
     Verdict {
-        skipped: Some(Event::SkippedGate { tool: tool.into(), what: what.into(), harmless: false }),
+        skipped: Some(Event::SkippedGate { id: "u1".into(), tool: tool.into(), what: what.into(), harmless: false }),
         stop: Some(why),
     }
 }
@@ -185,7 +193,7 @@ fn each_result_is_matched_to_its_own_call() {
     let asked = |id: &str| (id == "u1").then_some(true);
     assert_eq!(w.see(&call("u1", "Bash", json!({"command": "touch made.txt"})), &asked), Verdict::default());
     assert_eq!(w.see(&call("u2", "Bash", json!({"command": "ls"})), &asked), Verdict::default());
-    assert_eq!(w.see(&result("u2", false), &asked), harmless("Bash", "ls"));
+    assert_eq!(w.see(&result("u2", false), &asked), harmless_call("u2", "Bash", "ls"));
     assert_eq!(w.see(&result("u1", false), &asked), Verdict::default());
 }
 
@@ -217,7 +225,7 @@ fn the_other_events_are_not_judged() {
         Event::Stderr("warning".into()),
         Event::Unreadable("not json".into()),
         Event::Other("system/status".into()),
-        Event::SkippedGate { tool: "Bash".into(), what: "touch x".into(), harmless: false },
+        Event::SkippedGate { id: "u9".into(), tool: "Bash".into(), what: "touch x".into(), harmless: false },
     ] {
         assert_eq!(w.see(&e, &|_| None), Verdict::default(), "{e:?}");
     }

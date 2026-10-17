@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
-use steplet_run::{GateLink, PrepareError, RunPaths, RunRequest, discard, mcp_json, prepare, settings_json, wsl};
+use steplet_run::{
+    GateLink, PrepareError, RunPaths, RunRequest, changes, discard, mcp_json, prepare, settings_json, wsl,
+};
 
 /// Tiny and unchanged since 2011; phase 0's S4 used the same commit.
 const HELLO: (&str, &str) = ("https://github.com/octocat/Hello-World.git", "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d");
@@ -199,4 +201,49 @@ fn a_wrong_address_or_commit_names_the_step_and_runs_nothing() {
         assert_eq!(run(&distro, "root", &checked_out), "", "{url} {commit}: no files were checked out");
     }
     discard(&paths).unwrap();
+}
+
+/// Test data for Task 10 (made up, inert): a program that git starts as a "clean filter" while it lists the working
+/// copy. It notes whether it could read the run's settings file (which the agent cannot read) and write outside the
+/// working copy, then hands git a made-up text, so the listing shows that it ran.
+const PROBE: &str = "head -c 1 /var/lib/steplet/runs/t10b/settings.json > /dev/null 2>&1 && echo read-the-run-s-settings >> /tmp/steplet-t10b-probe
+echo wrote-outside-the-copy >> /tmp/steplet-t10b-probe
+cat > /dev/null
+echo made-up filtered text
+";
+
+/// Task 10: the agent writes the working copy, so Steplet's own listing of it after the run (`changes`) must reach no
+/// more than the agent could: whatever git starts while it lists the copy runs inside the same fence as the checkout
+/// (no network, nothing readable but the copy, nothing writable). Here the copy is set up, as root and in this test
+/// only, as if every guard on `.git` had failed: its git config names the probe above as a filter for README (the
+/// reviewer's route was a submodule's own `.git`, which the agent can write).
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn steplet_s_own_listing_of_the_copy_runs_inside_the_fence() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let paths = RunPaths::new(&distro, "t10b").unwrap();
+    prepare(&request(HELLO.0, HELLO.1), &paths, &gate("t10b")).unwrap();
+    let plant = "set -e
+cd /work/t10b/repo
+printf '%s' \"$1\" > .steplet-test-probe.sh
+printf 'README filter=probe\\n' > .gitattributes
+git config -f .git/config filter.probe.clean 'sh .steplet-test-probe.sh'
+touch -d 2001-01-01 README
+rm -f /tmp/steplet-t10b-probe";
+    run(&distro, "root", &["/bin/sh", "-c", plant, "sh", PROBE]);
+
+    let listed = changes(&paths);
+    let reached = "cat /tmp/steplet-t10b-probe 2> /dev/null; rm -f /tmp/steplet-t10b-probe";
+    let reached = run(&distro, "root", &["/bin/sh", "-c", reached]);
+    discard(&paths).unwrap();
+    println!("--- listed: {listed:?}\n--- the probe reached: {reached:?}");
+    assert_eq!(reached, "", "what the probe reached outside the working copy");
+    let mut listed = listed.unwrap();
+    listed.sort();
+    assert_eq!(
+        listed,
+        [" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"],
+        "the probe ran (README shows its made-up text), and nothing of the fence's own is listed"
+    );
 }
