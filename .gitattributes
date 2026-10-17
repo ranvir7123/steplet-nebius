@@ -9,3 +9,4 @@ crates/steplet-core/tests/vectors/commands.txt binary
 corpus/**/*.json text eol=lf
 docs/rules.md text eol=lf
 crates/steplet-run/tests/support/*.jsonl text eol=lf
+crates/steplet-run/tests/support/m0_fixture/** text eol=lf
