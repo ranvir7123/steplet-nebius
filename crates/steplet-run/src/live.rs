@@ -10,7 +10,7 @@ use crate::prepare::Prepared;
 use crate::types::Event;
 
 /// The receiver's Stop button. Clones share one signal. Steplet also sets it when it stops a run itself (a tripwire,
-/// the time limit), so that every question still on screen is taken back at once.
+/// the time limit) and when a run is over, so that every question still on screen is taken back at once.
 #[derive(Clone, Debug, Default)]
 pub struct StopSignal(Arc<AtomicBool>);
 

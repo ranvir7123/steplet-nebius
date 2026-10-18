@@ -116,7 +116,9 @@ pub fn run_live(
     setup: &RunSetup,
     live: Arc<Live>,
 ) -> Result<Report, RunError> {
-    if live.answers.is_some() && setup.decision_deadline < live.ask_limit + ASK_MARGIN {
+    if live.answers.is_some()
+        && live.ask_limit.checked_add(ASK_MARGIN).is_none_or(|needed| setup.decision_deadline < needed)
+    {
         return Err(RunError::Limits);
     }
     let _one_run = RunLock::take()?;
@@ -159,6 +161,8 @@ pub fn run_live(
             return Err(e);
         }
     };
+    // The run is over: a question still on screen is taken back, and recorded as such.
+    asker.take_back_all();
     outcome.answers = asker.answers();
     let agent_ran = !outcome.events.is_empty();
     // Steplet's own looks after the run. They come after the run, so they do not change whether it completed. When

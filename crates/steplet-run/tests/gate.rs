@@ -506,6 +506,37 @@ fn a_decision_that_never_comes_is_refused_at_steplet_s_deadline() {
     assert!(*took >= Duration::from_millis(1500), "{took:?}");
 }
 
+/// Task 4's review: while Steplet is still deciding a request (in a live run, while the question is on the
+/// receiver's screen), the gate service already knows the tool call, and counts it as not allowed. A result Claude
+/// Code gives for it meanwhile (when the run is cut short) is then judged as a refused call, not as one that skipped
+/// the gate.
+#[test]
+fn a_request_still_being_decided_counts_as_not_allowed() {
+    let pipe = pipe_name();
+    let p = policy("/work/t8/repo");
+    let (go, wait) = std::sync::mpsc::channel::<()>();
+    let wait = Mutex::new(wait);
+    let slow = move |r: &GateRequest| {
+        if r.tool_use_id == "toolu_slow" {
+            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(10));
+        }
+        decide(&p, r)
+    };
+    let gate = serve(&link(&pipe, Duration::from_secs(20)), &this_program(), None, slow).unwrap();
+    let asking = {
+        let pipe = pipe.clone();
+        thread::spawn(move || ask(&pipe, &decision("Bash", json!({"command": "touch declared.txt"}), "toolu_slow")))
+    };
+    let start = Instant::now();
+    while gate.answered("toolu_slow").is_none() && start.elapsed() < Duration::from_secs(5) {
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(gate.answered("toolu_slow"), Some(false), "while it is being decided");
+    go.send(()).unwrap();
+    assert_eq!(asking.join().unwrap().unwrap()["behavior"], "allow");
+    assert_eq!(gate.answered("toolu_slow"), Some(true), "once allowed");
+}
+
 #[test]
 fn a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered() {
     let pipe = pipe_name();

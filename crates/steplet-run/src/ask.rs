@@ -6,7 +6,7 @@
 //! kept in memory only (J2 B).
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -24,6 +24,11 @@ use crate::watch::what;
 const LOOK: Duration = Duration::from_millis(50);
 
 const MISMATCH: &str = "the answer did not match the request on screen, so Steplet refused it";
+/// Why a request is refused without a question when the screen could not show it exactly (R7).
+const CANNOT_SHOW: &str = "Steplet cannot show this request to the receiver exactly (it holds characters that do not \
+                           show, or the receiver's key), so it refused it without asking";
+/// How long Steplet waits at most, at the end of a run, for its open questions to be taken back.
+const TAKE_BACK_LIMIT: Duration = Duration::from_secs(2);
 
 /// One question for the receiver. `what` and `input` are cleaned for the screen; `fingerprint` is of the request
 /// itself.
@@ -122,6 +127,8 @@ pub struct Asker {
     live: Arc<Live>,
     scrub: Scrubber,
     last: AtomicU64,
+    /// How many questions are open now.
+    open: AtomicUsize,
     approved: Mutex<HashSet<String>>,
     record: Mutex<Vec<Answer>>,
 }
@@ -133,6 +140,7 @@ impl Asker {
             live,
             scrub: Scrubber::new(secrets),
             last: AtomicU64::new(0),
+            open: AtomicUsize::new(0),
             approved: Mutex::new(HashSet::new()),
             record: Mutex::new(Vec::new()),
         }
@@ -147,6 +155,11 @@ impl Asker {
             Ok(Decision::Ask { reason }) => reason,
         };
         let Some(answers) = &self.live.answers else { return no_one_to_ask(reason) };
+        // A yes covers exactly the request on screen, so a request the screen cannot show exactly (cleaning would
+        // change it) is never asked about.
+        if self.scrub.value(&req.input) != req.input || self.scrub.text(&req.tool_name) != req.tool_name {
+            return deny(CANNOT_SHOW);
+        }
         let print = fingerprint(req);
         let (tool, what) = (self.scrub.text(&req.tool_name), self.scrub.text(&what(&req.tool_name, &req.input)));
         let note = |reply: &Reply| {
@@ -163,6 +176,7 @@ impl Asker {
             return allow(req);
         }
         let id = self.last.fetch_add(1, Ordering::SeqCst) + 1;
+        self.open.fetch_add(1, Ordering::SeqCst);
         answers.open(id);
         let asked_at = Instant::now();
         let question = Question {
@@ -175,7 +189,9 @@ impl Asker {
             asked_at,
         };
         (self.live.on_progress)(Progress::Asking(question));
-        let (reply, answer) = match answers.wait(id, asked_at + self.live.ask_limit, &self.live.stop) {
+        // A limit too long to add counts as reached at once; `run_live` refuses such a limit before it starts.
+        let until = asked_at.checked_add(self.live.ask_limit).unwrap_or(asked_at);
+        let (reply, answer) = match answers.wait(id, until, &self.live.stop) {
             Reply::Yes { fingerprint } if fingerprint == print => {
                 self.approved.lock().unwrap_or_else(PoisonError::into_inner).insert(print);
                 (Reply::Yes { fingerprint }, allow(req))
@@ -189,7 +205,18 @@ impl Asker {
         };
         note(&reply);
         (self.live.on_progress)(Progress::Answered { question: id, reply });
+        self.open.fetch_sub(1, Ordering::SeqCst);
         answer
+    }
+
+    /// At the end of a run: takes back every question still open (`live.stop` is set) and waits a moment, at most
+    /// 2 s, until each one has recorded that it was taken back.
+    pub fn take_back_all(&self) {
+        self.live.stop.stop();
+        let start = Instant::now();
+        while self.open.load(Ordering::SeqCst) > 0 && start.elapsed() < TAKE_BACK_LIMIT {
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 
     /// Every question asked and every reused yes, in order.

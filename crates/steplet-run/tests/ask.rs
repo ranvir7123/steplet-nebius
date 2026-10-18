@@ -192,19 +192,33 @@ fn the_checkers_allow_and_deny_never_ask() {
     assert!(asker.answers().is_empty());
 }
 
+/// Task 4's review: a yes must cover exactly the request on screen, so a request Steplet cannot show exactly is
+/// refused without a question: one that holds a character that does not show (here an escape in the request's
+/// description, which the checker does not read), or the receiver's key, which the screen would have to hide.
 #[test]
-fn the_question_shows_the_request_cleaned() {
-    let (asker, seen, _, _) = asker(Box::new(|_| Some(Reply::No)), LIMIT);
-    // The checker refuses a command that holds a control character outright, so the escape is in the description,
-    // which the checker does not read but the question shows.
-    let mut req = bash(&format!("touch {MADE_UP_KEY}"), "u1");
-    req.input["description"] = "made up \u{1b}[31mtest".into();
-    assert!(matches!(asker.decide(&policy(), &req), GateAnswer::Deny { .. }));
-    let q = &questions(&seen)[0];
-    let shown = format!("{} {}", q.what, q.input);
-    assert!(!shown.contains('\u{1b}') && !shown.contains(MADE_UP_KEY), "{shown}");
-    assert!(q.what.contains("[hidden by Steplet]"), "{}", q.what);
-    assert_eq!(q.fingerprint, fingerprint(&req), "the fingerprint is of the request itself");
+fn a_request_steplet_cannot_show_exactly_is_refused_without_asking() {
+    let (asker, seen, _, _) = asker(yes(), LIMIT);
+    let mut escape = bash("touch made-up.txt", "u1");
+    escape.input["description"] = "made up \u{1b}[31mtest".into();
+    let key = bash(&format!("touch {MADE_UP_KEY}"), "u2");
+    // A command with such a character is already refused by the checker; a file's content it does not read.
+    let space = GateRequest {
+        tool_name: "Write".into(),
+        input: json!({"file_path": format!("{WORK}/made-up.txt"), "content": "made up\u{a0}text"}),
+        ..bash("", "u3")
+    };
+    for req in [&escape, &key, &space] {
+        let answer = asker.decide(&policy(), req);
+        assert!(
+            matches!(&answer, GateAnswer::Deny { message } if message.contains("cannot show")),
+            "{:?}: {answer:?}",
+            req.input
+        );
+    }
+    assert!(questions(&seen).is_empty(), "none of them was asked");
+    // The same request without them is asked, as the control.
+    assert!(matches!(asker.decide(&policy(), &bash("touch made-up.txt", "u4")), GateAnswer::Allow { .. }));
+    assert_eq!(questions(&seen).len(), 1);
 }
 
 #[test]

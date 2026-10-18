@@ -86,6 +86,8 @@ pub enum GateError {
 /// open a while, but no new one can be made.
 pub struct GateService {
     records: Arc<Mutex<Vec<Asked>>>,
+    /// The tool call ids of the requests being decided now. Locked only after `records` when both are held.
+    deciding: Arc<Mutex<Vec<String>>>,
     stopping: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<()>>,
@@ -101,18 +103,25 @@ impl GateService {
     }
 
     /// What Steplet answered the gate about tool call `id`, for the tripwire watcher: `None` if the gate never asked
-    /// about it, `Some(true)` if any answer was "allow", `Some(false)` if every one was "deny". Each answer is on
-    /// record before it is sent, so this is known before the call can run. A request with no id matches no call.
+    /// about it, `Some(true)` if any answer was "allow", `Some(false)` if every one was "deny", or if it is still
+    /// being decided (in a live run, while the question is on the receiver's screen): until it is allowed, it is not.
+    /// Each answer is on record before it is sent, so this is known before the call can run. A request with no id
+    /// matches no call.
     pub fn answered(&self, id: &str) -> Option<bool> {
         if id.is_empty() {
             return None;
         }
         let records = self.records.lock().unwrap_or_else(PoisonError::into_inner);
-        records.iter().fold(None, |seen, asked| match asked {
+        let answered = records.iter().fold(None, |seen, asked| match asked {
             Asked::Decision { request, answer, .. } if request.tool_use_id == id => {
                 Some(seen == Some(true) || matches!(answer, GateAnswer::Allow { .. }))
             }
             _ => seen,
+        });
+        // Looked at while `records` is still held, so a decision recorded in between cannot be missed.
+        answered.or_else(|| {
+            let deciding = self.deciding.lock().unwrap_or_else(PoisonError::into_inner);
+            deciding.iter().any(|d| d == id).then_some(false)
         })
     }
 
@@ -165,6 +174,7 @@ struct Rules<D> {
     deadline: Duration,
     decide: D,
     records: Arc<Mutex<Vec<Asked>>>,
+    deciding: Arc<Mutex<Vec<String>>>,
     /// Set once Steplet is stopping the run: every request is then refused.
     stopping: Arc<AtomicBool>,
 }
@@ -196,6 +206,7 @@ where
         Err(e) => return Err(start("could not make the pipe", e)),
     };
     let records = Arc::new(Mutex::new(Vec::new()));
+    let deciding = Arc::new(Mutex::new(Vec::new()));
     let stopping = Arc::new(AtomicBool::new(false));
     let rules = Arc::new(Rules {
         token: link.token().into(),
@@ -205,6 +216,7 @@ where
         deadline: link.deadline(),
         decide,
         records: records.clone(),
+        deciding: deciding.clone(),
         stopping: stopping.clone(),
     });
     let (stop, stopped) = oneshot::channel();
@@ -216,7 +228,7 @@ where
         // A decision still being made is not waited for: its checker may never return.
         runtime.shutdown_background();
     });
-    Ok(GateService { records, stopping, stop: Some(stop), thread: Some(thread) })
+    Ok(GateService { records, deciding, stopping, stop: Some(stop), thread: Some(thread) })
 }
 
 /// One end of the pipe, with Steplet's permission list, refusing clients on other computers.
@@ -374,6 +386,8 @@ where
             let left = rules.deadline.saturating_sub(started.elapsed());
             let asking = rules.clone();
             let asked = request.clone();
+            // Known as being decided from now until its answer is on record (see `GateService::answered`).
+            rules.deciding.lock().unwrap_or_else(PoisonError::into_inner).push(request.tool_use_id.clone());
             let decided = if stopping() {
                 Ok(Ok(refused_while_stopping()))
             } else {
@@ -399,6 +413,11 @@ where
                     GateAnswer::Allow { updated_input } => json!({"behavior": "allow", "updatedInput": updated_input}),
                     GateAnswer::Deny { message } => json!({"behavior": "deny", "message": message}),
                 };
+                let mut deciding = rules.deciding.lock().unwrap_or_else(PoisonError::into_inner);
+                if let Some(n) = deciding.iter().position(|d| *d == request.tool_use_id) {
+                    deciding.swap_remove(n);
+                }
+                drop(deciding);
                 records.push(Asked::Decision { client, request, answer, took, delivered: false });
                 (records.len() - 1, reply)
             };

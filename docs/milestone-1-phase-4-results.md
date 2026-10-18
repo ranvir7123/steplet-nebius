@@ -820,3 +820,81 @@ clippy exit 0
 - A real person answering: the screen is played by the tests here; the ask screen itself is Task 12.
 - Whether a yes reused for "the same exact request" ever differs in effect the second time (J2 B accepts this; the button will say so).
 - Later Claude Code versions asking again after a yes: measured on 2.1.220 only.
+
+### The code review, and what changed
+
+A code-reviewer agent read the diff (read-only). It found no way for a yes to allow anything other than the request it answered. Three important findings, and one bug its test found besides:
+
+1. **Fixed: the question showed the request cleaned, so a yes could cover something other than what the receiver saw.** For example, a file write whose content holds a no-break space would have been shown with a plain space, or a hidden character dropped. Now a request that Steplet cannot show exactly (cleaning would change it: a character that does not show, a terminal escape, or the receiver's key) is refused without a question; the agent is told why. A command holding such characters was already refused by the checker. Test: `a_request_steplet_cannot_show_exactly_is_refused_without_asking` (replaces the plan's `the_question_shows_the_request_cleaned`, which expected such a request to be asked about with the cleaned text).
+2. **Fixed: a question still open when the run ended stayed open** for up to its 5 minutes (for example when the run reached its time limit while the screen showed a question). Now every open question is taken back when a run is over, and recorded as taken back before the report is made. Test: `a_question_open_when_the_run_ends_is_taken_back` (a 15-second run, a 120-second ask limit, a screen that never answers).
+3. **Found by that test, and fixed: a run cut short while a question was open was blamed on the agent.** At the time limit, Claude Code gives back a "rejected" result for the call that waited for the answer. Steplet's watcher had no record of a gate answer for it yet (a decision being made was not on record), so it judged the call as one that skipped the checker, stopped the run for it, and the report said "a command ran without asking". The command had never run. Now the gate service also knows which calls it is still deciding, and counts each as not allowed: an error result for it is fine; a result showing it ran would still be a breach. Test: `a_request_still_being_decided_counts_as_not_allowed` (no Linux).
+4. **Kept as it is, as a known limit: a late answer after the gate gave up.** The gate gives Steplet its deadline from the moment the gate program connects; the asker's 5 minutes start when the request has been read. Only if reading the request took longer than the 15-second margin could the gate refuse while the question is still on screen. The request comes from Steplet's own gate program, which sends it at once.
+
+The tests first:
+
+```
+> cargo test -p steplet-run --offline --test ask a_request_steplet_cannot
+test a_request_steplet_cannot_show_exactly_is_refused_without_asking ... FAILED
+thread 'a_request_steplet_cannot_show_exactly_is_refused_without_asking' (47156) panicked at crates\steplet-run\tests\ask.rs:207:9:
+Object {"command": String("touch made-up.txt"), "description": String("made up \u{1b}[31mtest")}: Allow { updated_input: Object {"command": String("touch made-up.txt"), "description": String("made up \u{1b}[31mtest")} }
+> cargo test -p steplet-run --offline --test ask_live a_question_open_when -- --ignored --nocapture
+(the first try passed, for the wrong reason: the report showed why)
+Report {
+    completed: false,
+    stopped_by: Some(
+        SkippedCommand(
+            "touch asked.txt",
+        ),
+    ),
+...
+            command: "touch asked.txt",
+            check: Refused,
+...
+            output: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+> cargo test -p steplet-run --offline --test gate a_request_still_being
+test a_request_still_being_decided_counts_as_not_allowed ... FAILED
+thread 'a_request_still_being_decided_counts_as_not_allowed' (4852) panicked at crates\steplet-run\tests\gate.rs:534:5:
+  left: None
+ right: Some(false)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 17 filtered out; finished in 5.02s
+```
+
+After the gate fix, the run-end test failed for the right reason (no false stop any more, but the question was not taken back):
+
+```
+--- 18.7 s; closed: []
+thread 'a_question_open_when_the_run_ends_is_taken_back' (10496) panicked at crates\steplet-run\tests\ask_live.rs:216:5:
+  left: []
+ right: [Withdrawn]
+Report {
+    completed: false,
+    stopped_by: None,
+```
+
+After all the fixes:
+
+```
+> cargo test -p steplet-run --offline --test ask
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+> cargo test -p steplet-run --offline --test gate
+test result: ok. 15 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 9.14s
+> cargo test -p steplet-run --offline --test ask_live -- --ignored --nocapture --test-threads=1
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 58.43s
+```
+
+(One test's own wording was then corrected and re-run: its third case, a command with a no-break space, is already refused by the checker; it is now a file write whose content holds one, which the checker does not read.)
+
+Minor points, left as they are: a run-time ask limit too long to add to a clock now counts as reached at once (and `run_live` refuses it before starting); the report matches the receiver's answers to calls by the call's id alone, which only a model that reused an id could confuse.
+
+The whole runner after the fixes (Task 5's unfinished files were in the working folder; its declared-site test, which waits on a decision, was left out of this run):
+
+```
+> cargo test -p steplet-run --offline
+(18 summary lines, every one ok: 102 passed, 0 failed, 34 ignored; counted from the summary lines)
+> cargo test -p steplet-run --offline -- --ignored --test-threads=1 --skip a_declared_site_is_the_only_one
+(18 summary lines, every one ok: 33 passed, 0 failed; counted from the summary lines)
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+```

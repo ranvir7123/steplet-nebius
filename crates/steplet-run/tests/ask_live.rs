@@ -171,3 +171,47 @@ fn no_answer_refuses_it() {
     assert_eq!(r.changed_files, Some(vec![]), "asked.txt was never made");
     assert!(matches!(r.answers[..], [steplet_run::Answer { reply: Reply::NoAnswer, .. }]), "{:?}", r.answers);
 }
+
+/// Task 4's review: a question still open when the run ends (here at its time limit, while the screen never
+/// answers) is taken back before `run_live` returns, so no question stays on screen for a run that is over.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_question_open_when_the_run_ends_is_taken_back() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t4c").unwrap();
+    let mut req = request("");
+    req.deadline = Duration::from_secs(15);
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": "touch asked.txt", "description": "Make a file"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p4t4c", &script.to_string(), 47967);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let keep = seen.clone();
+    let limit = Duration::from_secs(120);
+    let live = Arc::new(Live {
+        on_progress: Box::new(move |p| keep.lock().unwrap().push(p)),
+        stop: StopSignal::new(),
+        answers: Some(Answers::default()),
+        ask_limit: limit,
+    });
+    let setup = RunSetup {
+        gate_exe: support::install_gate(&distro),
+        logs: logs_dir(),
+        key: Some(ApiKey::new(MADE_UP_KEY.into())),
+        decision_deadline: limit + Duration::from_secs(15),
+        model_url: Some("http://127.0.0.1:47967".into()),
+    };
+    let start = std::time::Instant::now();
+    let r = run_live(&req, &paths, &policy, &setup, live).unwrap();
+    let took = start.elapsed();
+    // A moment for a question taken back on another thread to say so.
+    thread::sleep(Duration::from_millis(500));
+    let seen = seen.lock().unwrap().clone();
+    let closed: Vec<&Reply> =
+        seen.iter().filter_map(|p| if let Progress::Answered { reply, .. } = p { Some(reply) } else { None }).collect();
+    println!("--- {:.1} s; closed: {closed:?}\n--- the report:\n{r:#?}", took.as_secs_f64());
+    assert!(took < limit, "the run ended at its own time limit, not the question's");
+    assert_eq!(closed, [&Reply::Withdrawn], "the open question was taken back");
+}
