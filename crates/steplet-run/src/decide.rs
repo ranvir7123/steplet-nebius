@@ -6,9 +6,20 @@ use steplet_core::policy::{Action, Decision, Policy};
 
 use crate::types::{GateAnswer, GateRequest};
 
-/// The gate's answer to `req`. With no receiver to ask (the test harness now, an unattended run later), an `Ask` from
-/// the checker is a refusal that carries the checker's reason; phase 4's ask screen turns it into a question.
+/// The gate's answer to `req` when no receiver can be asked (an unattended run, the tests): an `Ask` from the checker
+/// is a refusal that carries the checker's reason. A live run asks the receiver instead (`Asker::decide`).
 pub fn decide(policy: &Policy, req: &GateRequest) -> GateAnswer {
+    match check(policy, req) {
+        Err(message) => deny(message),
+        Ok(Decision::Allow) => GateAnswer::Allow { updated_input: req.input.clone() },
+        Ok(Decision::Deny { reason, .. }) => deny(reason),
+        Ok(Decision::Ask { reason }) => no_one_to_ask(reason),
+    }
+}
+
+/// The checker's decision on `req`, or why Steplet refuses it before asking the checker: a tool it does not offer, or
+/// a request it cannot read.
+pub(crate) fn check(policy: &Policy, req: &GateRequest) -> Result<Decision, &'static str> {
     let text = |field: &str| req.input.get(field).and_then(Value::as_str);
     let action = match req.tool_name.as_str() {
         "Bash" => text("command").map(Action::Command),
@@ -19,14 +30,15 @@ pub fn decide(policy: &Policy, req: &GateRequest) -> GateAnswer {
         "Glob" | "Grep" => text("path").map(Action::Read),
         "Write" | "Edit" => text("file_path").map(Action::Write),
         "WebFetch" => text("url").map(Action::Fetch),
-        _ => return deny("Steplet does not offer this tool to the agent"),
+        _ => return Err("Steplet does not offer this tool to the agent"),
     };
-    let Some(action) = action else { return deny("Steplet could not read this request, so it refused it") };
-    match policy.check(&action) {
-        Decision::Allow => GateAnswer::Allow { updated_input: req.input.clone() },
-        Decision::Deny { reason, .. } => deny(reason),
-        Decision::Ask { reason } => deny(&format!("this needs the receiver's yes, and no one could answer: {reason}")),
-    }
+    let Some(action) = action else { return Err("Steplet could not read this request, so it refused it") };
+    Ok(policy.check(&action))
+}
+
+/// The refusal of a request that needs the receiver's yes when no one can answer.
+pub(crate) fn no_one_to_ask(reason: &str) -> GateAnswer {
+    deny(&format!("this needs the receiver's yes, and no one could answer: {reason}"))
 }
 
 /// True for a search pattern that starts at a root or a home folder, or climbs out with `..`. A choice such as

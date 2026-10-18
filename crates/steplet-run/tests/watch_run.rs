@@ -277,7 +277,11 @@ const HIDDEN: &str = "[hidden by Steplet]";
 fn collecting() -> (Live, Arc<Mutex<Vec<Progress>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let keep = seen.clone();
-    let live = Live { on_progress: Box::new(move |p| keep.lock().unwrap().push(p)), stop: StopSignal::new() };
+    let live = Live {
+        on_progress: Box::new(move |p| keep.lock().unwrap().push(p)),
+        stop: StopSignal::new(),
+        ..Live::unattended()
+    };
     (live, seen)
 }
 
@@ -328,7 +332,7 @@ fn stop_signal_stops_the_run_and_the_report_says_you_stopped_it() {
     let stop = StopSignal::new();
     let pressed = stop.clone();
     // The receiver presses Stop as soon as the first event is on screen.
-    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop };
+    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop, ..Live::unattended() };
     let (outcome, notes) = watch_live(stand, Duration::from_secs(60), live, &[]);
     assert_eq!(notes, ["stop", "finish, ended: true"], "stopped once");
     assert_eq!((outcome.stopped_by.clone(), outcome.faults.clone()), (None, vec![]));
@@ -351,7 +355,7 @@ fn a_tripwire_after_your_stop_does_not_take_the_stop_from_you() {
     let stand = Stand { script, ..Stand::default() };
     let stop = StopSignal::new();
     let pressed = stop.clone();
-    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop };
+    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop, ..Live::unattended() };
     let (outcome, notes) = watch_live(stand, Duration::from_secs(60), live, &[]);
     assert_eq!(notes, ["stop", "finish, ended: true"]);
     assert!(outcome.stopped_by_you);
@@ -359,4 +363,19 @@ fn a_tripwire_after_your_stop_does_not_take_the_stop_from_you() {
     let report = build_report(&outcome, None, Trust::Unknown, &[]);
     let w = &report.commands[0];
     assert_eq!((&w.check, w.after_stop), (&steplet_run::Check::NotAsked { harmless: false }, false));
+}
+
+/// Phase 4 Task 4: when Steplet stops a run itself (here at a tripwire), it also sets the Stop signal, so every
+/// question still on the receiver's screen is taken back at once; the report still says a tripwire stopped it, not
+/// the receiver.
+#[test]
+fn a_tripwire_takes_back_every_open_question() {
+    let hook = Event::HookEvent { name: "PreToolUse:Bash".into() };
+    let stand = Stand { script: VecDeque::from([hook]), ..Stand::default() };
+    let stop = StopSignal::new();
+    let live = Live { stop: stop.clone(), ..Live::unattended() };
+    let (outcome, notes) = watch_live(stand, Duration::from_secs(60), live, &[]);
+    assert_eq!(notes, ["stop", "finish, ended: true"]);
+    assert!(stop.is_set(), "open questions are taken back");
+    assert_eq!((outcome.stopped_by, outcome.stopped_by_you), (Some(Tripwire::Hook("PreToolUse:Bash".into())), false));
 }

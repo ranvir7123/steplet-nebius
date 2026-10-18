@@ -3,11 +3,14 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
+use crate::ask::{Answers, Question, Reply};
 use crate::prepare::Prepared;
 use crate::types::Event;
 
-/// The receiver's Stop button. Clones share one signal.
+/// The receiver's Stop button. Clones share one signal. Steplet also sets it when it stops a run itself (a tripwire,
+/// the time limit), so that every question still on screen is taken back at once.
 #[derive(Clone, Debug, Default)]
 pub struct StopSignal(Arc<AtomicBool>);
 
@@ -33,6 +36,10 @@ pub enum Progress {
     Prepared(Prepared),
     /// One event of the run, or Steplet's own record of a tool call that skipped the gate, in order.
     Event(Event),
+    /// The run waits for the receiver's answer to this question (R7).
+    Asking(Question),
+    /// The question is closed, and how.
+    Answered { question: u64, reply: Reply },
 }
 
 /// Who follows a run as it goes: where its progress goes, and the Stop button. `on_progress` is called on the run's
@@ -41,11 +48,16 @@ pub enum Progress {
 pub struct Live {
     pub on_progress: Box<dyn Fn(Progress) + Send + Sync>,
     pub stop: StopSignal,
+    /// Where the receiver's answers come in; `None` when no one can be asked, and every "ask" is then a refusal.
+    pub answers: Option<Answers>,
+    /// How long a question waits for its answer; no answer by then is a no (S1).
+    pub ask_limit: Duration,
 }
 
 impl Live {
-    /// A run no one watches: progress goes nowhere, and no one presses Stop (phase 3's runs, and the tests).
+    /// A run no one watches: progress goes nowhere, no one presses Stop, and no one can be asked (phase 3's runs, and
+    /// the tests).
     pub fn unattended() -> Live {
-        Live { on_progress: Box::new(|_| {}), stop: StopSignal::new() }
+        Live { on_progress: Box::new(|_| {}), stop: StopSignal::new(), answers: None, ask_limit: Duration::ZERO }
     }
 }

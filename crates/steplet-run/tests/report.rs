@@ -20,8 +20,9 @@ use steplet_core::display::is_invisible;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Asked, Check, Client, Event, GateAnswer, GateRequest, Refusal, Report, ReportCommand, RunOutcome, RunPaths,
-    RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files, parse_line, raw_log_line, read_trust, run,
+    Answer, ApiKey, Asked, Check, Client, Event, GateAnswer, GateRequest, Refusal, Reply, Report, ReportCommand,
+    RunOutcome, RunPaths, RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files, parse_line, raw_log_line,
+    read_trust, run,
 };
 use support::MADE_UP_KEY;
 
@@ -44,6 +45,7 @@ fn outcome(events: Vec<Event>) -> RunOutcome {
         exit_code: Some(0),
         faults: Vec::new(),
         stopped_by_you: false,
+        answers: Vec::new(),
     }
 }
 
@@ -714,4 +716,62 @@ fn raw_log_lines_hide_the_key_and_the_token() {
     let not_text: &[u8] = b"{\"type\":\"system\"}\xff\xfe\n";
     assert_eq!(raw_log_line(not_text, &secrets()), not_text);
     assert_eq!(raw_log_line(b"", &secrets()), b"");
+}
+
+/// Phase 4 Task 4: the receiver's answers are in the report, and a call allowed by their yes says so: a fresh yes, a
+/// reused one, a no and no answer, each with its reply.
+#[test]
+fn answers_and_allowed_by_you_show_in_the_report() {
+    let answer = |id: &str, command: &str, reply: Reply| Answer {
+        call: id.into(),
+        tool: "Bash".into(),
+        what: command.into(),
+        reply,
+    };
+    let mut o = outcome(vec![
+        started(),
+        bash("u1", "touch a.txt"),
+        tool_result("u1", false, ""),
+        bash("u2", "touch a.txt"),
+        tool_result("u2", false, ""),
+        bash("u3", "touch b.txt"),
+        tool_result("u3", true, "refused"),
+        bash("u4", "touch c.txt"),
+        tool_result("u4", true, "refused"),
+        finished("done"),
+    ]);
+    o.requests = vec![
+        allow("u1", "touch a.txt"),
+        allow("u2", "touch a.txt"),
+        deny("u3", "touch b.txt", "the receiver said no"),
+        deny("u4", "touch c.txt", "no answer in time, so Steplet refused it"),
+    ];
+    let yes = Reply::Yes { fingerprint: "ab".repeat(32) };
+    o.answers = vec![
+        answer("u1", "touch a.txt", yes.clone()),
+        answer("u2", "touch a.txt", Reply::Reused),
+        answer("u3", "touch b.txt", Reply::No),
+        answer("u4", "touch c.txt", Reply::NoAnswer),
+    ];
+    let r = report(&o);
+    let checks: Vec<&Check> = r.commands.iter().map(|c| &c.check).collect();
+    assert_eq!(
+        checks,
+        [
+            &Check::AllowedByYou { reused: false },
+            &Check::AllowedByYou { reused: true },
+            &Check::Refused,
+            &Check::Refused
+        ]
+    );
+    let replies: Vec<(&str, &Reply)> = r.answers.iter().map(|a| (a.what.as_str(), &a.reply)).collect();
+    assert_eq!(
+        replies,
+        [
+            ("touch a.txt", &yes),
+            ("touch a.txt", &Reply::Reused),
+            ("touch b.txt", &Reply::No),
+            ("touch c.txt", &Reply::NoAnswer)
+        ]
+    );
 }

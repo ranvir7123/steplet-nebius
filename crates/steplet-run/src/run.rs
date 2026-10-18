@@ -13,10 +13,11 @@ use std::time::{Duration, Instant};
 use steplet_core::policy::Policy;
 use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
 
+use crate::ask::{Answer, Asker};
 use crate::decide::decide;
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_on_windows, serve};
 use crate::launch::{LaunchError, RunHandle, launch};
-use crate::live::{Live, Progress};
+use crate::live::{Live, Progress, StopSignal};
 use crate::lock::RunLock;
 use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
 use crate::report::{Report, Scrubber, Trust, build_report, read_trust};
@@ -31,6 +32,9 @@ const DISTRIBUTION: &str = "steplet";
 pub const BACKSTOP: Duration = Duration::from_secs(30);
 /// How often the watcher looks whether the agent has ended, while no event comes.
 const POLL: Duration = Duration::from_millis(200);
+/// How much longer than the ask limit the gate's deadline must be, so the gate never gives up on a decision before
+/// the receiver has had their whole time to answer (plan section 3.3).
+pub const ASK_MARGIN: Duration = Duration::from_secs(15);
 /// How long Steplet waits at most for one call into its Linux that ends what preparing started.
 const QUICK_CALL: Duration = Duration::from_secs(10);
 
@@ -63,6 +67,9 @@ pub enum RunError {
     Busy,
     /// Windows would not make the lock; the error says why.
     Lock(io::Error),
+    /// The gate's deadline is shorter than the ask limit plus `ASK_MARGIN`: the gate would refuse a question before
+    /// the receiver's time to answer it was up.
+    Limits,
 }
 
 /// What happened in a run, from Steplet's own records.
@@ -86,6 +93,8 @@ pub struct RunOutcome {
     pub faults: Vec<String>,
     /// The receiver pressed Stop, and Steplet stopped the run as at a tripwire (phase 4).
     pub stopped_by_you: bool,
+    /// Every question the receiver was asked, and every yes reused, from Steplet's own record (R7).
+    pub answers: Vec<Answer>,
 }
 
 /// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report: `run_live`
@@ -107,6 +116,9 @@ pub fn run_live(
     setup: &RunSetup,
     live: Arc<Live>,
 ) -> Result<Report, RunError> {
+    if live.answers.is_some() && setup.decision_deadline < live.ask_limit + ASK_MARGIN {
+        return Err(RunError::Limits);
+    }
     let _one_run = RunLock::take()?;
     let pipe = format!("steplet-{}-{}", paths.run_id(), random_hex::<8>().map_err(RunError::Random)?);
     let token = random_hex::<32>().map_err(RunError::Random)?;
@@ -116,7 +128,15 @@ pub fn run_live(
         .map_err(RunError::Refused)?;
     let checker = policy.clone();
     let program = gate_on_windows(DISTRIBUTION, &setup.gate_exe);
-    let gate = serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r)).map_err(RunError::Gate)?;
+    // With someone to ask, the checker's "ask" becomes a question on their screen; without, a refusal.
+    let asker = Arc::new(Asker::new(live.clone(), &secrets));
+    let gate = if live.answers.is_some() {
+        let asking = asker.clone();
+        serve(&link, &program, setup.key.clone(), move |r| asking.decide(&checker, r))
+    } else {
+        serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r))
+    }
+    .map_err(RunError::Gate)?;
     let prepared = prepare_until_stopped(req, paths, &link, &live);
     let started = match prepared {
         // A Stop while preparing ends what preparing started, so preparing fails: the receiver's Stop, not a fault.
@@ -127,7 +147,7 @@ pub fn run_live(
         }
         Err(e) => Err(RunError::Prepare(e)),
     };
-    let outcome = match started {
+    let mut outcome = match started {
         Ok(Some(handle)) => {
             watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP, &live, &secrets)
         }
@@ -139,6 +159,7 @@ pub fn run_live(
             return Err(e);
         }
     };
+    outcome.answers = asker.answers();
     let agent_ran = !outcome.events.is_empty();
     // Steplet's own looks after the run. They come after the run, so they do not change whether it completed. When
     // the agent never started there is nothing to look at: the copy is the one Steplet made, or not even that.
@@ -253,7 +274,7 @@ pub fn watch_run(
                 // After the receiver's Stop, a tripwire is still recorded, but the run is already being stopped.
                 if outcome.judge(&mut watcher, event, &gate, &show)
                     && !outcome.stopped_by_you
-                    && !stop_now(&mut handle, &gate, &mut outcome.faults)
+                    && !stop_now(&mut handle, &gate, &mut outcome.faults, &live.stop)
                 {
                     gave_up = true;
                     break;
@@ -267,7 +288,7 @@ pub fn watch_run(
         if live.stop.is_set() && !outcome.stopped_by_you && outcome.stopped_at.is_none() {
             outcome.stopped_by_you = true;
             outcome.stopped_at = Some(outcome.events.len());
-            if !stop_now(&mut handle, &gate, &mut outcome.faults) {
+            if !stop_now(&mut handle, &gate, &mut outcome.faults, &live.stop) {
                 gave_up = true;
                 break;
             }
@@ -284,7 +305,7 @@ pub fn watch_run(
                 outcome.faults.push(format!("Steplet could not tell whether the run had ended: {e}"));
                 // It may still be running: it is stopped, as at a tripwire, before Steplet waits for its end.
                 outcome.stopped_at.get_or_insert(outcome.events.len());
-                gave_up = !stop_now(&mut handle, &gate, &mut outcome.faults);
+                gave_up = !stop_now(&mut handle, &gate, &mut outcome.faults, &live.stop);
                 break;
             }
         }
@@ -292,7 +313,7 @@ pub fn watch_run(
             backstopped = true;
             outcome.faults.push("the run did not end at its time limit, so Steplet stopped it".into());
             outcome.stopped_at.get_or_insert(outcome.events.len());
-            if !stop_now(&mut handle, &gate, &mut outcome.faults) {
+            if !stop_now(&mut handle, &gate, &mut outcome.faults, &live.stop) {
                 gave_up = true;
                 break;
             }
@@ -317,10 +338,12 @@ pub fn watch_run(
     outcome
 }
 
-/// Stops the agent at once. The gate refuses everything from now on, then the run is stopped; if that fails, the
-/// agent's `wsl.exe` is ended from Windows. False when even that failed, and there is nothing more Steplet can do.
-fn stop_now(agent: &mut impl RunningAgent, gate: &GateService, faults: &mut Vec<String>) -> bool {
+/// Stops the agent at once. The gate refuses everything from now on, every question still on screen is taken back
+/// (`stop` is set), then the run is stopped; if that fails, the agent's `wsl.exe` is ended from Windows. False when
+/// even that failed, and there is nothing more Steplet can do.
+fn stop_now(agent: &mut impl RunningAgent, gate: &GateService, faults: &mut Vec<String>, stop: &StopSignal) -> bool {
     gate.refuse_everything();
+    stop.stop();
     let Err(e) = agent.stop() else { return true };
     faults.push(format!("Steplet could not stop the run: {e}"));
     match agent.kill() {
@@ -368,6 +391,7 @@ impl RunOutcome {
             exit_code: None,
             faults: Vec::new(),
             stopped_by_you: false,
+            answers: Vec::new(),
         }
     }
 

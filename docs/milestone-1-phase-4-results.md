@@ -631,3 +631,192 @@ fmt exit 0
 ```
 
 (The Linux-only run's non-empty summary lines, in order: ask_live (Task 4's measurement, already in the working folder), contain, gate, launch, prepare, report, tripwires.)
+
+## Task 4: the ask path (R7)
+
+### Changes from the plan, recorded here
+
+- **`Asker::new` also takes the secrets** (the key, the run's token): the question shows the request cleaned, and the token is made inside the run.
+- **`Answer` also holds the tool call's id** (`call`): the report needs it to mark a call "allowed by you", since a request carries no fingerprint of its own.
+- **Steplet's own stops take back open questions too.** When Steplet stops a run itself (a tripwire, the time limit, an end it cannot see), it now also sets the Stop signal, so a question still on screen is closed at once instead of waiting out its 5 minutes. The report still says what stopped the run: a stop Steplet makes after it has begun stopping does not count as the receiver's. Test: `a_tripwire_takes_back_every_open_question`, written together with the change; it was then shown to fail with the one line it guards removed (below).
+- **`decide.rs` is split in two,** so the unattended answer and the asker read requests the same way: `check` (the request read as the checker's action) and `no_one_to_ask`. The one checker is still `Policy::check` (row 29).
+- **The fingerprint sorts the JSON keys itself,** instead of relying on the JSON library's order (the desktop app's libraries could switch that library to keep the order keys came in).
+- **Two pieces of my own test data were wrong,** and the tests said so: a command holding a control character is refused by the checker outright (so the escape went into the request's description, which the question shows but the checker does not read), and `echo` is a harmless read the checker allows without asking (so the test uses `touch`).
+- The private `Answer` inside `report.rs` (one call's result) is renamed `CallResult`, so it does not clash with the new public `Answer`.
+- A yes given with another fingerprint, or a "reused" reply from the screen (which only Steplet can give), is recorded as a no.
+- The words the agent gets back: "the receiver said no"; "no answer in time, so Steplet refused it"; "the answer did not match the request on screen, so Steplet refused it"; "Steplet is stopping this run, so it took the question back and refused it".
+
+### Step 1: does Claude Code ask again after a yes? (a record)
+
+The gate allowed everything, as a receiver who says yes to every question would (Claude Code cannot tell the two apart). Each kind of request had a run of its own:
+
+```
+> cargo test -p steplet-run --offline --test ask_live does_claude_code -- --ignored --nocapture
+--- Bash: calls 2; first reached the gate: true; second reached the gate: true; stopped by: None
+--- Write: calls 2; first reached the gate: true; second reached the gate: true; stopped by: None
+--- Read: calls 2; first reached the gate: true; second reached the gate: true; stopped by: None
+--- WebFetch: calls 2; first reached the gate: true; second reached the gate: true; stopped by: None
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.46s
+```
+
+So Claude Code 2.1.220 asks Steplet again every time, for all four kinds, and the watcher needs no change; the plan's extra test for a skipped repeat is not needed.
+
+### Step 2 and 3: the tests first
+
+```
+> cargo test -p steplet-run --offline --test ask
+error[E0432]: unresolved imports `steplet_run::Answers`, `steplet_run::Asker`, `steplet_run::Question`, `steplet_run::Reply`, `steplet_run::fingerprint`
+  --> crates\steplet-run\tests\ask.rs:19:5
+error[E0599]: no variant, associated function, or constant named `Asking` found for enum `Progress` in the current scope
+  --> crates\steplet-run\tests\ask.rs:58:30
+error[E0560]: struct `Live` has no field named `answers`
+  --> crates\steplet-run\tests\ask.rs:71:9
+error[E0560]: struct `Live` has no field named `ask_limit`
+  --> crates\steplet-run\tests\ask.rs:72:9
+error[E0599]: no variant, associated function, or constant named `Asking` found for enum `Progress` in the current scope
+  --> crates\steplet-run\tests\ask.rs:85:42
+error[E0599]: no variant named `Answered` found for enum `Progress`
+  --> crates\steplet-run\tests\ask.rs:94:30
+```
+
+(The first six `error` lines with their places, as printed.)
+
+### Step 4: the code
+
+`crates/steplet-run/src/ask.rs` (plan section 3.3): `Question`, `Reply`, `Answer`, `Answers` (where the screen puts the receiver's answers), `Asker` (one run's question path: its approvals, kept in memory only, its question numbers and its record), and `fingerprint` (SHA-256 of the tool's name, a zero byte and the request's JSON with sorted keys; the call's id is not part of it). `run_live` refuses an ask limit the gate's deadline cannot cover (`RunError::Limits`: the deadline must be at least the ask limit plus 15 s), and uses the asker as the gate's decision function when someone can answer. The report gains `answers` and `Check::AllowedByYou { reused }`.
+
+### Step 5: the tests pass
+
+```
+> cargo test -p steplet-run --offline --test ask
+test the_checkers_allow_and_deny_never_ask ... ok
+test run_live_refuses_an_ask_limit_the_gate_deadline_cannot_cover ... ok
+test two_questions_at_once_each_get_their_own_answer ... ok
+test a_yes_with_another_fingerprint_is_a_no ... ok
+test the_question_shows_the_request_cleaned ... ok
+test a_yes_allows_exactly_the_request_shown ... ok
+test the_same_exact_request_later_in_the_run_is_allowed_without_asking_again ... ok
+test a_request_that_differs_by_one_character_asks_again ... ok
+test a_stop_withdraws_the_open_question_at_once ... ok
+test no_answer_within_the_limit_is_a_no ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+> cargo test -p steplet-run --offline --test report answers_and
+test answers_and_allowed_by_you_show_in_the_report ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+> cargo test -p steplet-run --offline --test watch_run a_tripwire_takes
+test a_tripwire_takes_back_every_open_question ... ok
+```
+
+With the one line it guards (`stop.stop();` in `stop_now`) taken out for a moment, and then put back:
+
+```
+test a_tripwire_takes_back_every_open_question ... FAILED
+thread 'a_tripwire_takes_back_every_open_question' (47372) panicked at crates\steplet-run\tests\watch_run.rs:379:5:
+open questions are taken back
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+```
+
+The real runs, with the screen played by the test:
+
+```
+> cargo test -p steplet-run --offline --test ask_live -- --ignored --nocapture --test-threads=1
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.03s
+```
+
+What the screen was sent in `a_yes_on_the_ask_screen_lets_exactly_that_command_run`, and the report (unchanged, the client details of the gate's records left out):
+
+```
+    Asking(
+        Question {
+            id: 1,
+            tool: "Bash",
+            what: "touch asked.txt",
+            input: Object {
+                "command": String("touch asked.txt"),
+                "description": String("Make a file"),
+            },
+            reason: "the file does not ask for this command",
+            fingerprint: "f2d02cf1aac4cb12ee6b4c03da6331c1a5a67732d195f25ace19aa0353044b8d",
+            asked_at: Instant {
+                t: 4611815197.958626403s,
+            },
+        },
+    ),
+    Answered {
+        question: 1,
+        reply: Yes {
+            fingerprint: "f2d02cf1aac4cb12ee6b4c03da6331c1a5a67732d195f25ace19aa0353044b8d",
+        },
+    },
+    Event(
+--- the report:
+Report {
+    completed: true,
+    stopped_by: None,
+    stopped_by_you: false,
+    commands: [
+        ReportCommand {
+            tool: "Bash",
+            command: "touch asked.txt",
+            check: AllowedByYou {
+                reused: false,
+            },
+            exit_code: Some(
+                0,
+            ),
+            output: "(Bash completed with no output)",
+            after_stop: false,
+        },
+    ],
+    refused: [],
+    models: [
+        "claude-opus-5[1m]",
+    ],
+    refusals: [],
+    changed_files: Some(
+        [
+            "?? asked.txt",
+        ],
+    ),
+    trust: NotRecorded,
+    agent_says: "Task 4: the end of the script.",
+    faults: [],
+    answers: [
+        Answer {
+            call: "toolu_test_ac89998be82e42338bdc",
+            tool: "Bash",
+            what: "touch asked.txt",
+            reply: Yes {
+                fingerprint: "f2d02cf1aac4cb12ee6b4c03da6331c1a5a67732d195f25ace19aa0353044b8d",
+            },
+        },
+    ],
+    notes: [
+        "Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.",
+    ],
+}
+```
+
+The question carried the request whole, its reason and its fingerprint; the screen's yes carried the same fingerprint; the command ran inside the fence with exit code 0; and Steplet's own `git status` after the run saw the file it made. In `no_answer_refuses_it` (a 2-second limit, the screen never answers) the call is refused with "no answer in time", nothing is made, and the report lists `NoAnswer`.
+
+The whole runner, and the checks:
+
+```
+> cargo test -p steplet-run --offline
+(17 summary lines, every one ok: 98 passed, 0 failed, 32 ignored; counted from the summary lines)
+plain exit 0
+> cargo test -p steplet-run --offline -- --ignored --test-threads=1
+(17 summary lines, every one ok: 32 passed, 0 failed; counted from the summary lines)
+ignored exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.48s
+clippy exit 0
+```
+
+### What this task did not verify
+
+- A real person answering: the screen is played by the tests here; the ask screen itself is Task 12.
+- Whether a yes reused for "the same exact request" ever differs in effect the second time (J2 B accepts this; the button will say so).
+- Later Claude Code versions asking again after a yes: measured on 2.1.220 only.

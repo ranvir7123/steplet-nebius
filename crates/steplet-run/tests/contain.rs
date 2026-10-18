@@ -542,7 +542,11 @@ fn a_stop_while_preparing_ends_the_preparing() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let keep = seen.clone();
     let stop = steplet_run::StopSignal::new();
-    let live = Arc::new(Live { on_progress: Box::new(move |p| keep.lock().unwrap().push(p)), stop: stop.clone() });
+    let live = Arc::new(Live {
+        on_progress: Box::new(move |p| keep.lock().unwrap().push(p)),
+        stop: stop.clone(),
+        ..Live::unattended()
+    });
     let pressing = stop.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(1));

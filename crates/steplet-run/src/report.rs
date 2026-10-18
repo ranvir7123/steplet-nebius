@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use serde_json::{Map, Value};
 use steplet_core::display::{is_invisible, is_space_like};
 
+use crate::ask::{Answer, Reply};
 use crate::gate::Asked;
 use crate::run::RunOutcome;
 use crate::types::{Event, GateAnswer};
@@ -56,6 +57,8 @@ pub struct Report {
     pub agent_says: String,
     /// What went wrong around the run, in Steplet's words.
     pub faults: Vec<String>,
+    /// Every question the receiver was asked, and every yes reused, in order, with the reply (R7).
+    pub answers: Vec<Answer>,
     /// Lines every report carries.
     pub notes: Vec<&'static str>,
 }
@@ -84,6 +87,9 @@ pub struct ReportCommand {
 pub enum Check {
     /// The gate asked Steplet, and Steplet allowed it.
     Allowed,
+    /// The gate asked Steplet, the checker asked the receiver, and the receiver said yes to this exact request;
+    /// `reused`: they had said yes to it earlier in the run, so it was not asked again (J2 B).
+    AllowedByYou { reused: bool },
     /// The gate asked Steplet, and Steplet refused it.
     Refused,
     /// Steplet refused it at the gate, yet its result came back with no error: it ran anyway. That stops the run
@@ -157,6 +163,16 @@ pub fn build_report(outcome: &RunOutcome, changed: Option<&[String]>, trust: Tru
         trust,
         agent_says: scrub.text(agent_says(&outcome.events)),
         faults: outcome.faults.iter().map(|f| scrub.text(f)).collect(),
+        answers: outcome
+            .answers
+            .iter()
+            .map(|a| Answer {
+                call: scrub.text(&a.call),
+                tool: scrub.text(&a.tool),
+                what: scrub.text(&a.what),
+                reply: a.reply.clone(),
+            })
+            .collect(),
         notes: vec![FENCE_NOTE],
     }
 }
@@ -305,6 +321,16 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
             *allowed |= matches!(answer, GateAnswer::Allow { .. });
         }
     }
+    // The calls the receiver said yes to: `true` when the yes was one given earlier in the run.
+    let by_you: HashMap<&str, bool> = outcome
+        .answers
+        .iter()
+        .filter_map(|a| match a.reply {
+            Reply::Yes { .. } => Some((a.call.as_str(), false)),
+            Reply::Reused => Some((a.call.as_str(), true)),
+            _ => None,
+        })
+        .collect();
     let results = results(&outcome.events);
     let mut skipped: HashMap<&str, bool> = HashMap::new();
     for e in &outcome.events {
@@ -320,7 +346,10 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
             let Event::ToolUse { id, name, input } = e else { return None };
             let result = results.get(id.as_str());
             let check = match (answered.get(id.as_str()), skipped.get(id.as_str())) {
-                (Some(true), _) => Check::Allowed,
+                (Some(true), _) => match by_you.get(id.as_str()) {
+                    Some(&reused) => Check::AllowedByYou { reused },
+                    None => Check::Allowed,
+                },
                 (Some(false), _) if result.is_some_and(|r| !r.is_error) => Check::RefusedButRan,
                 (Some(false), _) => Check::Refused,
                 (None, Some(&harmless)) => Check::NotAsked { harmless },
@@ -348,7 +377,7 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
 }
 
 /// One tool call's result: where it is among the events, and what Claude Code marked on it.
-struct Answer<'a> {
+struct CallResult<'a> {
     event: usize,
     is_error: bool,
     plain_end: bool,
@@ -356,11 +385,11 @@ struct Answer<'a> {
 }
 
 /// The first result for each tool call id.
-fn results(events: &[Event]) -> HashMap<&str, Answer<'_>> {
+fn results(events: &[Event]) -> HashMap<&str, CallResult<'_>> {
     let mut results = HashMap::new();
     for (event, e) in events.iter().enumerate() {
         if let Event::ToolResult { id, is_error, text, plain_end } = e {
-            results.entry(id.as_str()).or_insert(Answer {
+            results.entry(id.as_str()).or_insert(CallResult {
                 event,
                 is_error: *is_error,
                 plain_end: *plain_end,
@@ -374,7 +403,7 @@ fn results(events: &[Event]) -> HashMap<&str, Answer<'_>> {
 /// A command's exit code from Claude Code's own marks, never from what the program printed: no error with a plain end
 /// in Claude Code's record means 0; with an error, Claude Code's first line `Exit code N` gives N. Anything else (a
 /// refusal, an interruption, an exit code Claude Code gave a meaning of its own) has none.
-fn exit_code(r: &Answer) -> Option<i32> {
+fn exit_code(r: &CallResult) -> Option<i32> {
     if !r.is_error {
         return r.plain_end.then_some(0);
     }
