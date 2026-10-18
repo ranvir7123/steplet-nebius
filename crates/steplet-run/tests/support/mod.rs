@@ -93,7 +93,8 @@ pub fn serve_gate(
 ) -> (GateLink, GateService) {
     let exe = install_gate(distro);
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-    let token = format!("{run_id}token{nanos:08x}");
+    // At least 20 characters, so `count_key.py` can count it.
+    let token = format!("{run_id}-token-{nanos:016x}");
     let link = GateLink::new(&exe, &format!("steplet-{run_id}"), &token, &gate_log(run_id), deadline).unwrap();
     let service =
         serve(&link, &gate_on_windows("steplet", &exe), Some(ApiKey::new(MADE_UP_KEY.into())), decide).unwrap();

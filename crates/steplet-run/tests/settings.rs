@@ -35,7 +35,8 @@ fn the_run_paths_follow_the_layout() {
     assert_eq!(p.work_repo(), "/work/r1/repo");
     assert_eq!(p.run_home(), "/var/lib/steplet/runs/r1/home");
     assert_eq!(p.run_config(), "/var/lib/steplet/runs/r1/config");
-    assert_eq!(p.run_tmp(), "/var/lib/steplet/runs/r1/tmp");
+    // The owner's choice A of 18 Oct 2026: under /tmp, where the fence's network bridge can be reached.
+    assert_eq!(p.run_tmp(), "/tmp/steplet-run-r1");
     assert_eq!(p.settings(), "/var/lib/steplet/runs/r1/settings.json");
     assert_eq!(p.mcp(), "/var/lib/steplet/runs/r1/mcp.json");
 }

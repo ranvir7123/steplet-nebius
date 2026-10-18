@@ -376,7 +376,13 @@ rm -f {STAMP} {FIND_CONTROL}",
     assert!(!marker.exists(), "no Windows program started from inside the fence");
     assert!(written.lines().any(|p| p == FIND_CONTROL), "the search lists a file written after the stamp");
     for path in written.lines().filter(|p| *p != FIND_CONTROL) {
-        let own = path.strip_prefix("/var/lib/steplet/runs/t11b/").is_some_and(|p| {
+        // The run's temporary folder is `/tmp/steplet-run-<id>` (the owner's choice A, 18 Oct 2026); the list names it
+        // `tmp`, as when it was inside the run's own folder.
+        let in_run = path
+            .strip_prefix("/var/lib/steplet/runs/t11b/")
+            .map(str::to_owned)
+            .or_else(|| path.strip_prefix("/tmp/steplet-run-t11b").map(|rest| format!("tmp{rest}")));
+        let own = in_run.as_deref().is_some_and(|p| {
             CLAUDE_CODE_S_OWN.contains(&p) || CLAUDE_CODE_S_OWN_BEGINNINGS.iter().any(|b| p.starts_with(b))
         });
         assert!(own, "written outside the working copy, and not by Claude Code for the run: {path}");
@@ -567,4 +573,126 @@ fn a_stop_while_preparing_ends_the_preparing() {
     assert!(r.commands.is_empty(), "the agent never started");
     assert_eq!(r.faults, Vec::<String>::new());
     assert_eq!(left, "/var/lib/steplet/runs:\n\n/work:", "nothing is left, and nothing of the steplet account runs");
+}
+
+/// Test data for the next test (made up, inert): a program that tries to fetch two web pages and writes down, for
+/// each, whether it got there. It writes to the file named by its argument, or to `probe_results.json`.
+const SITE_PROBE: &str = r#"import json, os, sys, urllib.error, urllib.request
+results = {"proxy": os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or "none"}
+for url in ["https://example.org/", "https://example.net/"]:
+    try:
+        urllib.request.urlopen(url, timeout=20).read(64)
+        results[url] = "reached"
+    except urllib.error.HTTPError as e:
+        # The site itself answered, with an error status: it was reached.
+        results[url] = "reached"
+    except Exception as e:
+        results[url] = "failed: " + type(e).__name__ + ": " + str(e)
+with open(sys.argv[1] if len(sys.argv) > 1 else "probe_results.json", "w") as f:
+    json.dump(results, f)
+print(json.dumps(results))
+"#;
+
+/// Phase 4 Task 5, the run chooser's line 5b: when a file declares a web site, a program the task runs can reach
+/// that site and no other. Judged from the probe's own record and from a control outside the fence that reaches both,
+/// never from the agent's words.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_declared_site_is_the_only_one_a_program_can_reach() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t5a").unwrap();
+    let req = request("allow:\n  commands:\n    - python3 probe.py\n  domains:\n    - example.org\n");
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let checker = policy.clone();
+    let (link, gate) = serve_gate(&distro, "p4t5a", Duration::from_secs(10), move |r| decide(&checker, r));
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": "python3 probe.py", "description": "Try the two sites"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p4t5a", &script.to_string(), 47955);
+    prepare(&req, &paths, &link).unwrap();
+    let probe = format!("{}/probe.py", paths.work_repo());
+    put_as_steplet(&distro, SITE_PROBE.as_bytes(), &probe, "644");
+    // The control, outside the fence, as the same account: both sites can be reached from Steplet's Linux.
+    let control = wsl::run(&distro, "steplet", &["/usr/bin/python3", "-I", &probe, "/dev/null"], b"").unwrap();
+    println!("--- control, outside the fence: {}", control.stdout.trim_end());
+    let control: Value = serde_json::from_str(control.stdout.trim_end()).unwrap();
+
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47955"), &[]).unwrap();
+    let outcome =
+        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+    let record = root_sh(&distro, &format!("cat {}/probe_results.json", paths.work_repo()));
+    discard(&paths).unwrap();
+    let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);
+    println!("--- inside the fence, the probe's own record: {record}\n--- the report:\n{report:#?}");
+
+    assert_eq!(control["https://example.org/"], "reached", "the control reached example.org");
+    assert_eq!(control["https://example.net/"], "reached", "the control reached example.net");
+    let inside: Value = serde_json::from_str(&record).unwrap();
+    assert_eq!(inside["https://example.org/"], "reached", "the declared site");
+    let other = inside["https://example.net/"].as_str().unwrap();
+    assert!(other.starts_with("failed"), "a site the file does not declare: {other}");
+    let c = &report.commands[0];
+    assert_eq!((c.command.as_str(), &c.check, c.exit_code), ("python3 probe.py", &Check::Allowed, Some(0)));
+}
+
+/// The declared command of the next test: it waits 8 seconds, inside the fence.
+const WAIT: &str = r#"python3 -c "import time; time.sleep(8)""#;
+
+/// The owner's condition with choice A (18 Oct 2026): the run's temporary folder is now under `/tmp`, so during a run
+/// the Anthropic key and the run's token must appear 0 times in it, and it must be gone after the run. Counted with
+/// phase 3's method (`support/count_key.py`): each secret goes in on standard input and only counts come out; nothing
+/// here prints a secret. Counted while the declared command runs inside the fence, with the fence's network bridge
+/// in the folder.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t5t").unwrap();
+    // A program the agent asks about (Claude Code runs `sleep` without asking, which Steplet stops, H11).
+    let req = request(&format!("allow:\n  commands:\n    - '{WAIT}'\n"));
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let checker = policy.clone();
+    let (link, gate) = serve_gate(&distro, "p4t5t", Duration::from_secs(10), move |r| decide(&checker, r));
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": WAIT, "description": "Wait a moment"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p4t5t", &script.to_string(), 47956);
+    support::install(&distro, include_bytes!("support/count_key.py"), "/opt/steplet-test/count_key.py", "644");
+    prepare(&req, &paths, &link).unwrap();
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47956"), &[]).unwrap();
+    let watching = {
+        let (policy, work) = (policy.clone(), paths.work_repo().to_owned());
+        let deadline = req.deadline + BACKSTOP;
+        std::thread::spawn(move || watch_run(handle, gate, &policy, &work, deadline, &Live::unattended(), &[]))
+    };
+    // Until the declared command runs inside the fence.
+    let start = Instant::now();
+    while root_sh(&distro, "pgrep -u steplet -f 'time.sleep' > /dev/null && echo running || true") != "running" {
+        assert!(start.elapsed() < Duration::from_secs(60), "the declared command did not start");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let tmp = paths.run_tmp();
+    let listing = root_sh(&distro, &format!("find {tmp} -mindepth 1 -printf '%y %P\\n' | sort"));
+    let count = |secret: &str| {
+        let argv = ["/usr/bin/python3", "-I", "/opt/steplet-test/count_key.py", tmp];
+        let out = wsl::run(&distro, "root", &argv, secret.as_bytes()).unwrap();
+        assert_eq!(out.status, Some(0), "{}", out.stderr);
+        out.stdout.trim_end().to_owned()
+    };
+    let (key, token) = (count(MADE_UP_KEY), count(link.token()));
+    let outcome = watching.join().unwrap();
+    discard(&paths).unwrap();
+    let after = root_sh(&distro, &format!("test -e {tmp} && echo present || echo absent"));
+    println!("--- during the run, {tmp} held (type and name):\n{listing}");
+    println!("--- the made-up key in it:\n{key}\n--- the run's token in it:\n{token}\n--- after the run: {after}");
+    assert!(listing.lines().any(|l| l.starts_with("s srt-mux-")), "the fence's network bridge is in it: {listing}");
+    for counted in [&key, &token] {
+        let lines: Vec<&str> = counted.lines().collect();
+        assert_eq!(lines.len(), 2, "{counted}");
+        assert!(lines[0].starts_with("key: 0 ") && lines[1].starts_with("key, last 20 characters: 0 "), "{counted}");
+    }
+    assert_eq!(after, "absent", "the run's temporary folder is gone after the run");
+    assert!(outcome.stopped_by.is_none(), "{:?}", outcome.stopped_by);
 }

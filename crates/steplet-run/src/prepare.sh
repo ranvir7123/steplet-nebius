@@ -30,7 +30,7 @@ stop_steplet() {
 
 main() {
     local ID=$1 URL=$2 COMMIT=$3 SETTINGS=$4 MCP=$5
-    local W=/work/$ID R=/var/lib/steplet/runs/$ID
+    local W=/work/$ID R=/var/lib/steplet/runs/$ID T=/tmp/steplet-run-$ID
     local REPO=$W/repo C=$R/checkout
     local SRT=/opt/steplet/srt/node_modules/.bin/srt
 
@@ -41,13 +41,16 @@ main() {
         GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 GIT_LFS_SKIP_SMUDGE=1)
     local GIT=(/usr/bin/git -c core.hooksPath=/dev/null -c core.fsmonitor=false)
 
-    # 1. One run at a time: end whatever the steplet account left running, then empty /work and the runs folder.
+    # 1. One run at a time: end whatever the steplet account left running, then empty /work and the runs folder, and
+    #    remove every run's temporary folder under /tmp. With nothing of the steplet account running, nothing can
+    #    make one again before it is made fresh below.
     stop_steplet || fail 10 "a program from the last run would not stop"
-    find /work /var/lib/steplet/runs -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + ||
+    find /work /var/lib/steplet/runs -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + &&
+        find /tmp -mindepth 1 -maxdepth 1 -name 'steplet-run-*' -exec rm -rf -- {} + ||
         fail 10 "could not clear the last run"
     install -d -o root -g root -m 755 "$W" "$R" &&
         install -d -o steplet -g steplet -m 755 "$REPO" &&
-        install -d -o steplet -g steplet -m 700 "$R/home" "$R/config" "$R/tmp" "$C" ||
+        install -d -o steplet -g steplet -m 700 "$R/home" "$R/config" "$T" "$C" ||
         fail 10 "could not make the run's folders"
 
     # 2. The hardened clone, outside the fence and without a checkout: https only, every object checked, no bundle

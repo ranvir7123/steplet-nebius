@@ -898,3 +898,139 @@ fmt exit 0
 > cargo clippy --workspace --all-targets --offline -- -D warnings
 clippy exit 0
 ```
+
+## Task 5: the chooser's lines, each tied to its test; and a phase 3 gap it found
+
+### What the new test found: a file's declared web sites never worked for the programs a task runs
+
+The new test `a_declared_site_is_the_only_one_a_program_can_reach` runs a small probe inside the fence (made-up test data: it tries `https://example.org/`, which the file declares, and `https://example.net/`, which it does not), with a control from outside the fence. Its first run:
+
+```
+--- control, outside the fence: {"https://example.org/": "failed: HTTPError", "https://example.net/": "failed: HTTPError"}
+--- inside the fence, the probe's own record: {"https://example.org/": "failed: URLError", "https://example.net/": "failed: URLError"}
+```
+
+The control's "HTTPError" means the sites did answer (with an error status, to Python's default client), so the probe now counts any answer from the site as reached. Inside the fence, both were cut off, the declared one too. Three different clients from inside the fence (the run's proxy password replaced by `(token)` here):
+
+```
+--- inside the fence, the probe's own record {
+ "proxy": "http://srt:(token)@localhost:3128",
+ "https://example.org/": "failed: URLError: <urlopen error Remote end closed connection without response>",
+ "curl https://example.org/": "000 curl: (56) Proxy CONNECT aborted",
+ "raw11 https://example.org/": "",
+ "raw10 https://example.org/": "(closed)",
+ "https://example.net/": "failed: URLError: <urlopen error Remote end closed connection without response>",
+ "curl https://example.net/": "000 curl: (56) Proxy CONNECT aborted",
+ "raw11 https://example.net/": "",
+ "raw10 https://example.net/": "(closed)"
+}
+```
+
+The fence program (`srt` 0.0.77) on its own, outside Claude Code, with example.org allowed, works as promised (the lines about the decision and curl's result, from its `--debug` output):
+
+```
+--- https://example.org/
+[SandboxDebug] Allowed by config rule: example.org:443
+200
+--- https://example.net/
+[SandboxDebug] No matching config rule, denying: example.net:443
+[SandboxDebug] Connection blocked to example.net:443
+curl: (7) CONNECT tunnel failed, response 403
+000
+```
+
+**The cause:** in a Claude Code run, the fence's network bridge is a socket file in the run's temporary folder, which phase 3 put inside Steplet's private folder (`/var/lib/steplet/runs/<id>/tmp`). Steplet's settings hide that whole folder from the programs a task runs, so the bridge inside the fence could not reach the socket, and every connection was cut. Phase 3's tests checked only that undeclared sites are refused, which a fence that refuses everything also passes. Nothing unsafe happened: programs could reach nothing at all. But the chooser's line for a file that declares sites would have been false, and a task that needs, for example, a package registry could not run.
+
+Two fixes were measured (and undone after each):
+- Letting the fence read the run's temporary folder in its old place: the sites then behave as promised, but the folder becomes read-only for the task's commands, and Claude Code's own small file for each command fails (`/var/lib/steplet/runs/p4t5a/tmp/claude-999/cwd-e7c3: Read-only file system`, exit code 1). Not usable.
+- Giving each run its own temporary folder under `/tmp`: example.org reached, example.net refused with 403, and the test passes.
+
+### Your decision (18 Oct 2026): A
+
+**A: each run gets its own fresh temporary folder under `/tmp` (`/tmp/steplet-run-<id>`), deleted after the run.** It changes phase 3's folder layout (the plan had said the only settings change in this phase is Task 1's rule); Task 16 records it in `docs/decisions.md`. Your condition: a test that, during a run, the Anthropic key and the run's token appear 0 times in that folder (counted, never printed, with phase 3's method), that the folder is gone after the run, and the containment battery run again.
+
+What changed:
+- `RunPaths::run_tmp()` is `/tmp/steplet-run-<id>`.
+- `prepare.sh` removes every `/tmp/steplet-run-*` left over (with nothing of the `steplet` account running, so nothing can make one again in between), then makes the run's folder fresh, owned by `steplet`, for it alone (mode 700).
+- `start-run.sh` checks that it is that folder (not a link, the `steplet` account's, mode 700) before it starts Claude Code with it as `TMPDIR`.
+- `discard.sh` removes it with the rest of the run, and fails if it is still there.
+- The test harness's own gate token is now at least 20 characters, so phase 3's counter can count it.
+- The hostile fixture test's list of what Claude Code itself writes for a run now finds the temporary folder in its new place.
+
+Your condition, as a test (`the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after`). Its declared command waits 8 seconds inside the fence, and the counts are taken while it runs. (Its first try used `sleep 8`, which Claude Code ran without asking the gate; Steplet's command reader does not count `sleep` as a harmless read, so the run was stopped, as H11 says. The test now uses a Python wait, which Claude Code asks about.)
+
+```
+> cargo test -p steplet-run --offline --test contain the_run_s_temporary_folder -- --ignored --nocapture
+--- during the run, /tmp/steplet-run-p4t5t held (type and name):
+d claude-999
+d claude-999/-work-p4t5t-repo
+d claude-999/-work-p4t5t-repo/ffa4b06d-e41b-4fe9-b68b-9b3bcb4a3805
+d claude-999/-work-p4t5t-repo/ffa4b06d-e41b-4fe9-b68b-9b3bcb4a3805/tasks
+f claude-999/-work-p4t5t-repo/ffa4b06d-e41b-4fe9-b68b-9b3bcb4a3805/tasks/bchlp516y.output
+s claude-http-79e425107eb4797c.sock
+s srt-mux-85398-0.sock
+--- the made-up key in it:
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- the run's token in it:
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- after the run: absent
+test the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 15.13s
+```
+
+(`d` is a folder, `f` a file, `s` a socket. The counter says "key" for whichever secret it is given; it reads every regular file, here the one file, and sockets hold no text.) This test checks a safety property, so it would also pass with the old layout. What shows the move is the layout test, which failed first (`left: "/var/lib/steplet/runs/r1/tmp"`, `right: "/tmp/steplet-run-r1"`), and the declared-site test, which passes only with it.
+
+### Changes from the plan, recorded here
+
+- **Line 2 is worded for the ask screen.** The plan's "The agent cannot fetch any web address" (and "can fetch only these web addresses") was written before the ask screen. Now a site the file does not declare is asked about, and the receiver can say yes. So the lines say: "The agent cannot fetch any web address, unless you say yes to that exact address." and "The agent can fetch only these web addresses, and another one only if you say yes to that exact address:". They also name `a_yes_allows_exactly_the_request_shown`.
+- The sites a line lists are its `items`, shown as file text, not set into the line's text.
+
+### The tests
+
+```
+> cargo test -p steplet-run --offline --test promises
+error[E0432]: unresolved imports `steplet_run::Promise`, `steplet_run::promises`
+ --> crates\steplet-run\tests\promises.rs:6:19
+error: could not compile `steplet-run` (test "promises") due to 1 previous error
+```
+
+After the code:
+
+```
+> cargo test -p steplet-run --offline --test promises
+test no_line_says_on_this_computer ... ok
+test the_lines_follow_the_files_sites ... ok
+test every_promise_names_tests_that_exist ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+The containment battery again, with the new layout (the owner's condition), and the whole runner:
+
+```
+> cargo test -p steplet-run --offline -- --ignored --nocapture --test-threads=1
+     Running tests\contain.rs (target\debug\deps\contain-e9ca5c3e4707e558.exe)
+--- inside the fence, the probe's own record: {"proxy": "http://srt:(token)@localhost:3128", "https://example.org/": "reached", "https://example.net/": "failed: URLError: <urlopen error Tunnel connection failed: 403 Forbidden>"}
+--- the listener's log: "2026-10-18T10:18:40.508262 from=('127.0.0.1', 44734) bytes=0"
+--- the write outside the copy: absent
+--- the Windows marker from inside the fence: absent
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 66.11s
+(18 summary lines, every one ok: 35 passed, 0 failed; counted from the summary lines)
+ignored exit 0
+> cargo test -p steplet-run --offline
+(18 summary lines, every one ok: 102 passed, 0 failed, 35 ignored; counted from the summary lines)
+plain exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+```
+
+(From the battery: the declared-site probe's record, and three lines of the hostile fixture's test: only the control's connection reached the listener, nothing landed outside the copy, and no Windows program started. The proxy password is replaced by `(token)`.) The containment battery's eight tests all pass with the new layout: use case 1, the hostile fixture, the web fetch, the writable folders, J1's write, the stop while preparing, the declared site, and the temporary folder.
+
+### What this task did not verify
+
+- Sites with more than one name behind them (a site that sends the program on to another site): the probe reaches one page of each.
+- A program listening on the Windows side (3.7 point 3): still not tried, so no line says "on this computer".
+- The lines on screen: the run chooser screen is Task 11.

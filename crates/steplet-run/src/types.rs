@@ -10,6 +10,11 @@ use steplet_core::header::Steplet;
 /// can hide the private folder without also hiding the working copy (C9).
 pub(crate) const WORK_ROOT: &str = "/work";
 pub(crate) const STATE_ROOT: &str = "/var/lib/steplet";
+/// The start of each run's temporary folder, `/tmp/steplet-run-<id>` (the owner's choice A, 18 Oct 2026). It is not
+/// inside `STATE_ROOT`, which the fence hides, because the fence's network bridge for a run is a socket in it: hidden,
+/// a program the task runs could reach no site, not even one the file declares. The task's programs could already
+/// read `/tmp`.
+pub(crate) const RUN_TMP: &str = "/tmp/steplet-run-";
 
 /// A value Steplet will not write into a run's files; the text names which value it was.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,7 +55,7 @@ impl RunPaths {
             work_repo: format!("{WORK_ROOT}/{run_id}/repo"),
             run_home: format!("{run}/home"),
             run_config: format!("{run}/config"),
-            run_tmp: format!("{run}/tmp"),
+            run_tmp: format!("{RUN_TMP}{run_id}"),
             settings: format!("{run}/settings.json"),
             mcp: format!("{run}/mcp.json"),
         })
@@ -69,8 +74,8 @@ impl RunPaths {
         &self.work_repo
     }
 
-    /// The run's `HOME`. It, `run_config` (`CLAUDE_CONFIG_DIR`) and `run_tmp` (`TMPDIR`) are fresh each run and
-    /// deleted after it.
+    /// The run's `HOME`. It, `run_config` (`CLAUDE_CONFIG_DIR`) and `run_tmp` (`TMPDIR`, under `/tmp`) are fresh
+    /// each run and deleted after it.
     pub fn run_home(&self) -> &str {
         &self.run_home
     }

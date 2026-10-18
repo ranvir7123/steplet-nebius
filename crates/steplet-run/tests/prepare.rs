@@ -119,7 +119,7 @@ fn prepare_makes_one_fresh_working_copy_at_the_declared_commit() {
     assert_eq!(run(&distro, "root", &["/usr/bin/ls", "-A", "/work"]), "t6a", "/work holds this run only");
     assert_eq!(
         run(&distro, "root", &["/usr/bin/ls", "-A", "/var/lib/steplet/runs/t6a"]),
-        "config\nhome\nmcp.json\nsettings.json\ntmp"
+        "config\nhome\nmcp.json\nsettings.json"
     );
     assert_eq!(run(&distro, "root", &["/usr/bin/ls", "-A", "/var/lib/steplet/runs"]), "t6a");
     assert_eq!(run(&distro, "root", &["/usr/bin/ls", "-A", repo.strip_suffix("/repo").unwrap()]), "repo");
@@ -147,6 +147,8 @@ fn prepare_makes_one_fresh_working_copy_at_the_declared_commit() {
         run(&distro, "root", &["/usr/bin/ls", "-A", "/work", "/var/lib/steplet/runs"]),
         "/var/lib/steplet/runs:\n\n/work:"
     );
+    let tmp = format!("test -e {} && echo present || echo absent", paths.run_tmp());
+    assert_eq!(run(&distro, "root", &["/bin/sh", "-c", &tmp]), "absent", "the run's temporary folder is gone too");
 }
 
 #[test]

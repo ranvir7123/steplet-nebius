@@ -18,8 +18,9 @@ stop_steplet() {
 main() {
     local ID=$1
     stop_steplet
-    rm -rf -- "/work/$ID" "/var/lib/steplet/runs/$ID"
-    if pgrep -u steplet > /dev/null || [ -e "/work/$ID" ] || [ -e "/var/lib/steplet/runs/$ID" ]; then
+    rm -rf -- "/work/$ID" "/var/lib/steplet/runs/$ID" "/tmp/steplet-run-$ID"
+    if pgrep -u steplet > /dev/null || [ -e "/work/$ID" ] || [ -e "/var/lib/steplet/runs/$ID" ] ||
+        [ -e "/tmp/steplet-run-$ID" ] || [ -L "/tmp/steplet-run-$ID" ]; then
         echo "steplet-discard: run $ID could not be removed completely" >&2
         exit 20
     fi

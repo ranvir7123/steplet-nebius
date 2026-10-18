@@ -41,9 +41,12 @@ close_shared_folders() {
 }
 
 check_layout() {
-    local ID=$1 R=/var/lib/steplet/runs/$1 f
+    local ID=$1 R=/var/lib/steplet/runs/$1 T=/tmp/steplet-run-$1 f
     [ "$(ls -A /work)" = "$ID" ] || fail 31 "/work holds something besides this run"
     [ -d "/work/$ID/repo" ] || fail 31 "the run has no working copy"
+    # The run's temporary folder, made by prepare: a folder (not a link) of the steplet account's, for it alone.
+    [ -d "$T" ] && [ ! -L "$T" ] && [ "$(stat -c '%U %a' -- "$T")" = "steplet 700" ] ||
+        fail 31 "the run's temporary folder is missing or not Steplet's"
     for f in "$R/settings.json" "$R/mcp.json"; do
         [ "$(stat -c '%U %a' -- "$f" 2> /dev/null)" = "root 644" ] || fail 31 "$f is missing or not Steplet's"
     done
@@ -55,7 +58,7 @@ R=/var/lib/steplet/runs/$ID
 close_shared_folders < /dev/null
 check_layout "$ID" < /dev/null
 cd "/work/$ID/repo" || fail 31 "the run has no working copy"
-VARS=(HOME="$R/home" PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 CLAUDE_CONFIG_DIR="$R/config" TMPDIR="$R/tmp"
+VARS=(HOME="$R/home" PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 CLAUDE_CONFIG_DIR="$R/config" TMPDIR="/tmp/steplet-run-$ID"
     DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 CLAUDE_CODE_DISABLE_AUTO_MEMORY=1)
 if [ -n "$MODEL_URL" ]; then VARS+=("ANTHROPIC_BASE_URL=$MODEL_URL"); fi
 # From here on nothing runs as root: setpriv becomes steplet, drops every power, empties the set any power could ever
