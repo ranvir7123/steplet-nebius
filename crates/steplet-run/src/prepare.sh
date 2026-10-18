@@ -3,9 +3,11 @@
 # root, sent on standard input by prepare.rs, which has checked every argument; nothing here is installed.
 # Two entries, named by the first argument:
 #   prepare <run id> <repository address (plain https)> <commit> <settings.json> <mcp.json> (both in base64)
-#   strip <working copy>: only the removal of the agent settings files (phase 4 Task 2), which prepare also runs.
+#   strip <run id>: only the removal of the agent settings files from that run's working copy (phase 4 Task 2),
+#   which prepare also runs.
 # Each agent settings file removed is said on standard output as "removed: <name>", and a ready copy as
-# "steplet-prepare: ready at <commit>"; prepare.rs reads both. A failed step exits with its own code, which
+# "steplet-prepare: ready at <commit>"; prepare.rs reads both. Nothing else this script starts writes to standard
+# output: git's and the fence's output goes to the error output, so nothing the repository holds can add a line. A failed step exits with its own code, which
 # prepare.rs turns into words: 10 clear, 11 clone, 12 commit, 13 checkout, 14 agent files, 15 run files.
 set -u
 
@@ -54,7 +56,7 @@ main() {
     timeout -k 10 600 "${AS[@]}" "${GIT[@]}" -c protocol.allow=never -c protocol.https.allow=always \
         -c transfer.fsckObjects=true -c transfer.bundleURI=false -c credential.helper= \
         -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 \
-        clone --quiet --no-checkout --no-recurse-submodules --template= -- "$URL" "$REPO" ||
+        clone --quiet --no-checkout --no-recurse-submodules --template= -- "$URL" "$REPO" >&2 ||
         fail 11 "could not clone $URL"
 
     # 3. The declared commit must be among what was fetched, and be a commit.
@@ -71,7 +73,7 @@ main() {
  "network": {"allowedDomains": [], "deniedDomains": []}}
 EOF
     timeout -k 10 300 "${AS[@]}" "$SRT" --settings "$R/srt-checkout.json" -- \
-        "${GIT[@]}" -C "$REPO" checkout --quiet --detach "$COMMIT" ||
+        "${GIT[@]}" -C "$REPO" checkout --quiet --detach "$COMMIT" >&2 ||
         fail 13 "the checkout of $COMMIT failed inside the fence"
     [ "$("${AS[@]}" "${GIT[@]}" -C "$REPO" rev-parse HEAD)" = "$COMMIT" ] ||
         fail 13 "the working copy is not at $COMMIT"
@@ -79,7 +81,7 @@ EOF
     stop_steplet || fail 13 "a program from the checkout would not stop"
 
     # 5. The agent settings files the repository carries are removed (D3), by the steplet account.
-    strip "$REPO"
+    strip "$ID"
 
     # 6. The run's settings file and MCP config, owned by root so the agent cannot change them.
     cd / && rm -rf -- "$C" "$R/srt-checkout.json" &&
@@ -90,18 +92,26 @@ EOF
     echo "steplet-prepare: ready at $COMMIT"
 }
 
-# Removes the agent settings files and folders from the working copy $1, in a fixed order, saying each one it removed
-# (D3). The removal runs as the steplet account with only a PATH (it starts no git, so it needs none of main's git
-# settings). It expects nothing of the steplet account to be running, as main makes sure before it calls it.
+# Removes the agent settings files and folders from the working copy of run $1, /work/<run id>/repo, in a fixed order,
+# saying each one it removed (D3). It takes the run id, as discard.sh and after.sh do, so it can touch no other folder.
+# Every program of the steplet account is ended first, so none can put a file back after its removal is said; and
+# all five are checked again at the end. The removal runs as the steplet account with only a PATH (it starts no git,
+# so it needs none of main's git settings).
 strip() {
-    local REPO=${1-} f
-    [ -d "$REPO" ] && [ "$REPO" != / ] || fail 14 "no working copy to remove the agent settings files from"
+    local ID=${1-} f
+    [[ $ID =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]] || fail 14 "not a run id: $ID"
+    local REPO=/work/$ID/repo
+    [ -d "$REPO" ] && [ ! -L "$REPO" ] || fail 14 "run $ID has no working copy"
+    stop_steplet || fail 14 "a program of the steplet account would not stop"
     for f in .claude .codex .cursor .gemini .mcp.json; do
         [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ] || continue
         setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs -- \
             /usr/bin/env -i PATH=/usr/bin:/bin /bin/rm -rf -- "$REPO/$f"
         if [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ]; then fail 14 "could not remove $f from the working copy"; fi
         echo "removed: $f"
+    done
+    for f in .claude .codex .cursor .gemini .mcp.json; do
+        if [ -e "$REPO/$f" ] || [ -L "$REPO/$f" ]; then fail 14 "$f came back in the working copy"; fi
     done
 }
 

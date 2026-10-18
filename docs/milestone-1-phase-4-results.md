@@ -376,3 +376,74 @@ test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... ok
 test the_strip_step_lists_what_it_removed ... ok
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 18.75s
 ```
+
+### The automatic security check, and what changed (after commit 75f653e)
+
+An automatic security check read Task 2's commits and raised four points. Three are fixed; one is kept, with the reason.
+
+1. **Fixed: a program of the task's account could put an agent settings file back.** When Steplet prepares a run, the strip step ran only after every program of the `steplet` account had been stopped. Run on its own, it stopped nothing, so a program of that account could make `.claude` again after its removal was said. The strip step now stops every program of the `steplet` account first, and checks all five names again at the end.
+2. **Fixed: the strip step took any folder.** It now takes a run id, as Steplet's other scripts do, and works only on `/work/<run id>/repo`. Anything else is refused, and nothing is removed.
+3. **Fixed: git's and the fence's own output could reach what Steplet reads.** The clone and the checkout now write only to the error output, so the only lines on standard output are the script's own `removed:` and `ready at` lines. No test shows this one, because git's quiet clone printed nothing there before either; it closes a way in, it does not change what happens today.
+4. **Kept: the sender's notes go to the agent exactly as written,** even though they could look like Steplet's own headings. They are the sender's own task, which the agent is meant to follow; Steplet's safety never rests on what the agent is told, but on the checker deciding every action and on the fence. Nothing of Steplet's own comes after the notes.
+
+The tests first. The listing test changed to the run-id form; two new tests show points 1 and 2:
+
+```
+> cargo test -p steplet-run --offline --test prepare strip -- --ignored --nocapture --test-threads=1
+(the lines naming each test, the failures and the summary; unchanged)
+test the_strip_step_lists_what_it_removed ... --- the strip step said:
+thread 'the_strip_step_lists_what_it_removed' (3308) panicked at crates\steplet-run\tests\prepare.rs:308:5:
+  left: Some(14)
+ right: Some(0)
+test the_strip_step_refuses_anything_but_a_run_s_working_copy ... --- the strip step said: [
+--- left: 
+thread 'the_strip_step_refuses_anything_but_a_run_s_working_copy' (45008) panicked at crates\steplet-run\tests\prepare.rs:334:9:
+  left: (Some(0), "removed: .claude\nremoved: .codex\nremoved: .mcp.json\n")
+ right: (Some(14), "")
+test the_strip_step_stops_the_steplet_account_first ... --- the strip step said:
+--- .claude afterwards: present; steplet programs: running
+thread 'the_strip_step_stops_the_steplet_account_first' (40900) panicked at crates\steplet-run\tests\prepare.rs:366:5:
+  left: Some(14)
+ right: Some(0)
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 8 filtered out; finished in 4.04s
+```
+
+The first and third also fail because the step did not yet take a run id. The third's printed line shows the hole itself: `.claude` was back, and the looping program was still running. After the fix:
+
+```
+> cargo test -p steplet-run --offline --test prepare -- --ignored --nocapture --test-threads=1
+test a_wrong_address_or_commit_names_the_step_and_runs_nothing ... --- https://github.com/octocat/steplet-test-no-such-repository.git at 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d: could not clone the repository:
+test agent_settings_files_the_commit_carries_are_checked_out_then_removed ... ok
+test prepare_makes_one_fresh_working_copy_at_the_declared_commit ... /var/lib/steplet/runs/t6a:
+test prepare_reports_the_commit_and_no_removed_files_for_hello_world ... ok
+test steplet_s_own_listing_of_the_copy_runs_inside_the_fence ... --- listed: Ok([" M README", "?? .gitattributes", "?? .steplet-test-probe.sh"])
+test the_strip_step_lists_what_it_removed ... --- the strip step said:
+test the_strip_step_refuses_anything_but_a_run_s_working_copy ... --- the strip step said: [
+test the_strip_step_stops_the_steplet_account_first ... --- the strip step said:
+--- .claude afterwards: absent; steplet programs: none
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 24.26s
+```
+
+What the refusal test's five bad arguments got, each one (unchanged):
+
+```
+        "steplet-prepare: not a run id: /opt/steplet-test/strip-outside",
+        "steplet-prepare: not a run id: ../../opt/steplet-test/strip-outside",
+        "steplet-prepare: not a run id:",
+        "steplet-prepare: not a run id: -x",
+        "steplet-prepare: not a run id: p4t2x/../..",
+```
+
+Everything planted in the outside folder was still there afterwards (`.claude`, `.codex`, `.mcp.json`). And one whole run through the changed script:
+
+```
+> cargo test -p steplet-run --offline --test contain use_case_1 -- --ignored
+test use_case_1_runs_with_none_of_the_receiver_s_files_present ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 10.70s
+> cargo clippy -p steplet-run --lib --test prepare --test contain --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+> cargo fmt --all -- --check
+fmt exit 0
+```
+
+(The lint check covers only these parts: Task 3's tests, already written but not yet backed by code, are in the working folder and do not build yet. Task 3 runs the full check.)

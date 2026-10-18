@@ -252,21 +252,9 @@ rm -f /tmp/steplet-t10b-probe";
 /// Phase 4 Task 2: only the names `prepare.sh` knows count, each once and in its order, whatever else was printed.
 #[test]
 fn removed_files_counts_only_names_it_knows() {
-    let said = "removed: .mcp.json
-removed: .claude
-removed: secrets
-removed: .claude
- removed: .codex
-noise
-";
+    let said = "removed: .mcp.json\nremoved: .claude\nremoved: secrets\nremoved: .claude\n removed: .codex\nnoise\n";
     assert_eq!(steplet_run::removed_files(said), [".claude", ".mcp.json"]);
-    assert_eq!(
-        steplet_run::removed_files(
-            "steplet-prepare: ready at 7fd1a60b
-"
-        ),
-        Vec::<String>::new()
-    );
+    assert_eq!(steplet_run::removed_files("steplet-prepare: ready at 7fd1a60b\n"), Vec::<String>::new());
 }
 
 /// Phase 4 Task 2: `prepare` says which commit the copy is at, and that it removed nothing from Hello-World.
@@ -282,15 +270,14 @@ fn prepare_reports_the_commit_and_no_removed_files_for_hello_world() {
     assert_eq!(prepared, Prepared { commit: HELLO.1.into(), removed: vec![] });
 }
 
-/// Phase 4 Task 2: the strip step of `prepare.sh`, on its own, on a made-up copy owned by the steplet account. It
-/// removes every agent settings file and folder it knows, prints one line for each it removed, in its fixed order,
-/// and leaves everything else.
-#[test]
-#[ignore = "needs Steplet's Linux"]
-fn the_strip_step_lists_what_it_removed() {
-    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-    let distro = steplet_linux();
-    let copy = "/opt/steplet-test/strip-copy";
+/// Runs the strip entry of `prepare.sh` on its own, as root, with `arg` as its argument.
+fn strip(distro: &str, arg: &str) -> wsl::Output {
+    let script = include_bytes!("../src/prepare.sh");
+    wsl::run(distro, "root", &["/bin/bash", "-s", "--", "strip", arg], script).unwrap()
+}
+
+/// Makes `copy` as root, with made-up agent settings files and one file of the task's, owned by the steplet account.
+fn plant_agent_files(distro: &str, copy: &str) {
     let plant = format!(
         "set -e
 rm -rf {copy}
@@ -301,28 +288,81 @@ echo 'made-up = true' > {copy}/.codex/config.toml
 echo 'kept' > {copy}/src/keep.txt
 chown -R steplet:steplet {copy}"
     );
-    run(&distro, "root", &["/bin/sh", "-c", &plant]);
-    let script = include_bytes!("../src/prepare.sh");
-    let out = wsl::run(&distro, "root", &["/bin/bash", "-s", "--", "strip", copy], script).unwrap();
+    run(distro, "root", &["/bin/sh", "-c", &plant]);
+}
+
+/// Phase 4 Task 2: the strip step of `prepare.sh`, on its own, on a made-up copy in a run's place. It removes every
+/// agent settings file and folder it knows, prints one line for each it removed, in its fixed order, and leaves
+/// everything else.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn the_strip_step_lists_what_it_removed() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let copy = "/work/p4t2b/repo";
+    plant_agent_files(&distro, copy);
+    let out = strip(&distro, "p4t2b");
     let left = run(&distro, "root", &["/usr/bin/find", copy, "-mindepth", "1"]);
-    run(&distro, "root", &["/usr/bin/rm", "-rf", copy]);
-    println!(
-        "--- the strip step said:
-{}{}
---- left in the copy:
-{left}",
-        out.stdout, out.stderr
-    );
+    run(&distro, "root", &["/usr/bin/rm", "-rf", "/work/p4t2b"]);
+    println!("--- the strip step said:\n{}{}\n--- left in the copy:\n{left}", out.stdout, out.stderr);
     assert_eq!(out.status, Some(0), "{}", out.stderr);
-    assert_eq!(
-        out.stdout,
-        "removed: .claude
-removed: .codex
-removed: .mcp.json
-"
-    );
+    assert_eq!(out.stdout, "removed: .claude\nremoved: .codex\nremoved: .mcp.json\n");
     assert_eq!(steplet_run::removed_files(&out.stdout), [".claude", ".codex", ".mcp.json"]);
     let mut left: Vec<&str> = left.lines().collect();
     left.sort();
     assert_eq!(left, [format!("{copy}/src"), format!("{copy}/src/keep.txt")], "everything else is left");
+}
+
+/// The security check of Task 2: the strip step works only on a run's own working copy, `/work/<run id>/repo`. It
+/// takes the run id, as Steplet's other scripts do, and refuses anything else without removing anything.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn the_strip_step_refuses_anything_but_a_run_s_working_copy() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let outside = "/opt/steplet-test/strip-outside";
+    plant_agent_files(&distro, outside);
+    let mut said = Vec::new();
+    for arg in [outside, "../../opt/steplet-test/strip-outside", "", "-x", "p4t2x/../.."] {
+        let out = strip(&distro, arg);
+        said.push((arg, out.status, out.stdout, out.stderr.trim_end().to_owned()));
+    }
+    let left = run(&distro, "root", &["/usr/bin/find", outside, "-maxdepth", "1", "-name", ".*"]);
+    run(&distro, "root", &["/usr/bin/rm", "-rf", outside]);
+    println!("--- the strip step said: {said:#?}\n--- left: {left}");
+    for (arg, status, stdout, _) in &said {
+        assert_eq!((status, stdout.as_str()), (&Some(14), ""), "{arg:?} was refused, and nothing was removed");
+    }
+    let mut left: Vec<&str> = left.lines().collect();
+    left.sort();
+    assert_eq!(left, [format!("{outside}/.claude"), format!("{outside}/.codex"), format!("{outside}/.mcp.json")]);
+}
+
+/// The security check of Task 2: while the strip step runs, no program of the steplet account may still be running,
+/// or it could put an agent settings file back after its removal was said. Here a made-up loop of that account keeps
+/// making `.claude` again; the strip step ends it first, so `.claude` stays gone.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn the_strip_step_stops_the_steplet_account_first() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = steplet_linux();
+    let copy = "/work/p4t2c/repo";
+    plant_agent_files(&distro, copy);
+    let again = format!("while :; do mkdir -p {copy}/.claude 2> /dev/null; sleep 0.05; done");
+    let mut looping = wsl::spawn(&distro, "steplet", &["/bin/bash", "-c", &again]).unwrap();
+    drop(looping.stdin.take());
+    let out = strip(&distro, "p4t2c");
+    std::thread::sleep(Duration::from_millis(500));
+    let left =
+        run(&distro, "root", &["/bin/sh", "-c", &format!("test -e {copy}/.claude && echo present || echo absent")]);
+    let running = run(&distro, "root", &["/bin/sh", "-c", "pgrep -u steplet > /dev/null && echo running || echo none"]);
+    run(&distro, "root", &["/bin/sh", "-c", "pkill -KILL -u steplet; rm -rf /work/p4t2c"]);
+    let _ = looping.kill();
+    let _ = looping.wait();
+    println!(
+        "--- the strip step said:\n{}{}\n--- .claude afterwards: {left}; steplet programs: {running}",
+        out.stdout, out.stderr
+    );
+    assert_eq!(out.status, Some(0), "{}", out.stderr);
+    assert_eq!((left.as_str(), running.as_str()), ("absent", "none"));
 }
