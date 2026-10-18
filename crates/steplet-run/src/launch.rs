@@ -1,7 +1,8 @@
 //! Starting the agent (plan section 3's launch, Task 7) and reading what it does. The run starts as root through
 //! `start-run.sh`, which closes WSL's shared folders (H1) and then becomes `steplet` for good to start Claude Code,
-//! with the task on its standard input. The event stream becomes `Event`s on a channel, and is also kept unchanged
-//! in Steplet's logs folder on Windows (section 3), with the error output beside it.
+//! with the task on its standard input. The event stream becomes `Event`s on a channel, and is also kept in Steplet's
+//! logs folder on Windows (section 3), with the error output beside it: as Claude Code wrote it, except that the key
+//! and the run's token are hidden (J6 A).
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -11,6 +12,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::report::raw_log_line;
 use crate::stream::parse_line;
 use crate::types::{BadValue, Event, RunPaths, RunRequest};
 use crate::wsl;
@@ -44,13 +46,15 @@ pub struct RunHandle {
     finished: bool,
 }
 
-/// Starts the agent on the prepared run `paths`. `logs` is the Windows folder that keeps the run's stream. The
-/// scripted model's address (tests only) must be `http://127.0.0.1:<port>`.
+/// Starts the agent on the prepared run `paths`. `logs` is the Windows folder that keeps the run's stream, with each
+/// of `hide` (the key, the run's token) hidden in it. The scripted model's address (tests only) must be
+/// `http://127.0.0.1:<port>`.
 pub fn launch(
     req: &RunRequest,
     paths: &RunPaths,
     logs: &Path,
     model_url: Option<&str>,
+    hide: &[&str],
 ) -> Result<RunHandle, LaunchError> {
     let seconds = req.deadline.as_secs();
     if seconds == 0 {
@@ -87,14 +91,15 @@ pub fn launch(
         return Err(LaunchError::Start("the agent's input and outputs were not connected".into()));
     };
     let task = req.task_text.clone().into_bytes();
+    let hide: Vec<String> = hide.iter().map(|s| (*s).to_owned()).collect();
     let (tx, events) = mpsc::channel();
     let threads = vec![
         // The task goes on standard input, which is then closed: dropping `input` closes it (C8, F1).
         thread::spawn(move || {
             let _ = input.write_all(&task);
         }),
-        read_lines(stdout, stream_log, tx.clone(), parse_line),
-        read_lines(stderr, error_log, tx, |line| vec![Event::Stderr(line.into())]),
+        read_lines(stdout, stream_log, hide.clone(), tx.clone(), parse_line),
+        read_lines(stderr, error_log, hide, tx, |line| vec![Event::Stderr(line.into())]),
     ];
     Ok(RunHandle {
         child,
@@ -210,18 +215,20 @@ impl Drop for RunHandle {
     }
 }
 
-/// Reads `from` line by line: each line is written to `log` unchanged and turned into events by `read`.
+/// Reads `from` line by line: each line is written to `log` with `hide` hidden, and turned into events by `read`.
 fn read_lines(
     from: impl Read + Send + 'static,
     mut log: File,
+    hide: Vec<String>,
     tx: Sender<Event>,
     read: fn(&str) -> Vec<Event>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
+        let hide: Vec<&str> = hide.iter().map(String::as_str).collect();
         let mut from = BufReader::new(from);
         let mut buf = Vec::new();
         while matches!(from.read_until(b'\n', &mut buf), Ok(n) if n > 0) {
-            let _ = log.write_all(&buf);
+            let _ = log.write_all(&raw_log_line(&buf, &hide));
             let line = wsl::text(&buf);
             for e in read(line.trim_end_matches(['\r', '\n'])) {
                 let _ = tx.send(e);

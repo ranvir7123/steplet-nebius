@@ -23,8 +23,8 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, BACKSTOP, Check, Report, RunPaths, RunRequest, RunSetup, Trust, build_report, changes, decide, discard,
-    launch, prepare, read_trust, run, run_config, watch_run, wsl,
+    ApiKey, BACKSTOP, Check, Live, Report, RunPaths, RunRequest, RunSetup, Trust, build_report, changes, decide,
+    discard, launch, prepare, read_trust, run, run_config, watch_run, wsl,
 };
 use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model, serve_gate};
 
@@ -307,8 +307,9 @@ fn every_try_of_the_hostile_fixture_is_contained() {
     root_sh(&distro, &format!("rm -f {OUTSIDE} {FIND_CONTROL}; touch {STAMP}"));
 
     let start = Instant::now();
-    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47951")).unwrap();
-    let outcome = watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47951"), &[]).unwrap();
+    let outcome =
+        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let took = start.elapsed();
     // Steplet's own looks, as `run` makes them; then the evidence, all before the run is removed.
     let changed = changes(&paths);
@@ -446,8 +447,9 @@ fn a_write_into_steplets_own_folder_is_refused_before_the_gate() {
     root_sh(&distro, &format!("rm -f {probe}"));
     assert_eq!((present(probe), present(&planted)), ("absent".into(), "absent".into()), "neither is there before");
 
-    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47953")).unwrap();
-    let outcome = watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47953"), &[]).unwrap();
+    let outcome =
+        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let after = (present(probe), present(&planted));
     discard(&paths).unwrap();
     let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);

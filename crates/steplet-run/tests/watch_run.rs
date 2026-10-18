@@ -1,6 +1,9 @@
 //! Following a run to its end (`watch_run`, plan Task 9), with stand-in agents, so it needs no Linux: when Steplet
 //! stops the run, what happens when stopping fails, and when the watch ends. The gate service is the real one, with
-//! this test program in the gate's place (as in `tests/gate.rs`).
+//! this test program in the gate's place (as in `tests/gate.rs`). Since phase 4 Task 3 also: what a live run sends to
+//! the screen as it happens, and the receiver's Stop.
+
+mod support;
 
 use std::collections::VecDeque;
 use std::fs::OpenOptions;
@@ -16,7 +19,11 @@ use serde_json::{Value, json};
 use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
-use steplet_run::{Event, GateAnswer, GateLink, GateService, RunOutcome, RunningAgent, Tripwire, serve, watch_run};
+use steplet_run::{
+    Event, GateAnswer, GateLink, GateService, Live, Progress, RunOutcome, RunningAgent, StopSignal, Tripwire, Trust,
+    build_report, serve, watch_run,
+};
+use support::MADE_UP_KEY;
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
 
 const WORK: &str = "/work/r1/repo";
@@ -153,12 +160,19 @@ fn policy() -> Policy {
 
 /// Follows `stand` with `watch_run`, which must return within 10 s; returns the outcome and what was done to it.
 fn watch(stand: Stand, stop_after: Duration) -> (RunOutcome, Vec<String>) {
+    watch_live(stand, stop_after, Live::unattended(), &[])
+}
+
+/// As `watch`, for a live run: `live` gets what the screen would, cleaned of `secrets`.
+fn watch_live(stand: Stand, stop_after: Duration, live: Live, secrets: &[&str]) -> (RunOutcome, Vec<String>) {
     let notes = stand.notes.clone();
     let pipe = pipe_name();
     let gate = gate(&pipe);
+    let secrets: Vec<String> = secrets.iter().map(|s| (*s).to_owned()).collect();
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
-        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, stop_after));
+        let secrets: Vec<&str> = secrets.iter().map(String::as_str).collect();
+        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, stop_after, &live, &secrets));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(10)).expect("watch_run returned within 10 s");
     let notes = notes.lock().unwrap().clone();
@@ -248,9 +262,76 @@ fn at_a_tripwire_the_gate_refuses_before_the_stop_begins() {
         Stand { script: VecDeque::from([hook]), ask_on_stop: Some(pipe), notes: notes.clone(), ..Stand::default() };
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
-        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, Duration::from_secs(60)));
+        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, Duration::from_secs(60), &Live::unattended(), &[]));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(10)).expect("watch_run returned within 10 s");
     assert!(matches!(outcome.stopped_by, Some(Tripwire::Hook(_))));
     assert_eq!(*notes.lock().unwrap(), ["stop", "asked the gate: \"deny\"", "finish, ended: true"]);
+}
+
+/// What a hidden secret shows as.
+const HIDDEN: &str = "[hidden by Steplet]";
+
+/// A live run's `Live`, which keeps everything sent to the screen.
+fn collecting() -> (Live, Arc<Mutex<Vec<Progress>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let keep = seen.clone();
+    let live = Live { on_progress: Box::new(move |p| keep.lock().unwrap().push(p)), stop: StopSignal::new() };
+    (live, seen)
+}
+
+/// Phase 4 Task 3: each event reaches the screen as it comes, in order, followed by Steplet's own record of a call
+/// that skipped the gate, and cleaned exactly as the report cleans the same text (the escape gone, the key hidden).
+#[test]
+fn each_event_reaches_the_screen_cleaned_and_in_order() {
+    let ls = json!({"command": "ls"});
+    let script = VecDeque::from([
+        Event::AgentText(format!("\u{1b}[2Kdone {MADE_UP_KEY}")),
+        Event::ToolUse { id: "u1".into(), name: "Bash".into(), input: ls.clone() },
+        Event::ToolResult { id: "u1".into(), is_error: false, text: "a\u{1b}[31mb".into(), plain_end: true },
+    ]);
+    let ends_at = Some(Instant::now() + Duration::from_millis(300));
+    let stand = Stand { script, outputs_closed: true, ends_at, ..Stand::default() };
+    let (live, seen) = collecting();
+    let (outcome, _) = watch_live(stand, Duration::from_secs(60), live, &[MADE_UP_KEY]);
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(
+        seen,
+        [
+            Progress::Event(Event::AgentText(format!("[2Kdone {HIDDEN}"))),
+            Progress::Event(Event::ToolUse { id: "u1".into(), name: "Bash".into(), input: ls }),
+            Progress::Event(Event::ToolResult {
+                id: "u1".into(),
+                is_error: false,
+                text: "a[31mb".into(),
+                plain_end: true
+            }),
+            Progress::Event(Event::SkippedGate {
+                id: "u1".into(),
+                tool: "Bash".into(),
+                what: "ls".into(),
+                harmless: true
+            }),
+        ]
+    );
+    let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY]);
+    assert_eq!(seen[0], Progress::Event(Event::AgentText(report.agent_says.clone())), "as the report cleans it");
+    assert!(matches!(&seen[2], Progress::Event(Event::ToolResult { text, .. }) if *text == report.commands[0].output));
+}
+
+/// Phase 4 Task 3: the receiver's Stop stops the run as a tripwire would, once, and the report says the receiver
+/// stopped it, not a tripwire.
+#[test]
+fn stop_signal_stops_the_run_and_the_report_says_you_stopped_it() {
+    let stand = Stand { chatter: true, ..Stand::default() };
+    let stop = StopSignal::new();
+    let pressed = stop.clone();
+    // The receiver presses Stop as soon as the first event is on screen.
+    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop };
+    let (outcome, notes) = watch_live(stand, Duration::from_secs(60), live, &[]);
+    assert_eq!(notes, ["stop", "finish, ended: true"], "stopped once");
+    assert_eq!((outcome.stopped_by.clone(), outcome.faults.clone()), (None, vec![]));
+    let report = build_report(&outcome, None, Trust::Unknown, &[]);
+    assert!(report.stopped_by_you, "{report:?}");
+    assert!(!report.completed);
 }

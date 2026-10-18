@@ -447,3 +447,121 @@ fmt exit 0
 ```
 
 (The lint check covers only these parts: Task 3's tests, already written but not yet backed by code, are in the working folder and do not build yet. Task 3 runs the full check.)
+
+## Task 3: live runs: progress as it happens, cleaned; Stop; one run at a time; raw logs
+
+### Changes from the plan, recorded here
+
+- **`watch_run` also takes the secrets to hide** (the key and the run's token), besides `live`: the live log is cleaned there, and the token is only made inside the run. Phase 3's tests pass `&Live::unattended(), &[]`.
+- **`launch` takes the secrets too** (`hide`), for the raw logs (J6 A). The function that hides them, `raw_log_line`, sits in `report.rs` next to the report's own "[hidden by Steplet]".
+- **`Live` has only `on_progress` and `stop` for now.** The answers and the ask limit come with Task 4, the task that uses them; `Progress` likewise has only `Prepared` and `Event` until then.
+- **`RunError` gains `Lock`** besides `Busy`: if Windows would not make the lock at all, the message says so instead of claiming that another run holds it.
+- **A Stop pressed while the working copy is being prepared:** the agent is then never started, and the report says the receiver stopped it. The plan did not say what happens in that case.
+- **A tripwire after the receiver's Stop** is still recorded, but the run is not stopped a second time.
+- The new tests count four live events, not three: after a call that skipped the gate, Steplet's own record of it is sent too, as the plan's Step 3 says.
+
+### The tests first
+
+```
+> cargo test -p steplet-run --offline --test watch_run --test lock --test report
+error[E0432]: unresolved import `steplet_run::RunLock`
+ --> crates\steplet-run\tests\lock.rs:6:29
+error[E0432]: unresolved import `steplet_run::raw_log_line`
+  --> crates\steplet-run\tests\report.rs:24:85
+error[E0432]: unresolved imports `steplet_run::Live`, `steplet_run::Progress`, `steplet_run::StopSignal`
+  --> crates\steplet-run\tests\watch_run.rs:23:47
+error[E0560]: struct `RunOutcome` has no field named `stopped_by_you`
+  --> crates\steplet-run\tests\report.rs:46:9
+error[E0599]: no variant, associated function, or constant named `Busy` found for enum `RunError` in the current scope
+  --> crates\steplet-run\tests\lock.rs:11:53
+error[E0599]: no variant, associated function, or constant named `Busy` found for enum `RunError` in the current scope
+  --> crates\steplet-run\tests\lock.rs:12:78
+error[E0061]: this function takes 5 arguments but 7 arguments were supplied
+   --> crates\steplet-run\tests\watch_run.rs:175:25
+   --> crates\steplet-run\src\run.rs:160:8
+error[E0061]: this function takes 5 arguments but 7 arguments were supplied
+   --> crates\steplet-run\tests\watch_run.rs:265:25
+   --> crates\steplet-run\src\run.rs:160:8
+error: could not compile `steplet-run` (test "lock") due to 3 previous errors
+error[E0609]: no field `stopped_by_you` on type `steplet_run::Report`
+```
+
+(The lines starting with `error` or `-->`, as printed; this run was before the usage-limit stop.)
+
+### The code
+
+- `crates/steplet-run/src/live.rs`: `StopSignal`, `Progress`, `Live` and `Live::unattended()`.
+- `crates/steplet-run/src/lock.rs`: `RunLock::take()`, the named Windows object `Local\Steplet-run`. Only that the object exists counts, so the lock can be let go on any thread, and Windows lets it go when Steplet ends or crashes.
+- `crates/steplet-run/src/report.rs`: `Scrubber::event` (every text of an event cleaned as the report cleans it, JSON keys included), `raw_log_line`, `Report.stopped_by_you`.
+- `crates/steplet-run/src/run.rs`: `run_live` takes the lock first, sends `Progress::Prepared` after preparing, then each event as it is judged; `run` is `run_live` with no one watching. `watch_run` looks at the Stop button on every turn and stops the run as at a tripwire, recording `stopped_by_you`.
+- `crates/steplet-run/src/launch.rs`: each raw log line is written with the key and the token hidden.
+
+### The tests pass
+
+```
+> cargo test -p steplet-run --offline --test watch_run --test lock --test report
+test a_second_run_cannot_start_while_one_is_running ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test raw_log_lines_hide_the_key_and_the_token ... ok
+test result: ok. 20 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test stop_signal_stops_the_run_and_the_report_says_you_stopped_it ... ok
+test each_event_reaches_the_screen_cleaned_and_in_order ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+```
+
+(The lines of the four new tests and the summaries.)
+
+```
+> cargo test -p steplet-run --offline
+plain exit 0
+(15 summary lines, every one ok; 84 passed, 0 failed, 28 ignored: counted from the summary lines)
+> cargo test -p steplet-run --offline -- --ignored --nocapture --test-threads=1
+(each test program's line and summary, unchanged)
+     Running unittests src\lib.rs (target\debug\deps\steplet_run-edb81ff285450e2f.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+     Running tests\contain.rs (target\debug\deps\contain-e9ca5c3e4707e558.exe)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 43.19s
+     Running tests\decide.rs (target\debug\deps\decide-f984e75a8222c3ff.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 25.18s
+     Running tests\launch.rs (target\debug\deps\launch-2c821a776c9bbf7e.exe)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 57.72s
+     Running tests\lock.rs (target\debug\deps\lock-208f96d8593d1013.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+     Running tests\prepare.rs (target\debug\deps\prepare-ca0ff602a7cf43dc.exe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 21.75s
+     Running tests\report.rs (target\debug\deps\report-ff7dc5d64e57faad.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 20.40s
+     Running tests\settings.rs (target\debug\deps\settings-8f98eebba7e02420.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+     Running tests\stream.rs (target\debug\deps\stream-14a26201034b512e.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+     Running tests\task.rs (target\debug\deps\task-4ed8a12bb5f61ffb.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+     Running tests\tripwires.rs (target\debug\deps\tripwires-8535515b103c05f7.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.69s
+     Running tests\watch.rs (target\debug\deps\watch-3da87fd5f880fdb0.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+     Running tests\watch_run.rs (target\debug\deps\watch_run-76ecdcace2e75d9b.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ignored exit 0
+```
+
+Every Linux-only test passes: 28 of 28 (phase 3's 22, Task 1's two and Task 2's four), with the new live-run code and the renamed script entry.
+
+```
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Checking steplet-run v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase4-build-88af2b\crates\steplet-run)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.08s
+clippy exit 0
+```
+
+### What this task did not verify
+
+- A live run whose raw log really held the key or the token: no run prints them (H2), so hiding them is shown by the unit test only.
+- Two Steplet windows in two different Windows sign-in sessions: the lock is per session (`Local\`), as the plan chose; Steplet's Linux is shared by them.
+- A program of the same Windows account that makes `Local\Steplet-run` itself would keep every run from starting. It could not harm a run, only block one.

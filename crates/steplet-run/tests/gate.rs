@@ -698,7 +698,7 @@ fn live_run(
     let req = run_request(120);
     prepare(&req, &paths, &link).unwrap();
     let started = Instant::now();
-    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}"))).unwrap();
+    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}")), &[]).unwrap();
     let events = collect(&handle, Duration::from_secs(120));
     let code = handle.wait().unwrap();
     println!("--- run {run_id}: exit code {code:?} after {:.1} s; every event:", started.elapsed().as_secs_f64());

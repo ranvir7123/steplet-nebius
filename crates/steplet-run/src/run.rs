@@ -4,6 +4,7 @@
 use std::io;
 use std::path::PathBuf;
 use std::ptr::null_mut;
+use std::sync::Arc;
 use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,6 +15,8 @@ use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG
 use crate::decide::decide;
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_on_windows, serve};
 use crate::launch::{LaunchError, RunHandle, launch};
+use crate::live::{Live, Progress};
+use crate::lock::RunLock;
 use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
 use crate::report::{Report, Scrubber, build_report, read_trust};
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
@@ -52,6 +55,10 @@ pub enum RunError {
     Gate(GateError),
     Prepare(PrepareError),
     Launch(LaunchError),
+    /// Another run holds the lock (one run at a time on this computer, phase 4).
+    Busy,
+    /// Windows would not make the lock; the error says why.
+    Lock(io::Error),
 }
 
 /// What happened in a run, from Steplet's own records.
@@ -73,33 +80,59 @@ pub struct RunOutcome {
     /// What went wrong around the run, in Steplet's words: it could not be stopped or waited for, did not end at
     /// its time limit, or was not removed.
     pub faults: Vec<String>,
+    /// The receiver pressed Stop, and Steplet stopped the run as at a tripwire (phase 4).
+    pub stopped_by_you: bool,
 }
 
-/// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report. Before the run
-/// is removed, Steplet's own `git status` lists what it changed and the run's config is checked for trust (D3). The
-/// gate's pipe gets a name and a token no one can guess, made for this run; neither the token nor the key shows in
-/// the report (F48).
+/// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report: `run_live`
+/// with no one watching.
 pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup) -> Result<Report, RunError> {
+    run_live(req, paths, policy, setup, Arc::new(Live::unattended()))
+}
+
+/// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report. Only one run
+/// at a time: another one gives `RunError::Busy`. Each piece of progress goes to `live`, cleaned as the report is, and
+/// `live.stop` stops the run as a tripwire would (before the agent starts, it never starts). Before the run is
+/// removed, Steplet's own `git status` lists what it changed and the run's config is checked for trust (D3). The
+/// gate's pipe gets a name and a token no one can guess, made for this run; neither the token nor the key shows in
+/// the report, the live log or the raw logs (F48, J6).
+pub fn run_live(
+    req: &RunRequest,
+    paths: &RunPaths,
+    policy: &Policy,
+    setup: &RunSetup,
+    live: Arc<Live>,
+) -> Result<Report, RunError> {
+    let _one_run = RunLock::take()?;
     let pipe = format!("steplet-{}-{}", paths.run_id(), random_hex::<8>().map_err(RunError::Random)?);
     let token = random_hex::<32>().map_err(RunError::Random)?;
+    let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
     let link = GateLink::new(&setup.gate_exe, &pipe, &token, &log.to_string_lossy(), setup.decision_deadline)
         .map_err(RunError::Refused)?;
     let checker = policy.clone();
     let program = gate_on_windows(DISTRIBUTION, &setup.gate_exe);
     let gate = serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r)).map_err(RunError::Gate)?;
-    let started = prepare(req, paths, &link)
-        .map_err(RunError::Prepare)
-        .and_then(|_prepared| launch(req, paths, &setup.logs, setup.model_url.as_deref()).map_err(RunError::Launch));
-    let handle = match started {
-        Ok(handle) => handle,
+    let prepared = prepare(req, paths, &link).map_err(RunError::Prepare);
+    let started = prepared.and_then(|prepared| {
+        (live.on_progress)(Progress::Prepared(prepared));
+        if live.stop.is_set() {
+            return Ok(None);
+        }
+        launch(req, paths, &setup.logs, setup.model_url.as_deref(), &secrets).map(Some).map_err(RunError::Launch)
+    });
+    let outcome = match started {
+        Ok(Some(handle)) => {
+            watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP, &live, &secrets)
+        }
+        // The receiver pressed Stop while the working copy was being prepared: the agent never started.
+        Ok(None) => RunOutcome { stopped_by_you: true, stopped_at: Some(0), ..RunOutcome::new(gate.into_requests()) },
         Err(e) => {
             // Whatever was made goes; the next run's preparation would clear it anyway.
             let _ = discard(paths);
             return Err(e);
         }
     };
-    let outcome = watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP);
     // Steplet's own looks after the run. They come after the run, so they do not change whether it completed.
     let mut after = Vec::new();
     let changed =
@@ -110,7 +143,6 @@ pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup
     if let Err(e) = discard(paths) {
         after.push(format!("the run's folders could not be removed: {e:?}"));
     }
-    let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let mut report = build_report(&outcome, changed.as_deref(), read_trust(config.as_deref()), &secrets);
     let scrub = Scrubber::new(&secrets);
     report.faults.extend(after.iter().map(|fault| scrub.text(fault)));
@@ -153,26 +185,24 @@ impl RunningAgent for RunHandle {
     }
 }
 
-/// Follows a launched run to its end. Each event is judged as it comes, and the run is stopped at the first
-/// tripwire; from then on the gate refuses every request, since stopping takes a moment. If the run has not ended
-/// `stop_after` from now, Steplet stops it itself: `run` gives the run's own time limit plus 30 s. The gate service
-/// is stopped once the agent has ended.
+/// Follows a launched run to its end. Each event is judged as it comes, sent to `live` cleaned of `secrets` (with
+/// Steplet's record after a call that skipped the gate), and the run is stopped at the first tripwire or when the
+/// receiver presses Stop; from then on the gate refuses every request, since stopping takes a moment. If the run has
+/// not ended `stop_after` from now, Steplet stops it itself: `run` gives the run's own time limit plus 30 s. The gate
+/// service is stopped once the agent has ended.
 pub fn watch_run(
     mut handle: impl RunningAgent,
     gate: GateService,
     policy: &Policy,
     work: &str,
     stop_after: Duration,
+    live: &Live,
+    secrets: &[&str],
 ) -> RunOutcome {
     let mut watcher = Watcher::new(policy, work);
-    let mut outcome = RunOutcome {
-        events: Vec::new(),
-        requests: Vec::new(),
-        stopped_by: None,
-        stopped_at: None,
-        exit_code: None,
-        faults: Vec::new(),
-    };
+    let scrub = Scrubber::new(secrets);
+    let show = |e: &Event| (live.on_progress)(Progress::Event(scrub.event(e)));
+    let mut outcome = RunOutcome::new(Vec::new());
     let backstop = Instant::now() + stop_after;
     let mut backstopped = false;
     // Neither Steplet's Linux nor Windows could end the run, so waiting for its end could take for ever.
@@ -181,7 +211,11 @@ pub fn watch_run(
     loop {
         match handle.next_event(POLL) {
             Ok(event) => {
-                if outcome.judge(&mut watcher, event, &gate) && !stop_now(&mut handle, &gate, &mut outcome.faults) {
+                // After the receiver's Stop, a tripwire is still recorded, but the run is already being stopped.
+                if outcome.judge(&mut watcher, event, &gate, &show)
+                    && !outcome.stopped_by_you
+                    && !stop_now(&mut handle, &gate, &mut outcome.faults)
+                {
                     gave_up = true;
                     break;
                 }
@@ -189,6 +223,15 @@ pub fn watch_run(
             Err(RecvTimeoutError::Timeout) => {}
             // No more events will come, but the agent may not have ended yet: keep looking until it has.
             Err(RecvTimeoutError::Disconnected) => thread::sleep(POLL),
+        }
+        // The receiver's Stop, looked at on every turn; once Steplet is already stopping the run, it changes nothing.
+        if live.stop.is_set() && !outcome.stopped_by_you && outcome.stopped_at.is_none() {
+            outcome.stopped_by_you = true;
+            outcome.stopped_at = Some(outcome.events.len());
+            if !stop_now(&mut handle, &gate, &mut outcome.faults) {
+                gave_up = true;
+                break;
+            }
         }
         // Looked at on time even while events keep coming.
         if Instant::now() < next_look {
@@ -224,7 +267,7 @@ pub fn watch_run(
         handle.finish()
     };
     for event in rest {
-        outcome.judge(&mut watcher, event, &gate);
+        outcome.judge(&mut watcher, event, &gate, &show);
     }
     match code {
         Ok(code) => outcome.exit_code = code,
@@ -276,9 +319,26 @@ fn random_hex<const N: usize>() -> io::Result<String> {
 }
 
 impl RunOutcome {
-    /// Adds `event` and the watcher's record of it. True when it set off the run's first tripwire.
-    fn judge(&mut self, watcher: &mut Watcher, event: Event, gate: &GateService) -> bool {
+    /// An outcome with nothing on record yet but the gate's `requests`.
+    fn new(requests: Vec<Asked>) -> RunOutcome {
+        RunOutcome {
+            events: Vec::new(),
+            requests,
+            stopped_by: None,
+            stopped_at: None,
+            exit_code: None,
+            faults: Vec::new(),
+            stopped_by_you: false,
+        }
+    }
+
+    /// Adds `event` and the watcher's record of it, and shows both. True when it set off the run's first tripwire.
+    fn judge(&mut self, watcher: &mut Watcher, event: Event, gate: &GateService, show: &dyn Fn(&Event)) -> bool {
         let verdict = watcher.see(&event, &|id| gate.answered(id));
+        show(&event);
+        if let Some(skipped) = &verdict.skipped {
+            show(skipped);
+        }
         self.events.push(event);
         self.events.extend(verdict.skipped);
         match verdict.stop {

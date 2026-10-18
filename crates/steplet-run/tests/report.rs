@@ -21,7 +21,7 @@ use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
     ApiKey, Asked, Check, Client, Event, GateAnswer, GateRequest, Refusal, Report, ReportCommand, RunOutcome, RunPaths,
-    RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files, parse_line, read_trust, run,
+    RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files, parse_line, raw_log_line, read_trust, run,
 };
 use support::MADE_UP_KEY;
 
@@ -43,6 +43,7 @@ fn outcome(events: Vec<Event>) -> RunOutcome {
         stopped_at: None,
         exit_code: Some(0),
         faults: Vec::new(),
+        stopped_by_you: false,
     }
 }
 
@@ -701,4 +702,16 @@ fn no_error_from_claude_code_does_not_always_mean_exit_code_0() {
     assert_eq!(grep.exit_code, None, "grep found nothing and exited 1; Claude Code called that no error");
     assert_eq!(r.commands[1].command, "tail -f README");
     assert_ne!(r.commands[1].exit_code, Some(0), "a command ended by Claude Code's time limit did not exit 0");
+}
+
+/// Phase 4 Task 3 (J6 A): the raw logs Steplet keeps on Windows hide the key and the run's token in each line as it
+/// is written; every other byte stays exactly as Claude Code wrote it, escapes and bytes that are not text included.
+#[test]
+fn raw_log_lines_hide_the_key_and_the_token() {
+    let line = format!("\u{1b}[2K{{\"text\":\"key {MADE_UP_KEY}, token {MADE_UP_TOKEN}\\u001b\"}}\r\n");
+    let want = format!("\u{1b}[2K{{\"text\":\"key {HIDDEN}, token {HIDDEN}\\u001b\"}}\r\n");
+    assert_eq!(raw_log_line(line.as_bytes(), &secrets()), want.as_bytes());
+    let not_text: &[u8] = b"{\"type\":\"system\"}\xff\xfe\n";
+    assert_eq!(raw_log_line(not_text, &secrets()), not_text);
+    assert_eq!(raw_log_line(b"", &secrets()), b"");
 }

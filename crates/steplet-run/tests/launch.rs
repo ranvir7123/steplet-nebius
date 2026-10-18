@@ -71,7 +71,7 @@ fn start(
     let mut req = request(seconds);
     req.task_text = task.into();
     prepare(&req, &paths, &gate).unwrap();
-    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}"))).unwrap();
+    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}")), &[]).unwrap();
     (handle, paths, host, model)
 }
 
@@ -81,13 +81,13 @@ fn launch_refuses_values_it_would_misread() {
     let paths = RunPaths::new("{00000000-0000-0000-0000-000000000000}", "t7x").unwrap();
     let logs = std::env::temp_dir().join("steplet-test-t7x-logs");
     for url in ["http://example.com:1", "http://127.0.0.1", "http://127.0.0.1:1/x", "https://127.0.0.1:443", "-x"] {
-        let got = launch(&request(60), &paths, &logs, Some(url));
+        let got = launch(&request(60), &paths, &logs, Some(url), &[]);
         assert!(matches!(got, Err(LaunchError::Refused(_))), "{url}");
     }
-    assert!(matches!(launch(&request(0), &paths, &logs, None), Err(LaunchError::Refused(_))), "no time limit");
+    assert!(matches!(launch(&request(0), &paths, &logs, None, &[]), Err(LaunchError::Refused(_))), "no time limit");
     let mut no_turns = request(60);
     no_turns.max_turns = 0;
-    assert!(matches!(launch(&no_turns, &paths, &logs, None), Err(LaunchError::Refused(_))), "no turns");
+    assert!(matches!(launch(&no_turns, &paths, &logs, None, &[]), Err(LaunchError::Refused(_))), "no turns");
 }
 
 #[test]

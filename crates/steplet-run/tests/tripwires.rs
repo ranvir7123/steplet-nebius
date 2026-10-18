@@ -12,7 +12,7 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Asked, BACKSTOP, Check, Event, GateAnswer, ReportCommand, RunOutcome, RunPaths, RunRequest, RunSetup,
+    ApiKey, Asked, BACKSTOP, Check, Event, GateAnswer, Live, ReportCommand, RunOutcome, RunPaths, RunRequest, RunSetup,
     Tripwire, decide, discard, launch, prepare, run, watch_run,
 };
 use support::{MADE_UP_KEY, logs_dir, scripted_model, serve_gate};
@@ -65,7 +65,7 @@ fn which_actions_ask_the_gate() {
     let _model = scripted_model(&distro, "t9m", &script.to_string(), 47930);
     let req = request();
     prepare(&req, &paths, &link).unwrap();
-    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47930")).unwrap();
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47930"), &[]).unwrap();
     let start = Instant::now();
     let mut events = Vec::new();
     while start.elapsed() < Duration::from_secs(150) {
@@ -224,8 +224,9 @@ fn run_with_changed_settings(name: &str, port: u16, script: &Value, change: &str
     rewrite_settings(&paths, change);
     println!("--- the run's settings now say: {}", support::run(&distro, "root", &["/usr/bin/cat", paths.settings()]));
     let start = Instant::now();
-    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}"))).unwrap();
-    let outcome = watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP);
+    let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}")), &[]).unwrap();
+    let outcome =
+        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let took = start.elapsed();
     discard(&paths).unwrap();
     (outcome, took)

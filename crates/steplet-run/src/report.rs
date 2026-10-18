@@ -9,9 +9,10 @@
 //! - the agent's words are shown only as `agent_says` (F47);
 //! - every text field keeps only characters that show (T5b), with the receiver's key and the run's token hidden (F48).
 
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use steplet_core::display::{is_invisible, is_space_like};
 
 use crate::gate::Asked;
@@ -36,6 +37,8 @@ pub struct Report {
     pub completed: bool,
     /// Why Steplet stopped the run, if a tripwire did (D3, D8, row 38).
     pub stopped_by: Option<Tripwire>,
+    /// The receiver pressed Stop (phase 4): the run was stopped as at a tripwire, and its folders were removed.
+    pub stopped_by_you: bool,
     /// Every tool call the agent made, in order.
     pub commands: Vec<ReportCommand>,
     /// Everything the gate refused, with Steplet's reason.
@@ -133,6 +136,7 @@ pub fn build_report(outcome: &RunOutcome, changed: Option<&[String]>, trust: Tru
     Report {
         completed,
         stopped_by: outcome.stopped_by.as_ref().map(|t| scrub.tripwire(t)),
+        stopped_by_you: outcome.stopped_by_you,
         commands: commands(outcome, &scrub),
         refused: refused(outcome, &scrub),
         models: models(&outcome.events, &scrub),
@@ -201,6 +205,56 @@ impl Scrubber {
         self.secrets.iter().fold(shown(text), |text, secret| text.replace(secret.as_str(), HIDDEN))
     }
 
+    /// `e` with every text in it cleaned as `text` cleans it, for the live log (phase 4 Task 3): the screen sees
+    /// what the report would show.
+    pub(crate) fn event(&self, e: &Event) -> Event {
+        let t = |text: &str| self.text(text);
+        match e {
+            Event::Started { model, tools, gate_connected } => Event::Started {
+                model: t(model),
+                tools: tools.iter().map(|x| t(x)).collect(),
+                gate_connected: *gate_connected,
+            },
+            Event::AgentText(text) => Event::AgentText(t(text)),
+            Event::ToolUse { id, name, input } => Event::ToolUse { id: t(id), name: t(name), input: self.value(input) },
+            Event::ToolResult { id, is_error, text, plain_end } => {
+                Event::ToolResult { id: t(id), is_error: *is_error, text: t(text), plain_end: *plain_end }
+            }
+            Event::HookEvent { name } => Event::HookEvent { name: t(name) },
+            Event::ModelSwitch { from, to, category, explanation } => Event::ModelSwitch {
+                from: t(from),
+                to: to.as_deref().map(t),
+                category: t(category),
+                explanation: t(explanation),
+            },
+            Event::Result { subtype, is_error, stop_reason, models, text } => Event::Result {
+                subtype: t(subtype),
+                is_error: *is_error,
+                stop_reason: t(stop_reason),
+                models: models.iter().map(|m| t(m)).collect(),
+                text: t(text),
+            },
+            Event::SkippedGate { id, tool, what, harmless } => {
+                Event::SkippedGate { id: t(id), tool: t(tool), what: t(what), harmless: *harmless }
+            }
+            Event::Stderr(text) => Event::Stderr(t(text)),
+            Event::Unreadable(text) => Event::Unreadable(t(text)),
+            Event::Other(text) => Event::Other(t(text)),
+        }
+    }
+
+    /// A JSON value with every string in it, keys included, cleaned.
+    pub(crate) fn value(&self, v: &Value) -> Value {
+        match v {
+            Value::String(s) => Value::String(self.text(s)),
+            Value::Array(items) => Value::Array(items.iter().map(|x| self.value(x)).collect()),
+            Value::Object(fields) => {
+                Value::Object(fields.iter().map(|(k, x)| (self.text(k), self.value(x))).collect::<Map<_, _>>())
+            }
+            other => other.clone(),
+        }
+    }
+
     fn tripwire(&self, t: &Tripwire) -> Tripwire {
         match t {
             Tripwire::Hook(name) => Tripwire::Hook(self.text(name)),
@@ -208,6 +262,27 @@ impl Scrubber {
             Tripwire::SkippedGate(what) => Tripwire::SkippedGate(self.text(what)),
         }
     }
+}
+
+/// One line of a raw log Steplet keeps on Windows (`<run>.jsonl`, `<run>.stderr.txt`), as it is written: each secret
+/// (the key, the run's token) hidden, every other byte exactly as Claude Code wrote it (J6 A).
+pub fn raw_log_line(line: &[u8], secrets: &[&str]) -> Vec<u8> {
+    let mut secrets: Vec<&[u8]> = secrets.iter().map(|s| s.as_bytes()).filter(|s| !s.is_empty()).collect();
+    secrets.sort_by_key(|s| Reverse(s.len()));
+    let mut out = Vec::with_capacity(line.len());
+    let mut rest = line;
+    'bytes: while let Some((&first, after)) = rest.split_first() {
+        for secret in &secrets {
+            if let Some(after_secret) = rest.strip_prefix(*secret) {
+                out.extend_from_slice(HIDDEN.as_bytes());
+                rest = after_secret;
+                continue 'bytes;
+            }
+        }
+        out.push(first);
+        rest = after;
+    }
+    out
 }
 
 /// Only the characters of `text` that show (T5b).
