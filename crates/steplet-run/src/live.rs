@@ -35,7 +35,9 @@ pub enum Progress {
     Event(Event),
 }
 
-/// Who follows a run as it goes: where its progress goes, and the Stop button.
+/// Who follows a run as it goes: where its progress goes, and the Stop button. `on_progress` is called on the run's
+/// own threads, the one that watches the agent among them, so it must only hand the progress on (to a queue, an
+/// event) and return: while it runs, Steplet does not look at the Stop button or the time limit.
 pub struct Live {
     pub on_progress: Box<dyn Fn(Progress) + Send + Sync>,
     pub stop: StopSignal,

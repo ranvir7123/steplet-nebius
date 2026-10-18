@@ -565,3 +565,69 @@ clippy exit 0
 - A live run whose raw log really held the key or the token: no run prints them (H2), so hiding them is shown by the unit test only.
 - Two Steplet windows in two different Windows sign-in sessions: the lock is per session (`Local\`), as the plan chose; Steplet's Linux is shared by them.
 - A program of the same Windows account that makes `Local\Steplet-run` itself would keep every run from starting. It could not harm a run, only block one.
+
+### The code review, and what changed
+
+A code-reviewer agent read the diff (read-only). No critical findings; three important ones, all fixed, each with a test that failed first:
+
+1. **A tripwire that came after your Stop took the stop from you.** When the receiver pressed Stop and an event already on its way then set off a tripwire, the report said Steplet's tripwire stopped the run. Now a tripwire after the receiver's Stop does not count as the reason; the call that set it off still shows as what it was (here a write that skipped the checker, which is not marked as cut short by the stop). Test: `a_tripwire_after_your_stop_does_not_take_the_stop_from_you`. To show this, the stand-in agent of `tests/watch_run.rs` now hands over the events it had not yet given out when it is finished, as the real one does.
+2. **Stop did nothing while the working copy was being prepared,** which can take minutes for a large repository. Now a second thread looks at the Stop button while preparing runs and, once it is pressed, ends every program of the `steplet` account (the clone and the checkout run as that account). Preparing then fails, which counts as the receiver's Stop, not as a fault; the agent never starts, and Steplet does not try to list changes in a copy the agent never touched. Test: `a_stop_while_preparing_ends_the_preparing` (anthropics/claude-code-action, Stop pressed one second in).
+3. **The live feed's documentation** now says that `on_progress` must only hand the progress on and return: it runs on the thread that watches the agent, so a slow screen would delay the Stop button and the time limit.
+
+Also added: `run_live_is_refused_while_another_run_holds_the_lock` (no Linux). It passed at once, as it should: it guards what Task 3 already did.
+
+The tests first:
+
+```
+> cargo test -p steplet-run --offline --test watch_run --test lock
+test run_live_is_refused_while_another_run_holds_the_lock ... ok
+test a_tripwire_after_your_stop_does_not_take_the_stop_from_you ... FAILED
+thread 'a_tripwire_after_your_stop_does_not_take_the_stop_from_you' (49976) panicked at crates\steplet-run\tests\watch_run.rs:358:5:
+  left: Some(SkippedGate("Write /work/r1/repo/x.txt"))
+ right: None
+test result: FAILED. 9 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+> cargo test -p steplet-run --offline --test contain a_stop_while_preparing -- --ignored --nocapture
+--- 6.2 s; sent to the screen: [Prepared(Prepared { commit: "34968b5981d5d170904281aa3df6f3c0d4a28855", removed: [".claude"] })]
+--- left: "/var/lib/steplet/runs:\n\n/work:"
+thread 'a_stop_while_preparing_ends_the_preparing' (48592) panicked at crates\steplet-run\tests\contain.rs:561:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 6.46s
+```
+
+After the fixes:
+
+```
+> cargo test -p steplet-run --offline --test watch_run --test lock
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+> cargo test -p steplet-run --offline --test contain a_stop_while_preparing -- --ignored --nocapture
+--- 1.8 s; sent to the screen: []
+--- left: "/var/lib/steplet/runs:\n\n/work:"
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 2.04s
+```
+
+Minor points, left as they are and named here:
+- The raw logs hide the key and the token only where they appear as the same bytes. A task that wrote the key in a disguised form (with an escape or a zero byte inside it) would get past that. The screen and the report are not affected: they clean the text before they look for secrets.
+- If another Windows account in the same sign-in session held `Local\Steplet-run`, the message would be "Windows would not make the lock", not "another run". Two sign-in sessions of the same account could each run one file at the same time; both use the one Steplet Linux.
+- A Stop pressed in the same moment the agent ends on its own is reported as the receiver's stop.
+
+The whole runner after the fixes. The first plain run had one failure, in a test, not in Steplet: the two lock tests ran at the same time in one test program, so each found the other holding the computer-wide lock (`no run holds the lock: Busy`). They now take turns, as every test file that runs Steplet does; three runs in a row passed.
+
+```
+> cargo test -p steplet-run --offline
+(16 summary lines, every one ok: 86 passed, 0 failed, 30 ignored; counted from the summary lines)
+> cargo test -p steplet-run --offline -- --ignored --test-threads=1
+(16 summary lines, every one ok: 30 passed, 0 failed)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.10s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.46s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 28.26s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 56.32s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 21.77s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 21.94s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.27s
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+```
+
+(The Linux-only run's non-empty summary lines, in order: ask_live (Task 4's measurement, already in the working folder), contain, gate, launch, prepare, report, tripwires.)

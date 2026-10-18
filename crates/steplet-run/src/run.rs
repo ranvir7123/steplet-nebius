@@ -5,6 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,9 +19,10 @@ use crate::launch::{LaunchError, RunHandle, launch};
 use crate::live::{Live, Progress};
 use crate::lock::RunLock;
 use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
-use crate::report::{Report, Scrubber, build_report, read_trust};
+use crate::report::{Report, Scrubber, Trust, build_report, read_trust};
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
 use crate::watch::{Tripwire, Watcher};
+use crate::wsl;
 
 /// The name Steplet gives its own Linux (Task 1); Windows names the gate program by it.
 const DISTRIBUTION: &str = "steplet";
@@ -29,6 +31,8 @@ const DISTRIBUTION: &str = "steplet";
 pub const BACKSTOP: Duration = Duration::from_secs(30);
 /// How often the watcher looks whether the agent has ended, while no event comes.
 const POLL: Duration = Duration::from_millis(200);
+/// How long Steplet waits at most for one call into its Linux that ends what preparing started.
+const QUICK_CALL: Duration = Duration::from_secs(10);
 
 /// What a run needs besides the request, its paths and the checker.
 #[derive(Clone, Debug)]
@@ -113,19 +117,21 @@ pub fn run_live(
     let checker = policy.clone();
     let program = gate_on_windows(DISTRIBUTION, &setup.gate_exe);
     let gate = serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r)).map_err(RunError::Gate)?;
-    let prepared = prepare(req, paths, &link).map_err(RunError::Prepare);
-    let started = prepared.and_then(|prepared| {
-        (live.on_progress)(Progress::Prepared(prepared));
-        if live.stop.is_set() {
-            return Ok(None);
+    let prepared = prepare_until_stopped(req, paths, &link, &live);
+    let started = match prepared {
+        // A Stop while preparing ends what preparing started, so preparing fails: the receiver's Stop, not a fault.
+        _ if live.stop.is_set() => Ok(None),
+        Ok(prepared) => {
+            (live.on_progress)(Progress::Prepared(prepared));
+            launch(req, paths, &setup.logs, setup.model_url.as_deref(), &secrets).map(Some).map_err(RunError::Launch)
         }
-        launch(req, paths, &setup.logs, setup.model_url.as_deref(), &secrets).map(Some).map_err(RunError::Launch)
-    });
+        Err(e) => Err(RunError::Prepare(e)),
+    };
     let outcome = match started {
         Ok(Some(handle)) => {
             watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP, &live, &secrets)
         }
-        // The receiver pressed Stop while the working copy was being prepared: the agent never started.
+        // The receiver pressed Stop before the agent started: nothing of the task ran.
         Ok(None) => RunOutcome { stopped_by_you: true, stopped_at: Some(0), ..RunOutcome::new(gate.into_requests()) },
         Err(e) => {
             // Whatever was made goes; the next run's preparation would clear it anyway.
@@ -133,20 +139,53 @@ pub fn run_live(
             return Err(e);
         }
     };
-    // Steplet's own looks after the run. They come after the run, so they do not change whether it completed.
+    let agent_ran = !outcome.events.is_empty();
+    // Steplet's own looks after the run. They come after the run, so they do not change whether it completed. When
+    // the agent never started there is nothing to look at: the copy is the one Steplet made, or not even that.
     let mut after = Vec::new();
-    let changed =
-        changes(paths).map_err(|e| after.push(format!("Steplet could not list the files the run changed: {e:?}"))).ok();
-    let config = run_config(paths)
-        .map_err(|e| after.push(format!("Steplet could not read the run's config for the trust check: {e:?}")))
-        .ok();
+    let (mut changed, mut config) = (None, None);
+    if agent_ran {
+        changed = changes(paths)
+            .map_err(|e| after.push(format!("Steplet could not list the files the run changed: {e:?}")))
+            .ok();
+        config = run_config(paths)
+            .map_err(|e| after.push(format!("Steplet could not read the run's config for the trust check: {e:?}")))
+            .ok();
+    }
     if let Err(e) = discard(paths) {
         after.push(format!("the run's folders could not be removed: {e:?}"));
     }
-    let mut report = build_report(&outcome, changed.as_deref(), read_trust(config.as_deref()), &secrets);
+    let trust = if agent_ran { read_trust(config.as_deref()) } else { Trust::Unknown };
+    let mut report = build_report(&outcome, changed.as_deref(), trust, &secrets);
     let scrub = Scrubber::new(&secrets);
     report.faults.extend(after.iter().map(|fault| scrub.text(fault)));
     Ok(report)
+}
+
+/// `prepare`, which can take minutes for a large repository, ended at once by the receiver's Stop: while it runs, a
+/// second thread looks at the Stop button and, once it is pressed, ends every program of the steplet account (the
+/// clone and the checkout run as that account), again and again until preparing has failed.
+fn prepare_until_stopped(
+    req: &RunRequest,
+    paths: &RunPaths,
+    link: &GateLink,
+    live: &Live,
+) -> Result<crate::prepare::Prepared, PrepareError> {
+    let done = AtomicBool::new(false);
+    thread::scope(|s| {
+        s.spawn(|| {
+            while !done.load(Ordering::SeqCst) {
+                if live.stop.is_set() {
+                    let end = ["/usr/bin/pkill", "-KILL", "-u", "steplet"];
+                    let _ = wsl::run_within(paths.distro_id(), "root", &end, b"", QUICK_CALL);
+                }
+                thread::sleep(POLL);
+            }
+        });
+        let prepared = prepare(req, paths, link);
+        done.store(true, Ordering::SeqCst);
+        prepared
+    })
 }
 
 /// A running agent, as `watch_run` follows it. `RunHandle` is the real one; the tests also use stand-ins.
@@ -332,7 +371,8 @@ impl RunOutcome {
         }
     }
 
-    /// Adds `event` and the watcher's record of it, and shows both. True when it set off the run's first tripwire.
+    /// Adds `event` and the watcher's record of it, and shows both. True when it set off the run's first tripwire;
+    /// after the receiver's Stop none counts, since the run was already being stopped for them.
     fn judge(&mut self, watcher: &mut Watcher, event: Event, gate: &GateService, show: &dyn Fn(&Event)) -> bool {
         let verdict = watcher.see(&event, &|id| gate.answered(id));
         show(&event);
@@ -342,7 +382,7 @@ impl RunOutcome {
         self.events.push(event);
         self.events.extend(verdict.skipped);
         match verdict.stop {
-            Some(why) if self.stopped_by.is_none() => {
+            Some(why) if self.stopped_by.is_none() && !self.stopped_by_you => {
                 self.stopped_by = Some(why);
                 self.stopped_at.get_or_insert(self.events.len());
                 true

@@ -112,7 +112,8 @@ impl RunningAgent for Stand {
         while self.wait_in_finish && !self.has_ended() {
             thread::sleep(Duration::from_millis(50));
         }
-        (Ok(Some(124)), Vec::new())
+        // What it had not yet handed out, as the real one hands over the events read after the end.
+        (Ok(Some(124)), self.script.into_iter().collect())
     }
 }
 
@@ -334,4 +335,28 @@ fn stop_signal_stops_the_run_and_the_report_says_you_stopped_it() {
     let report = build_report(&outcome, None, Trust::Unknown, &[]);
     assert!(report.stopped_by_you, "{report:?}");
     assert!(!report.completed);
+}
+
+/// Task 3's review: the receiver presses Stop, and an event already on its way then sets off a tripwire (here a write
+/// that did not ask the gate). The run was stopped by the receiver, not by the tripwire, so the report says so; the
+/// write still shows as what it is, a call that skipped the checker, and not as cut short by the stop.
+#[test]
+fn a_tripwire_after_your_stop_does_not_take_the_stop_from_you() {
+    let write = json!({"file_path": "/work/r1/repo/x.txt", "content": "made up"});
+    let script = VecDeque::from([
+        Event::Stderr("first".into()),
+        Event::ToolUse { id: "u9".into(), name: "Write".into(), input: write },
+        Event::ToolResult { id: "u9".into(), is_error: false, text: "written".into(), plain_end: true },
+    ]);
+    let stand = Stand { script, ..Stand::default() };
+    let stop = StopSignal::new();
+    let pressed = stop.clone();
+    let live = Live { on_progress: Box::new(move |_| pressed.stop()), stop };
+    let (outcome, notes) = watch_live(stand, Duration::from_secs(60), live, &[]);
+    assert_eq!(notes, ["stop", "finish, ended: true"]);
+    assert!(outcome.stopped_by_you);
+    assert_eq!(outcome.stopped_by, None, "the stop was the receiver's");
+    let report = build_report(&outcome, None, Trust::Unknown, &[]);
+    let w = &report.commands[0];
+    assert_eq!((&w.check, w.after_stop), (&steplet_run::Check::NotAsked { harmless: false }, false));
 }

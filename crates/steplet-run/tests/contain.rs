@@ -14,7 +14,7 @@
 
 mod support;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
     ApiKey, BACKSTOP, Check, Live, Report, RunPaths, RunRequest, RunSetup, Trust, build_report, changes, decide,
-    discard, launch, prepare, read_trust, run, run_config, watch_run, wsl,
+    discard, launch, prepare, read_trust, run, run_config, run_live, watch_run, wsl,
 };
 use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model, serve_gate};
 
@@ -521,4 +521,46 @@ fn a_web_fetch_is_allowed_only_to_a_site_the_file_declares() {
     assert_eq!(r.refused.len(), 1, "{:?}", r.refused);
     assert!(r.refused[0].contains("the file does not ask for this site"), "{:?}", r.refused);
     assert_eq!(r.stopped_by, None);
+}
+
+/// Task 3's review: Stop works while the working copy is still being prepared, which can take minutes for a large
+/// repository: what the preparing started is ended, the agent never starts, and the report says the receiver stopped
+/// it. The repository here (anthropics/claude-code-action) takes a few seconds to fetch, and Stop is pressed one
+/// second in, so a preparation that went on to the end would have sent "prepared".
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_stop_while_preparing_ends_the_preparing() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "p4t3p").unwrap();
+    let mut req = request("");
+    (req.repo_url, req.commit) = (
+        "https://github.com/anthropics/claude-code-action.git".into(),
+        "34968b5981d5d170904281aa3df6f3c0d4a28855".into(),
+    );
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let keep = seen.clone();
+    let stop = steplet_run::StopSignal::new();
+    let live = Arc::new(Live { on_progress: Box::new(move |p| keep.lock().unwrap().push(p)), stop: stop.clone() });
+    let pressing = stop.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(1));
+        pressing.stop();
+    });
+    let start = Instant::now();
+    let r = run_live(&req, &paths, &policy, &setup(&distro, 47954), live).unwrap();
+    let took = start.elapsed();
+    let left =
+        root_sh(&distro, "ls -A /work /var/lib/steplet/runs; pgrep -u steplet > /dev/null && echo running || true");
+    println!(
+        "--- {:.1} s; sent to the screen: {:?}\n--- the report:\n{r:#?}\n--- left: {left:?}",
+        took.as_secs_f64(),
+        seen.lock().unwrap()
+    );
+    assert!(seen.lock().unwrap().is_empty(), "the preparing was ended before it was done");
+    assert!(r.stopped_by_you && !r.completed, "{r:?}");
+    assert!(r.commands.is_empty(), "the agent never started");
+    assert_eq!(r.faults, Vec::<String>::new());
+    assert_eq!(left, "/var/lib/steplet/runs:\n\n/work:", "nothing is left, and nothing of the steplet account runs");
 }
