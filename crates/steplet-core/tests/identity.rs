@@ -54,6 +54,32 @@ fn a_known_sender_unsigned_is_red() {
         key_changed(f).detail.as_deref(),
         Some("Steplet knows this sender name with the key SHA256:made-up-key-of-ana-lee. This file is not signed.")
     );
+    // Task 7's review: other capitals or spaces are the same name here too.
+    for written in ["ana lee", "ANA\u{a0}LEE"] {
+        let (id, f) = identity(written, &SigStatus::Unsigned, &[pin("Ana Lee", ANA, 4)]);
+        assert_eq!(id, Identity::Unsigned, "{written:?}");
+        key_changed(f);
+    }
+}
+
+/// Task 7's review: what the comparison does not join. Such a name is another name, so it gets "sender unknown",
+/// never "the same key as before".
+#[test]
+fn only_capitals_and_spaces_are_ignored() {
+    let pins = [pin("Straße", ANA, 1), pin("José", ANA, 1)];
+    for other in ["STRASSE", "Jose\u{301}"] {
+        assert_eq!(identity(other, &signed(OTHER), &pins), (Identity::NewKey { key: OTHER.into() }, None), "{other:?}");
+    }
+}
+
+/// Task 7's review: an empty name matches no pin. No file can have one (the header reader refuses it), so only a
+/// damaged pins file could hold one; it must not make every nameless call match.
+#[test]
+fn an_empty_name_matches_no_pin() {
+    let pins = [pin("", ANA, 1), pin("   ", ANA, 1)];
+    assert_eq!(identity("", &SigStatus::Unsigned, &pins), (Identity::Unsigned, None));
+    assert_eq!(identity(" ", &signed(ANA), &pins).1, None);
+    assert_ne!(identity(" ", &signed(ANA), &pins).0, Identity::SameKey { key: ANA.into(), runs: 1 });
 }
 
 #[test]

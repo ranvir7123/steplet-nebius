@@ -1620,7 +1620,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 +| `id.key-changed` | red | This sender name was used before with another key | Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type the sentence to run it; Steplet then remembers the new key. |
 ```
 
-The ruling on names, checked: with names compared letter for letter (planted, then undone), two tests fail:
+The ruling on names, checked: with `comparable` changed to return the name as it is (planted, then undone), `cargo test -p steplet-core --offline --test identity` fails two tests:
 
 ```
 test a_known_sender_with_another_key_is_red ... FAILED
@@ -1671,6 +1671,49 @@ clippy exit 0
 
 ### What this task did not verify
 
-- **Names that only look alike,** such as "Ana Lee" written with a Cyrillic "а": a different name to Steplet, so the file shows "signature valid, sender unknown" and no red finding. Trust on first use cannot tell such names apart; the identity line is the honest status.
+- **Names that only look alike,** such as "Ana Lee" written with a Cyrillic "а", and names written alike in other ways (see the review below: "STRASSE" for "Straße", an accent typed as a second character): a different name to Steplet, so the file shows "signature valid, sender unknown" and no red finding. Trust on first use cannot tell such names apart; the identity line is the honest status.
 - **The pins themselves:** where they are kept, when they are written (only when Run is pressed, S5), and a damaged pins file are Task 10.
 - **The colour on screen:** the key-changed finding is about this computer ("On this computer" on the preview), and it must still make the preview red (row 22). That is the app's job, Task 10.
+
+### The code review, and what changed
+
+A code-reviewer agent read Task 7's diff (read-only) and ran the identity, rules and rules-doc tests (7, 12 and 1 passed). It found nothing critical, and found that the key-changed detail never holds file text. Its points:
+
+1. **Important, fixed in words and tests: the comment claimed more than the code does.** Only capitals and runs of spaces are ignored (Rust's lower case, not full Unicode case folding, and no joining of an accent typed as a second character). "STRASSE" against "Straße", or "José" written with a separate accent, is another name: "sender unknown", no red finding, never "the same key as before". The comment and "What this task did not verify" now say so. (An invisible character in a sender name already blocks the file, `block.invisible-in-field`.) Test: `only_capitals_and_spaces_are_ignored`. A full Unicode comparison would need a library in the core, which is not in the cache; not done.
+2. **Important, fixed in words: the names in `KeyKnownAs` are file text** (from earlier files), so the screens must show them as file text. The comment says so; Task 10 draws them.
+3. **Important, fixed: an empty name matched every empty-named pin.** No file can have an empty sender (the header reader refuses it), but a damaged pins file could hold one. Now an empty name matches no pin. Test: `an_empty_name_matches_no_pin`.
+4. Fixed with point 1: the unsigned case is now also checked with other capitals and a no-break space (`a_known_sender_unsigned_is_red`).
+
+Minor points left, for Task 10, which writes the pins: two spellings of one name with the same key are both listed in `KeyKnownAs`; two pins for one name with different keys make either key "the same key" (S5 keeps one pin per name, so the pins file must never hold two); the shared rule checks (unique ids, plain text) run over `RULES` only, and `MACHINE_RULES` is checked by its own test.
+
+```
+> cargo test -p steplet-core --offline --test identity     (before the fix)
+test an_empty_name_matches_no_pin ... FAILED
+thread 'an_empty_name_matches_no_pin' (4112) panicked at crates\steplet-core\tests\identity.rs:80:5:
+  left: (Unsigned, Some(Finding { rule: Rule { id: "id.key-changed", severity: Red, title: "This sender name was used before with another key", advice: "Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type the sentence to run it; Steplet then remembers the new key." }, line: None, detail: Some("Steplet knows this sender name with the key SHA256:made-up-key-of-ana-lee. This file is not signed."), quote: Some("") }))
+ right: (Unsigned, None)
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-core --offline --test identity     (after)
+test a_new_sender_is_new_key ... ok
+test a_known_key_under_another_name_is_said_but_not_a_finding ... ok
+test a_known_sender_unsigned_is_red ... ok
+test an_invalid_signature_gives_no_second_finding ... ok
+test the_machine_rule_is_not_in_rules ... ok
+test only_capitals_and_spaces_are_ignored ... ok
+test a_known_sender_with_another_key_is_red ... ok
+test an_empty_name_matches_no_pin ... ok
+test the_same_key_gives_the_same_key_line_and_no_finding ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+identity exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo test -p steplet-core --offline
+26 summary lines: 130 passed, 0 failed, 0 ignored
+core exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+> cargo build -p steplet-wasm --target wasm32-unknown-unknown --release --offline
+wasm exit 0
+```
+
+(`only_capitals_and_spaces_are_ignored` and the new unsigned cases passed before the fix too: they pin down what the code already did, now said in its comment. The "26 summary lines" line is counted from the run's own summary lines.)

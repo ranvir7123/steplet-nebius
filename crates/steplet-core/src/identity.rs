@@ -21,7 +21,8 @@ pub enum Identity {
     NewKey { key: String },
     /// Signed with the same key as the files from this sender that were run here before (`runs` of them).
     SameKey { key: String, runs: u32 },
-    /// The key is known here, but only under other sender names (`names`, each as it was written).
+    /// The key is known here, but only under other sender names (`names`, each as it was written). The names are text
+    /// from earlier files: screens show them as file text (display segments), never as Steplet's own words.
     KeyKnownAs { key: String, names: Vec<String> },
 }
 
@@ -36,10 +37,13 @@ pub struct Pin {
 
 /// The identity line for a file from `sender` with the signature `sig`, and the red finding `id.key-changed` when
 /// `sender` is pinned to another key, or the file is unsigned under a pinned sender name (S6). Sender names are
-/// compared ignoring capitals and spaces, so writing a known name differently does not dodge the finding.
+/// compared ignoring capitals and runs of spaces only, so "ana  lee" cannot dodge the finding for "Ana Lee". Any other
+/// way of writing a name alike ("STRASSE" for "Straße", an accent typed as a second character, letters of another
+/// alphabet) is another name: the file then shows "sender unknown", never "the same key as before". An empty name
+/// matches no pin.
 pub fn identity(sender: &str, sig: &SigStatus, pins: &[Pin]) -> (Identity, Option<Finding>) {
     let name = comparable(sender);
-    let known: Vec<&Pin> = pins.iter().filter(|p| comparable(&p.sender) == name).collect();
+    let known: Vec<&Pin> = pins.iter().filter(|p| !name.is_empty() && comparable(&p.sender) == name).collect();
     match sig {
         SigStatus::Invalid { .. } => (Identity::Invalid, None),
         SigStatus::Unsigned => (Identity::Unsigned, key_changed(sender, &known, None)),
