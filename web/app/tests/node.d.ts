@@ -1,0 +1,5 @@
+// The few Node functions the screen tests use, declared here because @types/node is not in the npm cache
+// (a download would need the owner's yes, Z6). Playwright runs these tests in Node, where they exist.
+declare module "node:url" {
+  export function fileURLToPath(url: string | URL): string;
+}

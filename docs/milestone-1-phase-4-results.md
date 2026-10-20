@@ -1717,3 +1717,363 @@ wasm exit 0
 ```
 
 (`only_capitals_and_spaces_are_ignored` and the new unsigned cases passed before the fix too: they pin down what the code already did, now said in its comment. The "26 summary lines" line is counted from the run's own summary lines.)
+
+## Task 8: the app's shell
+
+Steplet now has a desktop window. It is a Tauri app (`crates/steplet-app`, the program `steplet.exe`) that shows the screens from `web/`, written in Svelte. So far it shows only the empty Open screen; opening files comes with Task 10. What is fixed from the start: the window is always titled `Steplet`, the page may load nothing from outside the app (its **page rules**, the content security policy), it may only listen for Steplet's own events and call Steplet's own commands, it can never go to another address or open a second window, and it sends nothing to the network. Two check scripts keep the screens honest: one refuses every way of drawing text as HTML, one checks that every pair of colours is readable.
+
+### Changes from the plan, recorded here
+
+- **Found and closed: trying to leave the app's page sent a request to the internet.** The plan relies on Tauri's navigation check to keep the window on the app's own page. Measured on the real window: the page stays where it is, but WebView2 had already sent the request (example.com answered `200`) before the check cancelled it. Every request the web view makes now goes to a closed port on this computer instead (`--proxy-server=http://127.0.0.1:47`, with no exception for local addresses), so nothing can leave even where the page rules and the navigation check come too late. The app's own page and its channel to Rust never use the network, and the test shows both still work. See "Found while measuring" below.
+- **Z2, the download for writing the screens' data types (J7 A):** your yes was recorded by the plan session on 20 Oct and confirmed again here on 21 Oct before the download. Exactly three packages were downloaded (`ts-rs` 12.0.1, `ts-rs-macros` 12.0.1, `termcolor` 1.4.1); everything else came from the caches, and cargo went back to `--offline` straight after.
+- **Six packages that came with Tauri were under 14 days old today** (`toml` and five of its parts, published 8 and 9 Oct). Each was moved to an older version already in the cache (`cargo update --offline --precise`), as the plan says. The age script counts age from its own fixed date, 11 Oct 2026, so its "under 14 days" lines are counted again from today's date by a small reader (`ages_today.py`, in the session's scratch folder); both outputs are below.
+- **The page must be built before Rust.** The app carries its page inside the program, so `cargo build`, `cargo test` and `cargo clippy` of `steplet-app` need `web/dist` first: `npm --prefix web run build`. Without it, Tauri stops with "The `frontendDist` configuration is set to `"../../web/dist"` but this path doesn't exist". Every later check runs the page build first.
+- **The browser's developer tools are off** in normal builds and on only in the test build (`e2e`), which already opens the debugging port. Not in the plan; it removes a way into the page that no receiver needs.
+- **The app's commands are listed once,** in `src/commands.rs`. `build.rs` hands the same list to Tauri, so Tauri checks every call from the page against `capabilities/main.json`; `tests/shell.rs` checks that the file grants exactly the two event permissions and one line per listed command. The list is empty until Task 10.
+- **The app's identifier is `dev.steplet.desktop`.** WebView2 keeps its own data (its cache, for example) in `%LOCALAPPDATA%\dev.steplet.desktop`. The plan names no identifier.
+- **`web/package-lock.json` is phase 0's S9 lock file** with only its name changed (`s9-check` to `steplet-web`; checked with `diff`), so `npm ci --offline` installs exactly what S9 tested.
+- **`@types/node` is not in the npm cache,** so instead of a download (Z6) the screen tests declare the one Node function they use, in `web/app/tests/node.d.ts`.
+- **The contrast check also checks focus rings and control borders at 3 : 1** (WCAG 2.2, rule 1.4.11), and lists each pair's ratio with `--list`. **The raw-HTML check refuses four more ways** of turning text into HTML besides the plan's five: `createContextualFragment`, `setHTMLUnsafe`, `parseHTMLUnsafe` and `srcdoc`.
+- **`web/shared/base.css`** (fonts, the 4-pixel spacing scale, the focus ring, buttons and links) is a file the plan did not list.
+- **A rule for later screens:** the page rules (`style-src 'self'`) also block a `style="…"` written into a screen's markup, so screens set styles only through classes.
+- Real-window tests are the files named `real-*.spec.ts`, in their own Playwright project; Playwright still starts the screens' preview server, so `npm --prefix web run build:screens` comes first. `svelte-check` runs with `--fail-on-warnings`, so a warning fails `npm run check`.
+
+### Step 1: installing from the caches
+
+```
+> npm --prefix web ci --offline --no-audit --no-fund
+added 53 packages in 3s
+> diff <(tr -d '\r' < spikes/s9-check/package-lock.json) <(tr -d '\r' < web/package-lock.json)
+2c2
+<   "name": "s9-check",
+---
+>   "name": "steplet-web",
+7c7
+<       "name": "s9-check",
+---
+>       "name": "steplet-web",
+> cargo build -p steplet-app --offline        (empty App.svelte; the page built first)
+     Locking 331 packages to latest Rust 1.98 compatible versions
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 40s
+build exit: 0
+```
+
+The lock file gained 332 packages (Tauri's 331 and `steplet-app` itself) and lost none (compared by a small script over the old and new `[[package]]` lists: `old 115 new 447 removed [] added 332`).
+
+### Z2: the download, with your yes
+
+```
+> cargo add ts-rs@=12.0.1 --offline -p steplet-app
+error: the crate `ts-rs@=12.0.1` could not be found in registry index.
+exit: 101
+> cargo add ts-rs@=12.0.1 -p steplet-app          (online, after your yes)
+    Updating crates.io index
+      Adding ts-rs =12.0.1 to dependencies
+             Features:
+             + serde-compat
+             33 deactivated features
+    Updating crates.io index
+     Locking 3 packages to latest Rust 1.98 compatible versions
+      Adding termcolor v1.4.1
+      Adding ts-rs v12.0.1
+      Adding ts-rs-macros v12.0.1
+exit: 0
+lock: removed [] added [('termcolor', '1.4.1'), ('ts-rs', '12.0.1'), ('ts-rs-macros', '12.0.1')]
+> cargo build -p steplet-app --offline
+  attempting to make an HTTP request, but --offline was specified
+offline exit: 101
+> cargo build -p steplet-app                       (online, the one build that downloads)
+ Downloading crates ...
+  Downloaded ts-rs v12.0.1
+  Downloaded termcolor v1.4.1
+  Downloaded ts-rs-macros v12.0.1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 25.28s
+online exit: 0
+```
+
+Every cargo command after this one ran with `--offline`.
+
+### Step 2 and 3: the tests first, and seeing them fail
+
+`crates/steplet-app/tests/shell.rs` reads `tauri.conf.json` and `capabilities/main.json` and checks the fixed values of the plan (title, sizes, `dragDropEnabled` false, `withGlobalTauri` false, the exact page rules, no plugins, only the two event permissions and the app's own commands), and that a normal build opens no debugging port. Before the app had any of it:
+
+```
+> cargo test -p steplet-app --offline --test shell
+error[E0425]: cannot find value `COMMANDS` in crate `steplet_app`
+  --> crates\steplet-app\tests\shell.rs:63:61
+error[E0425]: cannot find value `COMMANDS` in crate `steplet_app`
+  --> crates\steplet-app\tests\shell.rs:67:27
+error[E0425]: cannot find function `browser_args` in crate `steplet_app`
+  --> crates\steplet-app\tests\shell.rs:75:29
+error[E0425]: cannot find function `browser_args` in crate `steplet_app`
+  --> crates\steplet-app\tests\shell.rs:92:22
+error[E0425]: cannot find function `browser_args` in crate `steplet_app`
+  --> crates\steplet-app\tests\shell.rs:94:22
+error: could not compile `steplet-app` (test "shell") due to 5 previous errors
+exit: 101
+```
+
+With those two names added (an empty command list, and wry's own browser arguments), the test ran and failed on the first setting the config did not have yet:
+
+```
+test no_debug_port_without_the_e2e_feature ... ok
+test the_browser_keeps_wrys_default_arguments ... ok
+test the_page_is_titled_steplet ... ok
+test the_window_and_security_settings_are_fixed ... FAILED
+thread 'the_window_and_security_settings_are_fixed' (52388) panicked at crates\steplet-app\tests\shell.rs:25:5:
+  left: Null
+ right: "main"
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> node web\scripts\no-raw-html.mjs --self-test
+self-test passed
+```
+
+Both check scripts refuse a planted mistake, in their self-tests and on a file planted from outside:
+
+```
+> node web/scripts/no-raw-html.mjs <scratch folder holding Planted.svelte, whose one line is <p>{@html x}</p>>
+..\..\..\..\..\..\Users\RANVIR\AppData\Local\Temp\claude\C--dev-runFile--claude-worktrees-steplet-phase4-build-88af2b\ac0cdc0b-e668-433d-856a-95a60957c963\scratchpad\planted\Planted.svelte:1: {@html
+raw HTML refused: 1 place(s)
+no-raw-html exit: 1
+> node web/scripts/contrast.mjs <a copy of tokens.css with --text-muted: #eeeeee>
+light --text-muted on --bg: 1.05 : 1 (needs 4.5)  <-- too low
+light --text-muted on --surface: 1.16 : 1 (needs 4.5)  <-- too low
+light --text-muted on --surface-sunken: 1.07 : 1 (needs 4.5)  <-- too low
+light --text-muted on --file-bg: 1.11 : 1 (needs 4.5)  <-- too low
+contrast exit: 1
+> node web/scripts/contrast.mjs --self-test
+self-test passed
+> node web/scripts/no-raw-html.mjs --self-test
+self-test passed
+```
+
+### Step 4: the shell
+
+`src/lib.rs` makes the one window from its config entry (`"create": false`, then `WebviewWindowBuilder::from_config`) and never changes its title. It refuses every navigation that is not the app's own page (`http://tauri.localhost`, checked by `is_own_page`) and every new window, and gives WebView2 its start arguments (`browser_args`): wry's own defaults (which turn off SmartScreen, among others, so no addresses go to Microsoft), the closed-port proxy (below), and, only in the `e2e` build, the debugging port. `web/app/App.svelte` shows the empty Open screen: the plan's sentence split into a heading and a line, "Open a file…" (not wired yet; Task 10), "or drop it on this window", and "Setup" at the top right. The colours are tokens in `web/shared/tokens.css`, one set for light and one for dark.
+
+Looked at in the screens build, in both themes and at both sizes (1100 × 800 and 560 × 720; those screenshots stayed in the scratch folder, since Task 14 takes the kept set): the first version stretched the dashed panel over the whole window, which read like a placeholder; it is now a centred panel, with Setup above it. After that, right as it is: the text is centred, the panel's right edge lines up with Setup's at both widths, and the dark theme reads well.
+
+### Step 5: the real window, driven through its debugging port (S13)
+
+```
+> cargo build -p steplet-app --offline --features e2e
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.36s
+> Start-Process target\debug\steplet.exe -WorkingDirectory C:\Windows\System32
+pid: 51888; running: True
+> (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:9333/json/version).Content
+{
+   "Browser": "Edg/155.0.4283.62",
+   "Protocol-Version": "1.3",
+   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0",
+   "V8-Version": "15.5.9.7",
+   "WebKit-Version": "537.36 (@aa3a7406ba8c53a83536df539f07124d73c899bd)",
+   "webSocketDebuggerUrl": "ws://127.0.0.1:9333/devtools/browser/89ecc6d8-f3d8-4f34-8699-97ff917631d3"
+}
+> netstat -ano | grep ":9333" | grep LISTEN
+  TCP    127.0.0.1:9333         0.0.0.0:0              LISTENING       38248
+> (Get-Process -Name steplet).MainWindowTitle
+title: 'Steplet'
+```
+
+Playwright attaches (`chromium.connectOverCDP`), so every later "real" screenshot can go through it; the PowerShell window capture is not needed. The port listens on 127.0.0.1 only. The real window's screenshot is `docs/screens/phase-4/real-open-empty-light.png` (this laptop is in light mode).
+
+### Found while measuring: trying to leave the app's page sent a request to the internet
+
+The second real-window test tries three ways out of the app: a `fetch` of a web address, `window.open`, and setting `location.href`. A probe (a throwaway test, since deleted) logged each one:
+
+```
+1. fetch
+  console error: Connecting to 'https://example.com/' violates the following Content Security Policy directive: "connect-src ipc: http://ipc.localhost". The action has been blocked.
+  console error: Fetch API cannot load https://example.com/. Refused to connect because it violates the document's Content Security Policy.
+  -> refused: TypeError: Failed to fetch
+2. window.open
+  -> null
+3. location.href
+  request https://example.com/ type=document nav=true
+  cdp requestWillBeSent https://example.com/
+  response https://example.com/ 200
+  cdp responseReceived https://example.com/ 200
+  failed https://example.com/: net::ERR_ABORTED
+  cdp loadingFailed net::ERR_ABORTED blocked=- canceled=true
+  -> url now http://tauri.localhost/, pages 1
+```
+
+The page rules refuse the `fetch` before any request, the new window is refused, and the page stays on the app's own page; but the navigation's request reached example.com, which answered `200`, before Tauri's navigation check cancelled it. Nothing in a file can start a navigation today (file text is drawn as plain text, and links are never clickable), but the promise is that opening and previewing a file make no network request (row 28), so the window must not be able to send one at all.
+
+The fix: WebView2 starts with `--proxy-server=http://127.0.0.1:47 --proxy-bypass-list=<-loopback>`. Every request it would send goes to a closed port on this computer, local addresses included (nothing listens on port 47 here, and it is not one of the ports Chromium refuses to use). The tests, first failing:
+
+```
+> cargo test -p steplet-app --offline --features e2e --test shell        (before the fix)
+test the_web_view_sends_nothing_to_the_network ... FAILED
+thread 'the_web_view_sends_nothing_to_the_network' (49264) panicked at crates\steplet-app\tests\shell.rs:104:5:
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> npm --prefix web test -- real-open                                      (before the fix)
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (160ms)
+  x  2 [real] › app\tests\real-open.spec.ts:25:1 › the real window reaches nothing outside the app (3.0s)
+    Error: expect(received).toEqual(expected) // deep equality
+    + Received  + 3
+    +   "https://example.com/",
+  1 failed
+  1 passed (8.5s)
+```
+
+With the fix in, the real test still saw an answer. A second probe showed where it came from: the web view's own cache, holding the page from the first probe, not the internet. A never-visited address failed at the closed port:
+
+```
+navigate to https://example.com/
+  answer https://example.com/ 200 fromDiskCache=true ip=[2606:4700:10::6814:179a]
+  failed net::ERR_ABORTED canceled=true
+  -> url now http://tauri.localhost/
+navigate to https://example.com/?steplet-probe=1792522537208
+  failed net::ERR_PROXY_CONNECTION_FAILED canceled=false
+  failed net::ERR_ABORTED canceled=true
+  -> url now http://tauri.localhost/
+```
+
+So each try in the test now uses an address never asked for before, and the test fails on any answer from outside the app. To show the test catches a missing fix, the proxy line was taken out of a build, then put back:
+
+```
+> npm --prefix web test -- real-open        (a build without the closed-port proxy)
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (148ms)
+  x  2 [real] › app\tests\real-open.spec.ts:25:1 › the real window reaches nothing outside the app (3.0s)
+    + Received  + 3
+    +   "https://example.com/?steplet-test=navigate-1792522624728",
+  1 failed
+  1 passed (7.1s)
+> the web view's browser process and its start arguments, as Windows lists them (the fixed build)
+pid 15020 parent 13644 started 10/21/2026 00:24:19
+  --user-data-dir="C:\Users\RANVIR\AppData\Local\dev.steplet.desktop\EBWebView"
+  --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection
+  --proxy-bypass-list=<-loopback>
+  --proxy-server=http://127.0.0.1:47
+  --remote-debugging-port=9333
+> npm --prefix web test -- real-open        (the fixed build)
+Running 2 tests using 1 worker
+saved docs/screens/phase-4/real-open-empty-light.png
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (148ms)
+  ok 2 [real] › app\tests\real-open.spec.ts:25:1 › the real window reaches nothing outside the app (3.1s)
+  2 passed (7.1s)
+```
+
+The same test also calls a made-up command through the app's channel to Rust and gets Tauri's own refusal, so the closed-port proxy does not cut the page off from Rust.
+
+### The 14-day rule (F12, S10)
+
+The first count, after Tauri and `ts-rs` came in. `lock_ages.py` counts age from its fixed date, 11 Oct 2026, so its own summary line over-counts; `ages_today.py` reads the same output and counts from today:
+
+```
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py Cargo.lock
+termcolor          1.4.1                  published 2024-01-10  1005 days old
+ts-rs              12.0.1                 published 2026-01-31   253 days old
+ts-rs-macros       12.0.1                 published 2026-01-31   253 days old
+444 crates.io packages in the lock file; 23 under 14 days old; 0 yanked
+lock_ages exit: 0
+> python -I ages_today.py t8-lock-ages.log
+serde_spanned 1.1.2 published 2026-10-08, 13 days old on 2026-10-21
+toml 1.1.8+spec-1.1.0 published 2026-10-09, 12 days old on 2026-10-21
+toml_datetime 1.1.2+spec-1.1.0 published 2026-10-08, 13 days old on 2026-10-21
+toml_edit 0.25.17+spec-1.1.0 published 2026-10-09, 12 days old on 2026-10-21
+toml_parser 1.1.5+spec-1.1.0 published 2026-10-09, 12 days old on 2026-10-21
+toml_writer 1.1.3+spec-1.1.0 published 2026-10-08, 13 days old on 2026-10-21
+444 packages read; on 2026-10-21: 6 under 14 days old; 0 yanked
+```
+
+(The three lines of the new download, picked from 444; the other 441 are in the run's log.) Each of the six was moved to an older version, the cached one where Windows builds need it (`toml_edit` 0.25.x is used only when building for other systems, so its version comes from cargo's saved index):
+
+```
+> cargo update --offline -p toml@1.1.8+spec-1.1.0 --precise 1.1.4+spec-1.1.0
+ Downgrading toml v1.1.8+spec-1.1.0 -> v1.1.4+spec-1.1.0
+> cargo update --offline -p toml_parser@1.1.5+spec-1.1.0 --precise 1.1.3+spec-1.1.0
+error: failed to select a version for the requirement `toml_parser = "^1.1.5"`
+candidate versions found which didn't match: 1.1.3+spec-1.1.0
+required by package `toml_edit v0.25.17+spec-1.1.0`
+> cargo update --offline -p toml_writer@1.1.3+spec-1.1.0 --precise 1.1.2+spec-1.1.0
+ Downgrading toml_writer v1.1.3+spec-1.1.0 -> v1.1.2+spec-1.1.0
+> cargo update --offline -p toml_datetime@1.1.2+spec-1.1.0 --precise 1.1.1+spec-1.1.0
+error: failed to select a version for the requirement `toml_datetime = "^1.1.2"`
+candidate versions found which didn't match: 1.1.1+spec-1.1.0
+required by package `toml_edit v0.25.17+spec-1.1.0`
+> cargo update --offline -p serde_spanned@1.1.2 --precise 1.1.1
+ Downgrading serde_spanned v1.1.2 -> v1.1.1
+> cargo update --offline -p toml_edit@0.25.17+spec-1.1.0 --precise 0.25.15+spec-1.1.0
+ Downgrading toml_edit v0.25.17+spec-1.1.0 -> v0.25.15+spec-1.1.0
+> cargo update --offline -p toml_parser@1.1.5+spec-1.1.0 --precise 1.1.3+spec-1.1.0      (again, now toml_edit allows it)
+ Downgrading toml_parser v1.1.5+spec-1.1.0 -> v1.1.3+spec-1.1.0
+> cargo update --offline -p toml_datetime@1.1.2+spec-1.1.0 --precise 1.1.1+spec-1.1.0
+ Downgrading toml_datetime v1.1.2+spec-1.1.0 -> v1.1.1+spec-1.1.0
+left: [('serde_spanned', '1.1.2'), ('toml', '1.1.8+spec-1.1.0'), ('toml_datetime', '1.1.2+spec-1.1.0'), ('toml_edit', '0.25.17+spec-1.1.0'), ('toml_parser', '1.1.5+spec-1.1.0'), ('toml_writer', '1.1.3+spec-1.1.0')]
+came in: [('serde_spanned', '1.1.1'), ('toml', '1.1.4+spec-1.1.0'), ('toml_datetime', '1.1.1+spec-1.1.0'), ('toml_edit', '0.25.15+spec-1.1.0'), ('toml_parser', '1.1.3+spec-1.1.0'), ('toml_writer', '1.1.2+spec-1.1.0')]
+```
+
+(The "note: pass `--verbose`" and "location searched" lines are left out.) The count again, on the changed lock file:
+
+```
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py Cargo.lock
+serde_spanned      1.1.1                  published 2026-03-31   194 days old
+toml               1.1.4+spec-1.1.0       published 2026-07-28    75 days old
+toml_datetime      1.1.1+spec-1.1.0       published 2026-03-31   194 days old
+toml_edit          0.25.15+spec-1.1.0     published 2026-09-11    30 days old
+toml_parser        1.1.3+spec-1.1.0       published 2026-07-27    76 days old
+toml_writer        1.1.2+spec-1.1.0       published 2026-07-14    89 days old
+444 crates.io packages in the lock file; 17 under 14 days old; 0 yanked
+lock_ages exit: 0
+> python -I ages_today.py t8-lock-ages2.log
+444 packages read; on 2026-10-21: 0 under 14 days old; 0 yanked
+> python -I web\scripts\npm_ages.py web\package-lock.json
+@rolldown/binding-android-arm-eabi       1.2.13       published 2026-10-07    14 days old
+88 npm packages in the lock file; 0 under 14 days old; 0 withdrawn or deprecated
+npm_ages exit: 0
+```
+
+(The npm lock lists 88 packages, the 53 installed here plus other systems' optional parts; the youngest, `rolldown` 1.2.13, is exactly 14 days old today.)
+
+### Step 6: the tests pass
+
+The page is built first (`npm --prefix web run build`), then:
+
+```
+> cargo test -p steplet-app --offline
+     Running tests\shell.rs (target\debug\deps\shell-a76efebd90a8ec1b.exe)
+test no_debug_port_without_the_e2e_feature ... ok
+test the_browser_keeps_wrys_default_arguments ... ok
+test the_web_view_sends_nothing_to_the_network ... ok
+test the_page_is_titled_steplet ... ok
+test the_window_goes_nowhere_but_the_apps_own_page ... ok
+test the_window_and_security_settings_are_fixed ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+app tests exit: 0
+> cargo test -p steplet-app --offline --features e2e --test shell
+test the_browser_keeps_wrys_default_arguments ... ok
+test the_e2e_build_opens_its_debug_port_on_this_computer_only ... ok
+test the_web_view_sends_nothing_to_the_network ... ok
+test the_page_is_titled_steplet ... ok
+test the_window_goes_nowhere_but_the_apps_own_page ... ok
+test the_window_and_security_settings_are_fixed ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> npm --prefix web run check
+> svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && node scripts/no-raw-html.mjs && node scripts/contrast.mjs
+1792523179047 COMPLETED 97 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 62 pairs
+check exit: 0
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.02s
+clippy exit: 0
+> cargo test --workspace --offline
+workspace tests exit: 0
+57 summary lines: 274 passed, 0 failed, 39 ignored
+```
+
+(The "57 summary lines" line is counted from the run's own summary lines; the 39 ignored are the Linux-only tests, which this task does not touch. The app's two empty unit-test lines are left out.) The first time `npm run check` ran it found four errors, all in the setup, fixed before the run above: the build-mode guard in `vite.config.ts` also refused the type checker, the CSS imports needed Vite's own types, and the test's Node import had no types (`node.d.ts`).
+
+### What this task did not verify
+
+- **Other ways out of the window** than the three the real test tries (`fetch`, `window.open`, `location.href`): for example a form, an image or a frame. The page rules refuse each of those by name (`form-action`, `img-src`, `default-src`), and the closed-port proxy stops any request that slips past, but neither was tried on these.
+- **The window's smallest size** (560 × 720) was not tried by dragging the real window's edge; it is checked in the config only. The screens at that size were looked at in the screens build.
+- **The dark theme in the real window:** this laptop is in light mode, so the real screenshot is light; the dark tokens were looked at in the screens build only.
+- **Whether WebView2 itself sends anything outside the page,** for example its own update checks or its crash reports. The proxy covers the web view's network traffic; WebView2's own updater runs as a separate Windows service and was not watched.
+- **That port 47 stays closed.** If a program on this computer ever listened on port 127.0.0.1:47, the web view's requests would reach that program (still nothing leaves the computer).
+- **The app's commands under Tauri's check:** the list is still empty, so a command refused for lack of its `allow-` line is first seen in Task 10.

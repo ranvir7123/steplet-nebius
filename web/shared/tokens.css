@@ -1,0 +1,81 @@
+/* Steplet's colours, spacing and type, one set for Windows' light theme and one for its dark theme (J8).
+   Every pair of colours the screens put together is checked by web/scripts/contrast.mjs (text at least 4.5 : 1). */
+
+:root {
+  /* Surfaces */
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --surface-sunken: #f5f5f7;
+  --border: #e1e1e5;
+  --control-border: #82828b;
+  --file-bg: #fbf9fd;
+  --file-rule: #8c6bb8;
+
+  /* Text */
+  --text: #1b1b1f;
+  --text-muted: #5b5b66;
+  --accent-text: #005fb8;
+  --file-label: #6a4a96;
+
+  /* Controls */
+  --accent: #005fb8;
+  --accent-hover: #0a529c;
+  --on-accent: #ffffff;
+  --focus: #1b1b1f;
+
+  /* Outcomes: each also has a word and an icon, never colour alone */
+  --green-bg: #dff6dd;
+  --green-fg: #0b5a0b;
+  --green-border: #9fd89f;
+  --amber-bg: #fff4ce;
+  --amber-fg: #6b4700;
+  --amber-border: #f0d78c;
+  --red-bg: #fde7e9;
+  --red-fg: #a4262c;
+  --red-border: #f1b2b7;
+  --blocked-bg: #4a0a0e;
+  --blocked-fg: #ffffff;
+  --blocked-border: #4a0a0e;
+
+  /* Badges for characters that cannot be seen (U+200B and the like) */
+  --badge-bg: #ffe8a3;
+  --badge-fg: #4d3500;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #202020;
+    --surface: #2b2b2b;
+    --surface-sunken: #1c1c1c;
+    --border: #3d3d3d;
+    --control-border: #9a9a9a;
+    --file-bg: #2e2a33;
+    --file-rule: #b48ee6;
+
+    --text: #f3f3f3;
+    --text-muted: #b4b4b8;
+    --accent-text: #60cdff;
+    --file-label: #cdb0f2;
+
+    --accent: #60cdff;
+    --accent-hover: #8ad9ff;
+    --on-accent: #000000;
+    --focus: #ffffff;
+
+    --green-bg: #2a3b22;
+    --green-fg: #8fdc80;
+    --green-border: #3f5c33;
+    --amber-bg: #433519;
+    --amber-fg: #fce100;
+    --amber-border: #6b5525;
+    --red-bg: #442726;
+    --red-fg: #ffa3ab;
+    --red-border: #6e3a39;
+    --blocked-bg: #ffb3b9;
+    --blocked-fg: #2b0004;
+    --blocked-border: #ffb3b9;
+
+    --badge-bg: #5a4500;
+    --badge-fg: #ffe8a3;
+  }
+}

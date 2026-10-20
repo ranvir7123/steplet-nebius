@@ -1,0 +1,30 @@
+[package]
+name = "steplet-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "steplet_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "steplet"
+path = "src/main.rs"
+
+[features]
+# A test build only: WebView2's debugging port on 127.0.0.1, so a screen test can drive the real window (S13).
+e2e = []
+
+[build-dependencies]
+tauri-build = { version = "=2.7.1", features = [] }
+
+[dependencies]
+steplet-core = { path = "../steplet-core" }
+steplet-run = { path = "../steplet-run" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+tauri = { version = "=2.12.1", features = ["custom-protocol"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_UI_Controls_Dialogs", "Win32_UI_Shell"] }
+ts-rs = "=12.0.1"
