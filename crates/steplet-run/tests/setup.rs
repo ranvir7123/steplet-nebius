@@ -42,7 +42,7 @@ fn reads_wsl_version_output() {
 #[test]
 fn look_checks_every_package_setup_installs() {
     let joined = include_str!("../src/setup.sh").replace("\\\n", " ");
-    let install = joined.lines().find(|l| l.starts_with("apt-get install ")).unwrap();
+    let install = joined.lines().find(|l| l.starts_with("logged ") && l.contains(" apt-get install ")).unwrap();
     let words = install.split_whitespace();
     let installed: Vec<&str> = words.skip_while(|w| *w != "git").take_while(|w| *w != ">").collect();
     let look = include_str!("../src/look.sh");
@@ -67,11 +67,56 @@ fn look_finds_steplets_linux_ready() {
     println!("--- {state:#?}");
     assert!(matches!(state.wsl, Wsl::Ready { .. }), "{state:?}");
     assert_eq!(state.linux.as_deref(), Some(distro.as_str()));
-    assert_eq!(state.missing, Vec::<String>::new());
+    assert_eq!((state.missing, state.trouble), (Vec::<String>::new(), None));
     assert!(state.gate);
     // A gate program Steplet has not installed (made-up bytes) is said to be missing.
     let other = setup::look(setup::LINUX, b"made-up bytes, not a program");
-    assert!(!other.gate && other.missing.is_empty(), "{other:?}");
+    assert!(!other.gate && other.missing.is_empty() && other.trouble.is_none(), "{other:?}");
+}
+
+/// Task 6's review: `setup.sh` keeps the package tools' long output in log files; when one of them fails, the end of
+/// its log is what the receiver sees, and the setup stops there. The script's own helper is run alone, as the
+/// `steplet` account, on a made-up command that fails.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn a_failed_setup_step_shows_the_end_of_its_log() {
+    let setup = include_str!("../src/setup.sh");
+    let start = setup.find("\nlogged() {\n").expect("setup.sh has its helper `logged`") + 1;
+    let end = start + setup[start..].find("\n}\n").unwrap() + 3;
+    let log = "/tmp/steplet-logged-test.txt";
+    let script = format!(
+        "set -eu\n{}logged {log} sh -c 'echo first; echo the made-up reason it failed; exit 3'\necho not reached\n",
+        &setup[start..end]
+    );
+    let distro = support::steplet_linux();
+    let out = steplet_run::wsl::run(&distro, "steplet", &["/bin/bash", "-s"], script.as_bytes()).unwrap();
+    steplet_run::wsl::run(&distro, "steplet", &["/usr/bin/rm", "-f", log], b"").unwrap();
+    println!("--- {out:#?}");
+    assert_eq!(out.status, Some(1));
+    assert!(out.stderr.contains("exit code 3") && out.stderr.contains("the made-up reason it failed"), "{out:?}");
+    assert!(!out.stdout.contains("not reached"), "the setup stops there");
+}
+
+/// Task 6's review: "Try again" runs the whole setup again on a Linux that is already there; the download is skipped.
+/// Run on Steplet's own Linux: every step can be repeated, and it is still ready afterwards.
+#[test]
+#[ignore = "runs the setup again inside Steplet's Linux: needs the network, about 2 minutes"]
+fn setup_runs_again_on_a_linux_that_is_there() {
+    let gate = std::fs::read(support::gate_program()).unwrap();
+    // Where Steplet's Linux is; not used, since it is there.
+    let place = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join("Steplet").join("wsl");
+    let said = std::cell::RefCell::new(Vec::<String>::new());
+    let start = Instant::now();
+    let again = setup::install(setup::LINUX, &place, &gate, &|line| {
+        println!("setup: {line}");
+        said.borrow_mut().push(line.to_owned());
+    });
+    println!("--- took {:.0} s: {again:?}", start.elapsed().as_secs_f64());
+    assert_eq!(again.unwrap(), support::steplet_linux());
+    assert!(!said.borrow().iter().any(|l| l.starts_with("Downloading")), "nothing was downloaded again");
+    let state = setup::look(setup::LINUX, &gate);
+    println!("--- {state:#?}");
+    assert_eq!((state.missing, state.trouble, state.gate), (Vec::<String>::new(), None, true));
 }
 
 #[test]
@@ -90,10 +135,7 @@ fn install_makes_a_ready_linux_from_nothing() {
     println!("--- {state:#?}");
     let removed = setup::remove(NAME);
     println!("--- removed: {removed:?}");
-    // The first install wrote Windows' cache into a new folder `%SystemDrive%` here, the folder the test started in.
-    let stray = std::path::Path::new("%SystemDrive%").exists();
     let id = installed.unwrap();
-    assert!(!stray, "nothing is written into the folder Steplet was started from");
     assert_eq!(state.linux.as_deref(), Some(id.as_str()));
     assert_eq!(state.missing, Vec::<String>::new());
     assert!(state.gate);

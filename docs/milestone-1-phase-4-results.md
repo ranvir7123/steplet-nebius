@@ -1137,7 +1137,7 @@ battery exit 0
 
 - **`wsl.exe --install` needs more of Windows' variables than `SystemRoot`.** Steplet starts Windows programs with `SystemRoot` as their only variable (C8). The first install try (18 Oct 2026, by the last session) stopped with `Wsl/InstallDistro/E_ACCESSDENIED` ("Access is denied"), until `wsl --install` was also given this Windows user's `TEMP`, `TMP`, `USERPROFILE` and `LOCALAPPDATA`. That session's notes keep the error code; its output of the failure was not kept.
 - **Found this session, and fixed: the install also left a new folder named `%SystemDrive%`** (four Windows cache files, 1 MB) inside the folder the test was started from, `crates/steplet-run`. With no `SystemDrive` variable, a part of Windows could not turn `%SystemDrive%\ProgramData` into `C:\ProgramData`, and wrote to a folder with that literal name, wherever `wsl.exe` was started. In the app, that could be any folder of the receiver's, for example the Downloads folder a `.steplet` file was double-clicked in. Now every call setup makes to `wsl.exe` gets Windows' folder variables (`SystemDrive`, `ProgramData`, `ALLUSERSPROFILE`, `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, `TEMP`, `TMP`; none is a secret, and these calls start nothing inside Linux), and starts in Windows' System32 folder, which a normal user cannot write. A place for the install that is not a full path is refused, since `wsl.exe` would read it from the folder it starts in. Two new tests, inside `src/setup.rs`.
-- **Found this session, for the Setup screen (Task 11): WSL changes the receiver's Windows when it installs a Linux.** It adds a profile named after the Linux to Windows Terminal, and a Start-menu folder (empty here). Both are on this laptop for `steplet` since 13 Oct (phase 3's install). Removing a Linux takes its Terminal profile away (measured on `steplet-setup-test`) but leaves the empty Start-menu folder. Ruled: Setup says so before the install; whether Steplet can stop both is not tried (it would need Steplet's own pinned image, H3's launch item).
+- **Found this session, for the Setup screen (Task 11): WSL changes the receiver's Windows when it installs a Linux.** It adds a profile named after the Linux to Windows Terminal, and a Start-menu folder (empty here). Both are on this laptop for `steplet` since 13 Oct (phase 3's install). After `steplet-setup-test` was removed, no Terminal profile for it was left, but its empty Start-menu folder was (seen only afterwards: its profile was not looked at while it was installed). Ruled: Setup says so before the install; whether Steplet can stop both is not tried (it would need Steplet's own pinned image, H3's launch item).
 - `look.sh` also checks `python3-venv`: `setup.sh` installs it, so a Linux without it is not ready. A new test, `look_checks_every_package_setup_installs`, keeps the two lists the same.
 - The plan's Step 4 expected `1 passed; 2 ignored`; there are 3 plain tests (`the_versions_are_the_tested_ones` and the list test besides the version reader).
 - `tests/support/mod.rs` needed no change: it never named the old script, which phase 3 ran by hand.
@@ -1153,7 +1153,7 @@ The four files were all written at the same moment, during Task 6's first runs:
 2026-10-18 15:54:05.1326080000 662488 crates/steplet-run/%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{DDF571F2-BE98-426D-8288-1A9A39C3FDA2}.2.ver0x0000000000000001.db
 ```
 
-Every other call setup makes, each started with only `SystemRoot` in its own empty folder, left nothing (the `--terminate` and `--unregister` tries name a Linux that does not exist, so they only fail; `--list --online` is the same download path the install uses, for a small list):
+The other calls setup makes to `wsl.exe` (`--version`, `--terminate`, `--unregister`; it finds its Linux in the registry, not with `--list`), and three it does not make (`--list --verbose`, `--status`, and `--list --online`, which uses the install's download path for a small list), each started with only `SystemRoot` in its own empty folder, left nothing. The `--terminate` and `--unregister` tries name a Linux that does not exist, so they only fail:
 
 ```
 > wsl.exe --version  (only SystemRoot, in an empty folder)
@@ -1373,7 +1373,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; fini
 install test exit 0
 ```
 
-(The red line is `systemd`'s, while the packages install; the install went on and finished.) The install test now also checks that nothing appears in the folder it was started from; that check has not run yet, since it needs another install.
+(The red line is `systemd`'s, while the packages install; the install went on and finished.) The install test also got a check that nothing appears in the folder it was started from; the review below removed it, since it looked in the wrong folder.
 
 The whole runner, and the checks:
 
@@ -1401,6 +1401,178 @@ clippy exit 0
 - **A setup that hangs** (for example a package download that never ends): `install` has no time limit and would wait.
 - **The setup log's lines come from Linux programs** as they print them, escape characters included (one line of the log above has two). The Setup screen must show them as file text, cleaned (Task 11).
 - **What setup downloads** (Ubuntu's packages, Claude Code and `srt` from npm) is fixed by version, not by content; pinning by content is H3's launch item.
+
+### The code review, and what changed
+
+A code-reviewer agent read Task 6's diff (read-only; it ran nothing). It found no way for setup's extra Windows variables to reach a program inside Linux: every command for inside Linux still starts with `SystemRoot` only. Its points, and what changed:
+
+1. **Important, fixed: setup took any plain name, so it could reach one of the receiver's own Linuxes.** `remove("debian")` would have deleted a Linux called `debian`, and `install("debian", …)` would have run Steplet's setup as root inside it. Now `install`, `remove` and `look` take only Steplet's own names: `steplet`, or `steplet-` and a plain name (the tests' `steplet-setup-test`). Test: `only_steplets_own_linux_names_are_taken` (it calls `remove` only with a made-up name no Linux has, so even the old code would only have failed).
+2. **Important, fixed: a failed package step showed no reason.** The package tools write to log files, and a failure printed nothing, so the receiver could not tell "no network" from "disk full". Now each of those commands runs through `logged` in `setup.sh`: on a failure, the end of its log goes to the setup's output and the setup stops. Test: `a_failed_setup_step_shows_the_end_of_its_log` (in Steplet's Linux, the helper alone on a made-up command that fails).
+3. **Important, fixed: a step could wait for ever** (a stalled download), and a read error was not counted. Now each step has a limit and is ended at it: the download 90 minutes, the setup inside 30, the restart 2, a removal 10. A read error ends the step too, and an ended step's program is stopped. A failure now starts with its exit code. Tests: `a_step_that_takes_too_long_is_ended_at_its_limit` and `a_failed_step_says_its_exit_code_and_the_end_of_what_it_printed`.
+4. **Important, fixed: `look` could say "ready" when it saw nothing.** A check now counts only when `look.sh` said `ok` for it; a look that printed nothing finds everything missing. Tests: `look_counts_only_what_it_saw`, and `the_checks_are_the_ones_look_sh_makes` (the list of checks is the one `look.sh` makes).
+5. **Important, fixed: "could not look" was reported as a missing part.** `State` gains `trouble` (one field more than the plan's section 6): why Steplet could not look. It is also set when WSL's list of Linuxes cannot be read, which before looked like "not installed"; `install` now stops on that instead of trying a second install. Covered by `look_counts_only_what_it_saw`.
+6. **Important, fixed in words: `look` starts Steplet's Linux if it is stopped.** Its description now says so (it changes nothing inside it). Not starting it would leave `look` unable to look most of the time.
+7. **Important, fixed: the install test's new check looked in the wrong folder.** Since setup now starts `wsl.exe` in System32, the test's own folder could never get the stray folder. The check is removed; the unit test on the start folder covers the fix.
+
+Minor points done because they were cheap: a test that the commands for inside Linux still get `SystemRoot` only (C8), `programs_for_inside_linux_get_systemroot_only`; a place for the install that is not text is refused; a comment says System32 is closed to normal accounts, not to administrators. Minor points left: the escape characters in setup lines (the Setup screen's job, Task 11); a network path is accepted as a place for the install; the `/etc/fstab` line of `setup.sh` keeps `|| true`, so a read error there would leave that file empty (in Steplet's own Linux only). The results text above was corrected on three points the reviewer named (what was seen of the Terminal profile, which calls setup makes, and the removed check).
+
+The tests first:
+
+```
+> cargo test -p steplet-run --offline --lib setup::
+1 x error: could not compile `steplet-run` (lib test) due to 9 previous errors
+2 x error[E0061]: this function takes 4 arguments but 5 arguments were supplied
+2 x error[E0425]: cannot find function `own_name` in this scope
+2 x error[E0425]: cannot find function `read_look` in this scope
+3 x error[E0425]: cannot find value `CHECKS` in this scope
+> cargo test -p steplet-run --offline --test setup a_failed_setup_step -- --ignored
+test a_failed_setup_step_shows_the_end_of_its_log ... FAILED
+thread 'a_failed_setup_step_shows_the_end_of_its_log' (36696) panicked at crates\steplet-run\tests\setup.rs:84:46:
+setup.sh has its helper `logged`
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+```
+
+(The unit tests' errors are shown each once, with how many times it came. `programs_for_inside_linux_get_systemroot_only` is a guard: it would have passed before too.) The time-limit test, with the two limit checks taken out (then put back):
+
+```
+test setup::tests::a_step_that_takes_too_long_is_ended_at_its_limit ... FAILED
+thread 'setup::tests::a_step_that_takes_too_long_is_ended_at_its_limit' (43960) panicked at crates\steplet-run\src\setup.rs:483:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 29.39s
+```
+
+(It failed after 29 s on `took < 8 s`: the stalled program ran its whole 30 seconds.)
+
+With the fixes:
+
+```
+> cargo test -p steplet-run --offline --lib setup::
+running 8 tests
+test setup::tests::only_steplets_own_linux_names_are_taken ... ok
+test setup::tests::the_install_command_is_exact_and_refuses_what_wsl_could_misread ... ok
+test setup::tests::the_checks_are_the_ones_look_sh_makes ... ok
+test setup::tests::look_counts_only_what_it_saw ... ok
+test setup::tests::programs_for_inside_linux_get_systemroot_only ... ok
+test setup::tests::setup_s_windows_programs_know_windows_folders_and_start_in_system32 ... ok
+test setup::tests::a_failed_step_says_its_exit_code_and_the_end_of_what_it_printed ... ok
+test setup::tests::a_step_that_takes_too_long_is_ended_at_its_limit ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 3.39s
+> cargo test -p steplet-run --offline --test setup -- --ignored --nocapture --test-threads=1 --skip install_makes_a_ready_linux_from_nothing
+running 2 tests
+test a_failed_setup_step_shows_the_end_of_its_log ... --- Output {
+    status: Some(
+        1,
+    ),
+    stdout: "",
+    stderr: "--- failed with exit code 3: sh -c echo first; echo the made-up reason it failed; exit 3\nfirst\nthe made-up reason it failed\n",
+    stdout_bytes: [],
+}
+ok
+test look_finds_steplets_linux_ready ... --- State {
+    wsl: Ready {
+        version: "2.6.3.0",
+    },
+    linux: Some(
+        "{44f36236-99b1-42c0-84bd-7ff8392d51ba}",
+    ),
+    missing: [],
+    gate: true,
+    trouble: None,
+}
+ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 3.38s
+```
+
+**"Try again", measured once** (new test `setup_runs_again_on_a_linux_that_is_there`): the whole setup run again on Steplet's own Linux, which is there, so nothing is downloaded. It changes only Steplet's Linux: Ubuntu upgraded nothing, Claude Code was put in again at the same version (the same SHA-256 as the 18 Oct install), and `look` finds it ready after:
+
+```
+> cargo test -p steplet-run --offline --test setup setup_runs_again_on_a_linux_that_is_there -- --ignored --nocapture
+running 1 test
+setup: --- /etc/wsl.conf: Windows drives not mounted, Windows PATH not added, default user steplet
+setup: [boot]
+setup: systemd=true
+setup: 
+setup: [automount]
+setup: enabled=false
+setup: mountFsTab=true
+setup: 
+setup: [interop]
+setup: enabled=true
+setup: appendWindowsPath=false
+setup: 
+setup: [user]
+setup: default=steplet
+setup: --- /opt/steplet/gate: the gate program's folder on the Linux disk, owned by root
+setup: --- the steplet account: no password, no sudo, no login shell
+setup: passwd: password changed.
+setup: uid=999(steplet) gid=986(steplet) groups=986(steplet)
+setup: --- base tools (choice H4-A; ripgrep because srt needs it, approved 14 Oct 2026)
+setup: Solving dependencies...
+setup: 0 upgraded, 0 newly installed, 0 to remove and 25 not upgraded.
+setup: git: 1:2.53.0-1ubuntu1.1
+setup: python3: 3.14.3-0ubuntu2
+setup: build-essential: 12.12ubuntu2.26.04.2
+setup: bubblewrap: 0.11.1-1ubuntu0.3
+setup: socat: 1.8.1.1-1ubuntu0.1
+setup: ripgrep: 15.1.0-1ubuntu1
+setup: nodejs: 22.22.1+dfsg+~cs22.19.15-1ubuntu1
+setup: npm: 9.2.0~ds3-1
+setup: --- Claude Code 2.1.220 into /opt/steplet/claude-cli
+setup: 
+setup: changed 3 packages in 8s
+setup: --- srt 0.0.77 into /opt/steplet/srt
+setup: 
+setup: up to date in 1s
+setup: --- Steplet's folders, owned by root; nothing under /opt/steplet writable by steplet
+setup: --- what was installed
+setup: claude runs: /opt/steplet/claude-cli/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe
+setup: claude sha256: 674f61f20ff306f3100cf9200e4c36c4b70278b5bef2884549819b942a89c863
+setup: claude version: 2.1.220 (Claude Code)
+setup: srt package: 0.0.77
+setup: drwxr-xr-x 6 root root 4096 Oct 14 19:20 /opt/steplet
+setup: drwxr-xr-x 2 root root 4096 Oct 20 11:18 /opt/steplet/bin
+setup: drwxr-xr-x 4 root root 4096 Oct 13 12:33 /opt/steplet/claude-cli
+setup: drwxr-xr-x 2 root root 4096 Oct 17 22:40 /opt/steplet/gate
+setup: drwxr-xr-x 3 root root 4096 Oct 13 12:33 /opt/steplet/srt
+setup: drwxr-xr-x 3 root root 4096 Oct 20 11:15 /var/lib/steplet
+setup: drwxr-xr-x 2 root root 4096 Oct 20 11:18 /var/lib/steplet/runs
+setup: drwxr-xr-x 2 root root 4096 Oct 20 11:18 /work
+setup: --- setup finished
+setup: The operation completed successfully. 
+setup: --- the gate program of this build
+setup: gate: /opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe
+--- took 28 s: Ok("{44f36236-99b1-42c0-84bd-7ff8392d51ba}")
+--- State {
+    wsl: Ready {
+        version: "2.6.3.0",
+    },
+    linux: Some(
+        "{44f36236-99b1-42c0-84bd-7ff8392d51ba}",
+    ),
+    missing: [],
+    gate: true,
+    trouble: None,
+}
+test setup_runs_again_on_a_linux_that_is_there ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 28.70s
+```
+
+The whole runner, and the checks (`cargo fmt` first only moved some lines of the new tests):
+
+```
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+> cargo test -p steplet-run --offline --no-run
+build ok on try 1
+> cargo test -p steplet-run --offline
+(19 summary lines, every one ok: 114 passed, 0 failed, 39 ignored; counted from the summary lines)
+plain exit 0
+```
+
+(The first plain run stopped on McAfee's hold on three freshly built test programs, `LNK1104`, so it was built first and run again, as the plan says. Plain: 108 before, plus the six new unit tests. The rest of the Linux-only tests do not use setup's code and were not run again; the three setup ones were.)
+
+What the review's points still leave unverified: the limits were seen on a program that stalls (`ping`), not on a stalled download; `logged` was seen on a made-up failure, not on a real `apt-get` failure.
 
 ## Task 7: sender pins in the core: the identity line and the key-changed rule
 

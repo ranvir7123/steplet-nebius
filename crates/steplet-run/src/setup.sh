@@ -7,6 +7,19 @@
 # Windows folder (only whole drives), and mounting a drive would undo option D.
 set -eu
 
+# Runs a command with all its output in the log file $1. If the command fails, the end of that log goes to standard
+# error and the setup stops, so the receiver sees why it stopped (no network, a full disk), not only that it did.
+logged() {
+    local log=$1
+    shift
+    "$@" > "$log" 2>&1 || {
+        local code=$?
+        echo "--- failed with exit code $code: $*" >&2
+        tail -n 20 "$log" >&2
+        exit 1
+    }
+}
+
 main() {
 CLAUDE_VERSION=$1
 SRT_VERSION=$2
@@ -40,25 +53,26 @@ id steplet
 
 echo "--- base tools (choice H4-A; ripgrep because srt needs it, approved 14 Oct 2026)"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -q > /var/log/steplet-apt-update.txt 2>&1
-apt-get install -y -q --no-install-recommends git python3 python3-venv build-essential ca-certificates \
-    bubblewrap socat ripgrep nodejs npm > /var/log/steplet-apt-install.txt 2>&1
+logged /var/log/steplet-apt-update.txt apt-get update -q
+logged /var/log/steplet-apt-install.txt apt-get install -y -q --no-install-recommends git python3 python3-venv \
+    build-essential ca-certificates bubblewrap socat ripgrep nodejs npm
 tail -2 /var/log/steplet-apt-install.txt
 for p in git python3 build-essential bubblewrap socat ripgrep nodejs npm; do
   echo "$p: $(dpkg-query -W -f='${Version}' "$p")"
 done
 
 echo "--- Claude Code $CLAUDE_VERSION into /opt/steplet/claude-cli"
-npm install -g --prefix /opt/steplet/claude-cli --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_VERSION" \
-    > /var/log/steplet-npm-claude.txt 2>&1
+logged /var/log/steplet-npm-claude.txt npm install -g --prefix /opt/steplet/claude-cli --no-fund --no-audit \
+    "@anthropic-ai/claude-code@$CLAUDE_VERSION"
 tail -3 /var/log/steplet-npm-claude.txt
 test -x /opt/steplet/claude-cli/bin/claude
 
 echo "--- srt $SRT_VERSION into /opt/steplet/srt"
 mkdir -p /opt/steplet/srt
 cd /opt/steplet/srt
-npm init -y > /dev/null
-npm install --save-exact --no-fund --no-audit "@anthropic-ai/sandbox-runtime@$SRT_VERSION" > /var/log/steplet-npm-srt.txt 2>&1
+logged /var/log/steplet-npm-init.txt npm init -y
+logged /var/log/steplet-npm-srt.txt npm install --save-exact --no-fund --no-audit \
+    "@anthropic-ai/sandbox-runtime@$SRT_VERSION"
 tail -3 /var/log/steplet-npm-srt.txt
 test -x /opt/steplet/srt/node_modules/.bin/srt
 
