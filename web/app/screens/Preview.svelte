@@ -16,9 +16,7 @@
   const SENTENCE = "I understand the risks and want to run this file";
   let typed = $state("");
 
-  const colour: Colour = $derived(
-    view.run_status.kind === "not_runnable" ? (view.outcome as Colour) : (view.run_status.kind as Colour),
-  );
+  const colour: Colour = $derived(view.colour as Colour);
   const firstBlocked = $derived(view.findings.find((f) => f.severity === "blocked"));
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 </script>
@@ -41,7 +39,11 @@
   <section class="identity" aria-label="Who signed this file">
     {#if view.key_changed}
       <p class="key-changed">
-        <Icon kind="red" />This sender name was used before with another key. See "On this computer", below.
+        <Icon kind="red" /><span
+          >{view.identity.kind === "unsigned"
+            ? "This sender name was used before on a signed file, and this file is not signed."
+            : "This sender name was used before with another key."} See "On this computer", below.</span
+        >
       </p>
     {/if}
     {#if view.identity.kind === "unchecked"}
@@ -51,7 +53,11 @@
     {:else if view.identity.kind === "invalid"}
       <p>The signature does not match this file: it was changed after it was signed, or the signature is not real.</p>
     {:else if view.identity.kind === "new_key"}
-      <p>Signature valid, sender unknown: this computer has not seen this key before.</p>
+      {#if view.key_changed}
+        <p>The signature is valid, but this computer has not seen this key before.</p>
+      {:else}
+        <p>Signature valid, sender unknown: this computer has not seen this key before.</p>
+      {/if}
       <p class="key">Key {view.identity.key}</p>
     {:else if view.identity.kind === "same_key"}
       <p>
@@ -232,10 +238,16 @@
 
   .key-changed {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-2);
     color: var(--red-fg);
     font-weight: 600;
+  }
+
+  /* The 16-pixel icon in the middle of the first 20-pixel line. */
+  .key-changed :global(.icon) {
+    flex: none;
+    margin-top: 2px;
   }
 
   .key {

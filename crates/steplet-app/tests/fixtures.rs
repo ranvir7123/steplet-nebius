@@ -450,6 +450,10 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     );
     s.insert("preview-id-known-as", with_preview("preview", preview_with(&signed, &[pin("Ana Lee", &signed_key, 1)])));
     s.insert(
+        "preview-id-unsigned-known-name",
+        with_preview("preview", preview_with(&example, &[pin(&steplet_of(&example).sender.text, OTHER_KEY, 2)])),
+    );
+    s.insert(
         "preview-id-key-changed",
         with_preview("preview", preview_with(&signed, &[pin(&signed_sender, OTHER_KEY, 3)])),
     );
@@ -457,6 +461,11 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert(
         "preview-not-runnable-no-repo",
         with_preview("preview", preview_with(&read("corpus/hostile/note.no-repository.hit.steplet"), &[])),
+    );
+    let no_repo = read("corpus/hostile/note.no-repository.hit.steplet");
+    s.insert(
+        "preview-not-runnable-key-changed",
+        with_preview("preview", preview_with(&no_repo, &[pin(&steplet_of(&no_repo).sender.text, OTHER_KEY, 1)])),
     );
 
     // Run chooser

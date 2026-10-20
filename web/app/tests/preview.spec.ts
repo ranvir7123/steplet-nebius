@@ -71,6 +71,19 @@ test("nothing_is_cut_off", async ({ page }) => {
           .map((e) => `${e.tagName}.${e.className}`),
       );
       expect(cut, `${scenario} at ${width}`).toEqual([]);
+      // Nothing spills out of the box it is drawn in, even where the window is wide enough to hide it.
+      const spills = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("main *")]
+          .filter((e) => {
+            const box = e.parentElement?.closest(".from-file, .quote, .finding, .body, .run, .outcome, .counts > div");
+            if (!box) return false;
+            const r = e.getBoundingClientRect();
+            const b = box.getBoundingClientRect();
+            return r.width > 0 && (r.right > b.right + 1 || r.left < b.left - 1);
+          })
+          .map((e) => `${e.tagName}.${e.className}: ${e.textContent?.slice(0, 40)}`),
+      );
+      expect(spills, `${scenario} at ${width}: spills out of its box`).toEqual([]);
       const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
       expect(sideways, `${scenario} at ${width}: sideways scroll`).toBe(false);
     }
@@ -114,6 +127,22 @@ test("a_changed_key_leads_the_identity_line", async ({ page }) => {
   await show(page, "preview-id-key-changed");
   const identity = page.getByRole("region", { name: "Who signed this file" });
   await expect(identity.locator("p").first()).toHaveText(/^This sender name was used before with another key\./);
+  await expect(identity).not.toContainText("sender unknown");
+});
+
+test("an_unsigned_file_under_a_known_name_says_so", async ({ page }) => {
+  await show(page, "preview-id-unsigned-known-name");
+  const identity = page.getByRole("region", { name: "Who signed this file" });
+  await expect(identity.locator("p").first()).toHaveText(
+    /^This sender name was used before on a signed file, and this file is not signed\./,
+  );
+});
+
+test("the_banner_shows_this_computers_warnings_too", async ({ page }) => {
+  // A file that cannot run here (no repository), whose sender name this computer knows with a signing key.
+  await show(page, "preview-not-runnable-key-changed");
+  await expect(page.getByRole("heading", { name: "Steplet cannot run this file on this computer" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "How Steplet rates this file" })).toContainText("Red");
 });
 
 test("opening_makes_no_network_request", async ({ page, baseURL }) => {

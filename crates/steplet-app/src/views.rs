@@ -198,6 +198,9 @@ pub struct PreviewView {
     pub sha256: String,
     /// The file's own outcome, as the core rated it: `green`, `amber`, `red` or `blocked`.
     pub outcome: String,
+    /// The colour the screen shows: the worst of the file's findings and those about this computer (row 22), in the
+    /// same words. It differs from `outcome` only when something on this computer is worse than the file.
+    pub colour: String,
     pub run_status: RunStatus,
     pub identity: IdentityView,
     /// The sender name is pinned here to another key, or the file is unsigned under a pinned name (`id.key-changed`,
@@ -231,7 +234,8 @@ pub const NO_REPOSITORY: &str = "This file names no repository, so Steplet has n
 /// host: that is file text, shown in the file's own panel.
 pub fn not_fetched_from_here() -> String {
     format!(
-        "Steplet fetches repositories only from plain https:// addresses on {}, and this file's repository is not          one of those.",
+        "Steplet fetches repositories only from plain https:// addresses on {}, and this file's repository is not one \
+         of those.",
         and_list(steplet_run::REPOSITORY_HOSTS)
     )
 }
@@ -249,7 +253,8 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
     let file_worst = report.rating.findings.first().map(|f| f.rule.severity);
     let here_worst = here.findings.iter().map(|f| f.rule.severity).max();
     let worst = file_worst.into_iter().chain(here_worst).max();
-    let run_status = match worst.map(Outcome::of).unwrap_or(Outcome::Green) {
+    let colour = worst.map(Outcome::of).unwrap_or(Outcome::Green);
+    let run_status = match colour {
         Outcome::Blocked => RunStatus::Blocked,
         _ if here.not_runnable.is_some() => {
             RunStatus::NotRunnable { reason: here.not_runnable.clone().unwrap_or_default() }
@@ -270,6 +275,7 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
     PreviewView {
         sha256: Sha256::digest(raw).iter().map(|b| format!("{b:02x}")).collect(),
         outcome: report.rating.outcome.name().into(),
+        colour: colour.name().into(),
         run_status,
         identity,
         key_changed: here.findings.iter().any(|f| f.rule.id == rules::KEY_CHANGED.id),

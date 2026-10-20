@@ -3,9 +3,10 @@
   "preview": {
     "sha256": "364768de5a5646450a233d3b7ca007b7aff5319cc193eb9e11060b6593e8b400",
     "outcome": "green",
+    "colour": "green",
     "run_status": {
       "kind": "not_runnable",
-      "reason": "Steplet fetches repositories only from plain https:// addresses on github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is not          one of those."
+      "reason": "Steplet fetches repositories only from plain https:// addresses on github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is not one of those."
     },
     "identity": {
       "kind": "unsigned"

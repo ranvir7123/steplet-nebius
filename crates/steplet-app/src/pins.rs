@@ -5,7 +5,7 @@
 //! form Steplet's signature check gives it. A file that breaks any of that is kept as it is and said, never
 //! overwritten: Steplet then cannot warn about a changed key, and the preview says so.
 
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -115,8 +115,12 @@ pub fn record(path: &Path, sender: &str, key: &str) -> io::Result<()> {
     let dir = path.parent().ok_or_else(|| io::Error::other("the pins file has no folder"))?;
     std::fs::create_dir_all(dir)?;
     let part = path.with_extension("json.part");
-    std::fs::write(&part, text)?;
-    std::fs::rename(&part, path).inspect_err(|_| {
+    // The new list reaches the disk before it takes the old one's place, so a power cut leaves either list whole.
+    let written = std::fs::File::create(&part).and_then(|mut f| {
+        f.write_all(text.as_bytes())?;
+        f.sync_all()
+    });
+    written.and_then(|()| std::fs::rename(&part, path)).inspect_err(|_| {
         let _ = std::fs::remove_file(&part);
     })
 }

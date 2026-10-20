@@ -1,0 +1,140 @@
+{
+  "screen": "preview",
+  "preview": {
+    "sha256": "3c2857305de420d1011a0ed7bbfd5c319b578bee967199dd9ac8a322255e82e4",
+    "outcome": "green",
+    "colour": "red",
+    "run_status": {
+      "kind": "not_runnable",
+      "reason": "This file names no repository, so Steplet has nothing to fetch and run."
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "key_changed": true,
+    "findings": [
+      {
+        "rule": "note.no-repository",
+        "severity": "note",
+        "line": null,
+        "title": "The file names no repository",
+        "detail": null,
+        "advice": "Steplet 1 runs only tasks on a public repository, so this file can be read but not run.",
+        "quote": null
+      }
+    ],
+    "here": [
+      {
+        "rule": "id.key-changed",
+        "severity": "red",
+        "line": null,
+        "title": "This sender name was used before with another key",
+        "detail": "Steplet knows this sender name with the key SHA256:Q2hhbmdlZEtleUNoYW5nZWRLZXlDaGFuZ2VkS2V5Q2g. This file is not signed.",
+        "advice": "Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type the sentence to run it; Steplet then remembers the new key.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "Steplet corpus"
+          }
+        ]
+      }
+    ],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Count the README lines"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Steplet corpus"
+          }
+        ]
+      },
+      "expires": "2026-12-31",
+      "repository": null,
+      "steps": [
+        {
+          "line": 7,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Count the lines in the README file."
+            }
+          ]
+        },
+        {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report the count."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "wc -l README"
+            }
+          ]
+        }
+      ],
+      "domains": [],
+      "read": [],
+      "write": [],
+      "never": [
+        {
+          "line": 13,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change any file."
+            }
+          ]
+        }
+      ],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Count the README lines\n\nRun `wc -l README` and report the number.\n"
+        }
+      ],
+      "body_line": 15
+    },
+    "counts": {
+      "steps": 2,
+      "commands": 1,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 1
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "setup_changes": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

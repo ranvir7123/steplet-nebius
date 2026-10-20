@@ -3,6 +3,7 @@
   "preview": {
     "sha256": "994947474aa807e2ef69a19b39350e6855b00047103a8159ec0098a0c8567109",
     "outcome": "amber",
+    "colour": "amber",
     "run_status": {
       "kind": "amber"
     },

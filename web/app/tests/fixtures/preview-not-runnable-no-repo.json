@@ -3,6 +3,7 @@
   "preview": {
     "sha256": "3c2857305de420d1011a0ed7bbfd5c319b578bee967199dd9ac8a322255e82e4",
     "outcome": "green",
+    "colour": "green",
     "run_status": {
       "kind": "not_runnable",
       "reason": "This file names no repository, so Steplet has nothing to fetch and run."

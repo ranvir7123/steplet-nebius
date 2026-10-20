@@ -3,6 +3,7 @@
   "preview": {
     "sha256": "e9e775aec1ab7cc3d42b7a240d0f4ccb6f1d482060f48c1c42da1b42f446bade",
     "outcome": "blocked",
+    "colour": "blocked",
     "run_status": {
       "kind": "blocked"
     },

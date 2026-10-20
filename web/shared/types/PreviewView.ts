@@ -13,7 +13,12 @@ sha256: string,
 /**
  * The file's own outcome, as the core rated it: `green`, `amber`, `red` or `blocked`.
  */
-outcome: string, run_status: RunStatus, identity: IdentityView, 
+outcome: string, 
+/**
+ * The colour the screen shows: the worst of the file's findings and those about this computer (row 22), in the
+ * same words. It differs from `outcome` only when something on this computer is worse than the file.
+ */
+colour: string, run_status: RunStatus, identity: IdentityView, 
 /**
  * The sender name is pinned here to another key, or the file is unsigned under a pinned name (`id.key-changed`,
  * rows 16 and 22): the identity line starts with that warning, whose detail is in `here`.

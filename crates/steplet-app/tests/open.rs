@@ -76,6 +76,7 @@ fn a_host_steplet_does_not_fetch_from_is_said_before_run() {
     assert_eq!(*reason, not_fetched_from_here());
     assert!(reason.contains("github.com, gitlab.com, codeberg.org and bitbucket.org"), "H9's hosts: {reason}");
     assert!(!reason.contains("gitlab.example.com"), "the file's own host is file text, shown in its panel only");
+    assert!(!reason.contains("  "), "one space between words: {reason:?}");
 }
 
 #[test]
@@ -114,6 +115,22 @@ fn a_changed_key_leads_the_identity_line() {
     let unsigned = preview_file(&example(), NOW, &pinned(sender_of(&example()), OTHER_KEY));
     assert!(unsigned.key_changed, "unsigned under a pinned sender name (S6)");
     assert_eq!(rules(&unsigned), ["id.key-changed"]);
+}
+
+#[test]
+fn a_file_that_cannot_run_here_keeps_this_computers_colour() {
+    // A file with no repository, from a sender name this computer knows with a signing key, now unsigned (S6).
+    let raw =
+        std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../corpus/hostile/note.no-repository.hit.steplet"))
+            .unwrap();
+    let sender = steplet_core::report::check(&raw, NOW).steplet.unwrap().sender.text;
+    let view = preview_file(&raw, NOW, &Pins::Known(vec![Pin { sender, key: OTHER_KEY.into(), runs: 1 }]));
+    assert_eq!(view.run_status, RunStatus::NotRunnable { reason: steplet_app::views::NO_REPOSITORY.into() });
+    assert!(view.key_changed);
+    assert_eq!(view.outcome, "green", "the file's own outcome");
+    assert_eq!(view.colour, "red", "the banner: the worst of the file's findings and this computer's (row 22)");
+    let plain = preview_file(&raw, NOW, &Pins::Known(Vec::new()));
+    assert_eq!(plain.colour, plain.outcome, "nothing about this computer: the file's own colour");
 }
 
 #[test]

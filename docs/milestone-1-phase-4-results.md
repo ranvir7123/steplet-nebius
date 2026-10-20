@@ -2691,3 +2691,82 @@ clippy exit: 0
 - **The pins being written when Run starts** (Task 12 calls `pins::record`); `record` itself is tested.
 - **Look-alike sender names** in other alphabets stay different names (Task 7); not tried on screen.
 - **Windows' own Open dialog** opened by "Open a file…" in the real window: the test sets the file straight into the picker, so the dialog itself was not seen.
+
+### The code review, and what changed
+
+A read-only reviewer read the task's commit (60c18b0). It found nothing critical: no file text outside the display pieces, no raw HTML, nothing written to disk while opening, no network call. Its points, and what was done with each:
+
+1. **A file that cannot run here showed the file's own colour,** even when something on this computer was worse. Example: a file with no repository, from a sender name this computer knows with a signing key, now unsigned: the banner said "Green" while "On this computer" held the red key warning. The preview data now carries `colour`, the worst of the file's findings and this computer's, worked out in Rust; the banner shows it (the screen no longer works it out). Tests: Rust `a_file_that_cannot_run_here_keeps_this_computers_colour`, screen `the_banner_shows_this_computers_warnings_too` (a new saved scenario, `preview-not-runnable-key-changed`).
+2. **The changed-key line said "another key" for an unsigned file,** and the next line still said "sender unknown". Now an unsigned file under a known name says "This sender name was used before on a signed file, and this file is not signed."; a valid new key under a known name says "The signature is valid, but this computer has not seen this key before." Tests: screen `an_unsigned_file_under_a_known_name_says_so` (a new saved scenario, `preview-id-unsigned-known-name`), and `a_changed_key_leads_the_identity_line` now also requires that "sender unknown" is not there.
+3. **The senders list was not flushed to disk before it replaced the old one,** so a power cut at that moment could leave an empty list, which Steplet would then refuse to touch for good. It is now written, flushed (`sync_all`), and only then renamed into place; a temporary file left by a failed write is removed. No test can make a power cut, so this change has none that failed first; the existing test that no temporary file is left still passes.
+4. **Two windows recording a pin at the same moment** could lose one update. Pins are written only when Run starts, and Run takes Steplet's one-run lock (Task 3), so Task 12 must write the pin while it holds that lock. Noted for Task 12; nothing to change now.
+5. **`nothing_is_cut_off` could only see text clipped by a hidden overflow,** and Steplet's file text never clips, so that half could not fail; text spilling out of its box but not past the window's edge would pass. The test now also checks that nothing is drawn outside the box it sits in (the file panel, a quote, a finding, the notes, the Run box, the banner, a count box). To show it can fail, a list's second column was made 850 pixels wide (then put back):
+
+```
+> npm --prefix web test -- preview -g nothing_is_cut_off        (the planted overflow)
+  x  1 [screens] › app\tests\preview.spec.ts:58:1 › nothing_is_cut_off (257ms)
+    Error: preview-longest at 1100: spills out of its box
+  1 failed
+```
+
+6. **`opening_makes_no_network_request` checks the page only,** not the Rust side. True: Rust's opening code holds no network code at all, and the real window's test (`the real window reaches nothing outside the app`) covers the web view. Left as it is (deferred below).
+7. **The cut to 262,145 bytes in `AppState::show` has no test of its own.** A file over that size is always blocked (`read.too-large`), so it can never be run, which makes a missed cut harmless. Deferred.
+
+Also found by the reviewer, and fixed because the results above quote the sentence: the "cannot run here" reason held a run of ten spaces ("is not          one of those"), from a broken line join; the test `a_host_steplet_does_not_fetch_from_is_said_before_run` now requires single spaces. And while looking at the two new states: the red icon of a two-line warning sat between the lines; it now sits beside the first line.
+
+The tests first:
+
+```
+> cargo test -p steplet-app --offline --test open
+error[E0609]: no field `colour` on type `PreviewView`
+   --> crates\steplet-app\tests\open.rs:131:21
+error[E0609]: no field `colour` on type `PreviewView`
+   --> crates\steplet-app\tests\open.rs:133:22
+error: could not compile `steplet-app` (test "open") due to 2 previous errors
+> STEPLET_BLESS=1 cargo test -p steplet-app --offline --test fixtures        (the two new scenarios)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+> npm --prefix web run build:screens; npm --prefix web test -- preview
+  x   9 [screens] › app\tests\preview.spec.ts:126:1 › a_changed_key_leads_the_identity_line (5.1s)
+  x  10 [screens] › app\tests\preview.spec.ts:133:1 › an_unsigned_file_under_a_known_name_says_so (5.2s)
+  x  11 [screens] › app\tests\preview.spec.ts:141:1 › the_banner_shows_this_computers_warnings_too (5.2s)
+    Expected substring: not "sender unknown"
+    Received string: "This sender name was used before with another key. See \"On this computer\", below. Signature valid, sender unknown: this computer has not seen this key before. Key SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk"
+    Expected pattern: /^This sender name was used before on a signed file, and this file is not signed\./
+    Received string:  "This sender name was used before with another key. See \"On this computer\", below."
+    Expected substring: "Red"
+    Received string:    " Green Nothing in this file asks for more than it declares, and everything declared is low risk."
+  3 failed
+  9 passed (22.9s)
+```
+
+(The first run after the change also failed two of them on a space at the start of the warning, left by how the markup was laid out; the markup was tidied.) The saved scenarios were written again; each preview gained `colour` (checked by a script over all 49 previews: it equals the Run colour wherever the file can run, and is red for the three key-changed states, whose own outcome is green), and the host reason lost its extra spaces.
+
+The tests pass:
+
+```
+> npm --prefix web run build:screens; npm --prefix web test -- preview
+  12 passed (5.3s)
+> npm --prefix web run build; cargo test -p steplet-app --offline
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+app exit: 0
+> npm --prefix web run check
+1792529841796 COMPLETED 141 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 64 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit: 0
+```
+
+(The app's empty test lines are left out.) Minor points left for later:
+- The page shows any refusal string as it is, so in a broken build Tauri's own refusal text would reach the screen (seen above with the planted missing permission); Rust's own refusals are Steplet's sentences and never name the file.
+- If a double-clicked file is still loading when another file is dropped, the two answers can arrive in either order (Run's check of the file's bytes, Task 12, refuses a mismatch).
+- `steplet.exe --anything` treats the flag as a file to open (Task 11 handles the start argument).
+- The "Setup" link in the top bar does nothing yet (Task 11).
+- A red file that also cannot run here still shows red's line "you will type a sentence first" in its banner (Task 14 looks at every state's words).
+- `opening_makes_no_network_request` checks the page only; the cut in `AppState::show` and the pins file's 1 MiB limit have no tests of their own.
