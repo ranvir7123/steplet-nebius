@@ -7,19 +7,23 @@
   "setup": {
     "wsl": {
       "status": "ready",
-      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+      "text": "Windows' Linux feature (WSL 2.6.3.0).",
+      "detail": null
     },
     "linux": {
       "status": "missing",
-      "text": "Steplet's own Linux is not installed yet."
+      "text": "Steplet's own Linux is not installed yet.",
+      "detail": null
     },
     "tools": {
       "status": "unknown",
-      "text": "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+      "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+      "detail": null
     },
     "gate": {
       "status": "unknown",
-      "text": "Steplet cannot look at its gate program until Windows' Linux feature is there."
+      "text": "Steplet can look at its gate program once its Linux is installed.",
+      "detail": null
     },
     "key_saved": false,
     "opens_steplet_files": "off",
@@ -84,6 +88,108 @@
     ]
   ],
   "setup_error": null,
+  "setup_changes": {
+    "key_saved": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "key_saved": true,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "key_forgotten": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "switch_on": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "on",
+      "ready": false
+    },
+    "switch_off": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false
+    }
+  },
   "progress": [],
   "after_stop": [],
   "replies": {

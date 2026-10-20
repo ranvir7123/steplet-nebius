@@ -7,19 +7,23 @@
   "setup": {
     "wsl": {
       "status": "missing",
-      "text": "Windows' Linux feature (WSL 2) is not on this computer."
+      "text": "Windows' Linux feature (WSL 2) is not on this computer.",
+      "detail": null
     },
     "linux": {
       "status": "unknown",
-      "text": "Steplet cannot look at its own Linux until Windows' Linux feature is there."
+      "text": "Steplet can look at its own Linux once Windows' Linux feature is there.",
+      "detail": null
     },
     "tools": {
       "status": "unknown",
-      "text": "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+      "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is there.",
+      "detail": null
     },
     "gate": {
       "status": "unknown",
-      "text": "Steplet cannot look at its gate program until Windows' Linux feature is there."
+      "text": "Steplet can look at its gate program once Windows' Linux feature is there.",
+      "detail": null
     },
     "key_saved": false,
     "opens_steplet_files": "off",
@@ -27,6 +31,108 @@
   },
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": {
+    "key_saved": {
+      "wsl": {
+        "status": "missing",
+        "text": "Windows' Linux feature (WSL 2) is not on this computer.",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet can look at its own Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "key_saved": true,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "key_forgotten": {
+      "wsl": {
+        "status": "missing",
+        "text": "Windows' Linux feature (WSL 2) is not on this computer.",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet can look at its own Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "switch_on": {
+      "wsl": {
+        "status": "missing",
+        "text": "Windows' Linux feature (WSL 2) is not on this computer.",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet can look at its own Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "on",
+      "ready": false
+    },
+    "switch_off": {
+      "wsl": {
+        "status": "missing",
+        "text": "Windows' Linux feature (WSL 2) is not on this computer.",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet can look at its own Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once Windows' Linux feature is there.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false
+    }
+  },
   "progress": [],
   "after_stop": [],
   "replies": {

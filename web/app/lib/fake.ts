@@ -3,6 +3,7 @@
 // web/app/tests/fixtures. It decides nothing itself: every answer, word and colour comes from the saved data.
 import type { Fixture } from "../../shared/types/Fixture";
 import type { ProgressView } from "../../shared/types/ProgressView";
+import type { SetupChanges } from "../../shared/types/SetupChanges";
 import type { SetupView } from "../../shared/types/SetupView";
 import type { Backend, Shown, Unlisten } from "./backend";
 import { timing } from "./scenarios";
@@ -53,6 +54,13 @@ async function currentSetup(): Promise<SetupView> {
   return setup;
 }
 
+/** The setup screen after each change, as the Rust side worked it out when the scenario was saved. */
+async function changes(): Promise<SetupChanges> {
+  const f = await fixture();
+  if (!f.setup_changes) throw new Error(`${STAND_IN_MARK}: scenario ${name} has no setup changes`);
+  return f.setup_changes;
+}
+
 async function preview() {
   const f = await fixture();
   if (t.open === null) return never();
@@ -85,18 +93,19 @@ export const backend: Backend = {
       for (const cb of lineListeners) cb(l);
     }
     if (!t.installEnds) return never();
-    if (f.setup_error) throw new Error(f.setup_error);
+    if (f.setup_error) throw f.setup_error;
   },
   async saveKey() {
-    setup = { ...(await currentSetup()), key_saved: true };
+    setup = (await changes()).key_saved;
     return setup;
   },
   async forgetKey() {
-    setup = { ...(await currentSetup()), key_saved: false };
+    setup = (await changes()).key_forgotten;
     return setup;
   },
   async setOpensStepletFiles(on) {
-    setup = { ...(await currentSetup()), opens_steplet_files: on ? "on" : "off" };
+    const c = await changes();
+    setup = on ? c.switch_on : c.switch_off;
     return setup;
   },
   async startRun() {

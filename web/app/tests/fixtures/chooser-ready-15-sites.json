@@ -3279,19 +3279,23 @@
   "setup": {
     "wsl": {
       "status": "ready",
-      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+      "text": "Windows' Linux feature (WSL 2.6.3.0).",
+      "detail": null
     },
     "linux": {
       "status": "ready",
-      "text": "Steplet's own Linux is installed."
+      "text": "Steplet's own Linux is installed.",
+      "detail": null
     },
     "tools": {
       "status": "ready",
-      "text": "Its tools are there: git, Python, Claude Code and the rest."
+      "text": "Its tools are there: git, Python, Claude Code and the rest.",
+      "detail": null
     },
     "gate": {
       "status": "ready",
-      "text": "The gate program for this Steplet is in its Linux."
+      "text": "The gate program for this Steplet is in its Linux.",
+      "detail": null
     },
     "key_saved": true,
     "opens_steplet_files": "off",
@@ -3299,6 +3303,7 @@
   },
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": null,
   "progress": [],
   "after_stop": [],
   "replies": {

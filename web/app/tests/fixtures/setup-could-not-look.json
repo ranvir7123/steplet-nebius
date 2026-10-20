@@ -7,19 +7,38 @@
   "setup": {
     "wsl": {
       "status": "ready",
-      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+      "text": "Windows' Linux feature (WSL 2.6.3.0).",
+      "detail": null
     },
     "linux": {
       "status": "unknown",
-      "text": "Steplet could not look at its own Linux: WSL did not answer within 60 seconds"
+      "text": "Steplet could not look at its own Linux. What went wrong:",
+      "detail": [
+        {
+          "kind": "text",
+          "text": "WSL did not answer within 60 seconds"
+        }
+      ]
     },
     "tools": {
       "status": "unknown",
-      "text": "Steplet could not look at the tools in its Linux: WSL did not answer within 60 seconds"
+      "text": "Steplet could not look at the tools in its Linux. What went wrong:",
+      "detail": [
+        {
+          "kind": "text",
+          "text": "WSL did not answer within 60 seconds"
+        }
+      ]
     },
     "gate": {
       "status": "unknown",
-      "text": "Steplet could not look at its gate program: WSL did not answer within 60 seconds"
+      "text": "Steplet could not look at its gate program. What went wrong:",
+      "detail": [
+        {
+          "kind": "text",
+          "text": "WSL did not answer within 60 seconds"
+        }
+      ]
     },
     "key_saved": true,
     "opens_steplet_files": "off",
@@ -27,6 +46,168 @@
   },
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": {
+    "key_saved": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet could not look at its own Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet could not look at the tools in its Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet could not look at its gate program. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "key_saved": true,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "key_forgotten": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet could not look at its own Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet could not look at the tools in its Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet could not look at its gate program. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false
+    },
+    "switch_on": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet could not look at its own Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet could not look at the tools in its Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet could not look at its gate program. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "key_saved": true,
+      "opens_steplet_files": "on",
+      "ready": false
+    },
+    "switch_off": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet could not look at its own Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet could not look at the tools in its Linux. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet could not look at its gate program. What went wrong:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "WSL did not answer within 60 seconds"
+          }
+        ]
+      },
+      "key_saved": true,
+      "opens_steplet_files": "off",
+      "ready": false
+    }
+  },
   "progress": [],
   "after_stop": [],
   "replies": {

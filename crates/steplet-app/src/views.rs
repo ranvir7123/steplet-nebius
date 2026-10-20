@@ -411,6 +411,8 @@ pub struct LineView {
     pub status: LineStatus,
     /// Steplet's own words.
     pub text: String,
+    /// What a program printed when Steplet could not look (`setup::State.trouble`): not Steplet's words, so file text.
+    pub detail: Option<Shown>,
 }
 
 /// The "Open .steplet files with Steplet" switch (J4 A).
@@ -438,60 +440,52 @@ pub struct SetupView {
 /// The setup checklist from what `steplet_run::setup::look` saw, whether a key is saved, and the switch.
 pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Switch) -> SetupView {
     use steplet_run::setup::Wsl;
+    let said = |status: LineStatus, text: String| LineView { status, text, detail: None };
     let wsl = match &state.wsl {
-        Wsl::Missing => LineView {
-            status: LineStatus::Missing,
-            text: "Windows' Linux feature (WSL 2) is not on this computer.".into(),
-        },
-        Wsl::TooOld { version } => LineView {
-            status: LineStatus::Missing,
-            text: format!("Windows' Linux feature is version {version}; Steplet needs 2.6.3 or newer."),
-        },
-        Wsl::Ready { version } => {
-            LineView { status: LineStatus::Ready, text: format!("Windows' Linux feature (WSL {version}).") }
+        Wsl::Missing => said(LineStatus::Missing, "Windows' Linux feature (WSL 2) is not on this computer.".into()),
+        Wsl::TooOld { version } => said(
+            LineStatus::Missing,
+            format!("Windows' Linux feature is version {version}; Steplet needs 2.6.3 or newer."),
+        ),
+        Wsl::Ready { version } => said(LineStatus::Ready, format!("Windows' Linux feature (WSL {version}).")),
+    };
+    let linux_there = state.linux.is_some();
+    // A line Steplet cannot look at, and why, from the first cause in order: the feature, the trouble, its Linux.
+    let not_seen = |what: &str| match (&state.wsl, state.trouble.as_deref()) {
+        (Wsl::Missing, _) => {
+            said(LineStatus::Unknown, format!("Steplet can look at {what} once Windows' Linux feature is there."))
         }
-    };
-    let wsl_ready = matches!(state.wsl, Wsl::Ready { .. });
-    let trouble = state.trouble.as_deref();
-    let unknown = |what: &str| LineView {
-        status: LineStatus::Unknown,
-        text: match trouble {
-            Some(t) => format!("Steplet could not look at {what}: {t}"),
-            None => format!("Steplet cannot look at {what} until Windows' Linux feature is there."),
+        (Wsl::TooOld { .. }, _) => {
+            said(LineStatus::Unknown, format!("Steplet can look at {what} once Windows' Linux feature is updated."))
+        }
+        (_, Some(trouble)) => LineView {
+            status: LineStatus::Unknown,
+            text: format!("Steplet could not look at {what}. What went wrong:"),
+            detail: Some(shown(trouble)),
         },
+        (_, None) => said(LineStatus::Unknown, format!("Steplet can look at {what} once its Linux is installed.")),
     };
-    let linux = if !wsl_ready {
-        unknown("its own Linux")
-    } else if state.linux.is_some() {
-        LineView { status: LineStatus::Ready, text: "Steplet's own Linux is installed.".into() }
-    } else if trouble.is_some() {
-        unknown("its own Linux")
+    let seen = matches!(state.wsl, Wsl::Ready { .. }) && state.trouble.is_none();
+    let linux = if !seen {
+        not_seen("its own Linux")
+    } else if linux_there {
+        said(LineStatus::Ready, "Steplet's own Linux is installed.".into())
     } else {
-        LineView { status: LineStatus::Missing, text: "Steplet's own Linux is not installed yet.".into() }
+        said(LineStatus::Missing, "Steplet's own Linux is not installed yet.".into())
     };
-    let installed = wsl_ready && state.linux.is_some();
-    let tools = if !installed || trouble.is_some() {
-        unknown("the tools in its Linux")
+    let tools = if !seen || !linux_there {
+        not_seen("the tools in its Linux")
     } else if state.missing.is_empty() {
-        LineView {
-            status: LineStatus::Ready,
-            text: "Its tools are there: git, Python, Claude Code and the rest.".into(),
-        }
+        said(LineStatus::Ready, "Its tools are there: git, Python, Claude Code and the rest.".into())
     } else {
-        LineView {
-            status: LineStatus::Missing,
-            text: format!("Missing in Steplet's Linux: {}.", state.missing.join(", ")),
-        }
+        said(LineStatus::Missing, format!("Missing in Steplet's Linux: {}.", state.missing.join(", ")))
     };
-    let gate = if !installed || trouble.is_some() {
-        unknown("its gate program")
+    let gate = if !seen || !linux_there {
+        not_seen("its gate program")
     } else if state.gate {
-        LineView { status: LineStatus::Ready, text: "The gate program for this Steplet is in its Linux.".into() }
+        said(LineStatus::Ready, "The gate program for this Steplet is in its Linux.".into())
     } else {
-        LineView {
-            status: LineStatus::Missing,
-            text: "The gate program for this Steplet is not in its Linux yet.".into(),
-        }
+        said(LineStatus::Missing, "The gate program for this Steplet is not in its Linux yet.".into())
     };
     let ready = [&wsl, &linux, &tools, &gate].iter().all(|l| l.status == LineStatus::Ready) && key_saved;
     SetupView { wsl, linux, tools, gate, key_saved, opens_steplet_files: switch, ready }
@@ -639,6 +633,26 @@ pub fn reply_words(r: &Reply) -> &'static str {
     }
 }
 
+/// The setup screen after each change the receiver can make on it, for the stand-in backend (it decides nothing).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct SetupChanges {
+    pub key_saved: SetupView,
+    pub key_forgotten: SetupView,
+    pub switch_on: SetupView,
+    pub switch_off: SetupView,
+}
+
+impl SetupChanges {
+    pub fn of(state: &steplet_run::setup::State, key_saved: bool, switch: Switch) -> SetupChanges {
+        SetupChanges {
+            key_saved: setup_view(state, true, switch),
+            key_forgotten: setup_view(state, false, switch),
+            switch_on: setup_view(state, key_saved, Switch::On),
+            switch_off: setup_view(state, key_saved, Switch::Off),
+        }
+    }
+}
+
 /// Steplet's words for how a question ended, for the stand-in backend's `QuestionClosed`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct Replies {
@@ -677,11 +691,24 @@ pub enum ProgressView {
     Finished {
         report: ReportView,
     },
-    /// The run could not start or prepare; `stage` and `reason` in Steplet's words.
+    /// The run could not start or prepare: the stage, in Steplet's words, and why.
     Failed {
         stage: String,
-        reason: String,
+        failure: FailureView,
     },
+}
+
+/// Why something failed: Steplet's own sentence, and what the program that failed printed, if anything. That output is
+/// not Steplet's words (git prints what a repository's host sends; setup's programs print their own), so it is file
+/// text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct FailureView {
+    pub reason: String,
+    pub detail: Option<Shown>,
+}
+
+pub fn failure(reason: &str, detail: Option<&str>) -> FailureView {
+    FailureView { reason: reason.into(), detail: detail.map(shown) }
 }
 
 /// The screen's view of one piece of live progress. `call` is the tool name and request of the call a result belongs
@@ -866,7 +893,7 @@ pub struct Fixture {
     pub screen: String,
     /// What `initial_preview` and `open_path` answer.
     pub preview: Option<PreviewView>,
-    /// `open_path`'s refusal instead, in Steplet's words (the file could not be read).
+    /// `open_path`'s refusal instead, in Steplet's words (the file could not be read). It never names the file.
     pub open_error: Option<String>,
     /// A note on the Open screen, in Steplet's words (a crash's run was cleared).
     pub note: Option<String>,
@@ -874,8 +901,10 @@ pub struct Fixture {
     pub setup: Option<SetupView>,
     /// The setup's progress lines (raw lines from Linux programs, so file text).
     pub setup_lines: Vec<Shown>,
-    /// How the install ended, if it failed, in Steplet's words.
-    pub setup_error: Option<String>,
+    /// How the install ended, if it failed.
+    pub setup_error: Option<FailureView>,
+    /// The setup screen after each change the receiver can make there, as the Rust side works it out.
+    pub setup_changes: Option<SetupChanges>,
     /// The run's progress, in order.
     pub progress: Vec<ProgressView>,
     /// What the run sends after the receiver presses Stop.

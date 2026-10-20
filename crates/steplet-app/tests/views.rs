@@ -4,9 +4,13 @@
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
-use steplet_app::views::{Here, Seg, line, preview, report_view};
+use steplet_app::views::{
+    Here, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
+    setup_view,
+};
 use steplet_core::report::check;
-use steplet_run::{Answer, Event, Reply, RunOutcome, Trust, build_report};
+use steplet_run::setup::{State, Wsl};
+use steplet_run::{Answer, Event, Question, Reply, RunOutcome, Trust, build_report};
 
 /// The corpus's own time of viewing (crates/steplet-core/tests/corpus.rs), so expiry findings are the expected ones.
 const NOW: i64 = 1_791_720_000;
@@ -152,4 +156,107 @@ fn no_view_holds_the_key() {
     assert!(text.contains("[hidden by Steplet]"), "the key's places are marked");
     assert!(!text.contains(k), "{text}");
     assert!(!text.contains("STEPLET-TEST-MADE-UP"), "no part of the key either");
+}
+
+fn stray_text(v: &impl serde::Serialize, marker: &str) -> Vec<String> {
+    let mut stray = Vec::new();
+    outside_pieces(&serde_json::to_value(v).unwrap(), "view", marker, &mut stray);
+    stray
+}
+
+fn trouble_state(trouble: Option<&str>, wsl: Wsl, linux: bool) -> State {
+    State {
+        wsl,
+        linux: linux.then(|| "{44f36236-99b1-42c0-84bd-7ff8392d51ba}".into()),
+        missing: Vec::new(),
+        gate: false,
+        trouble: trouble.map(Into::into),
+    }
+}
+
+fn ready() -> Wsl {
+    Wsl::Ready { version: "2.6.3.0".into() }
+}
+
+#[test]
+fn what_a_program_printed_when_setup_could_not_look_is_file_text() {
+    // setup::State.trouble ends with what programs inside the Linux and wsl.exe printed (Task 6 review).
+    let view =
+        setup_view(&trouble_state(Some("wsl.exe said: Qzx \u{1b}[31m✅ all fine"), ready(), true), true, Switch::Off);
+    assert_eq!(stray_text(&view, "Qzx"), Vec::<String>::new(), "program output outside display pieces");
+    assert_eq!(view.tools.status, LineStatus::Unknown, "could not look, which is not the same as missing");
+}
+
+#[test]
+fn what_a_failed_program_printed_is_file_text() {
+    // git prints what the repository's host sends, so a failure's detail is not Steplet's words.
+    let f = failure("Steplet could not fetch the repository. Nothing ran.", Some("remote: Qzx ✅ Verified by Steplet"));
+    let p = ProgressView::Failed { stage: "Fetching the repository".into(), failure: f };
+    assert_eq!(stray_text(&p, "Qzx"), Vec::<String>::new());
+}
+
+#[test]
+fn setup_says_why_it_cannot_look_yet() {
+    let text = |state: &State| setup_view(state, false, Switch::Off).tools.text;
+    assert_eq!(
+        text(&trouble_state(None, ready(), false)),
+        "Steplet can look at the tools in its Linux once its Linux is installed."
+    );
+    assert_eq!(
+        text(&trouble_state(None, Wsl::TooOld { version: "2.0.9.0".into() }, false)),
+        "Steplet can look at the tools in its Linux once Windows' Linux feature is updated."
+    );
+    assert_eq!(
+        text(&trouble_state(None, Wsl::Missing, false)),
+        "Steplet can look at the tools in its Linux once Windows' Linux feature is there."
+    );
+    assert_eq!(
+        text(&trouble_state(Some("x"), ready(), true)),
+        "Steplet could not look at the tools in its Linux. What went wrong:"
+    );
+}
+
+#[test]
+fn live_and_report_views_keep_outside_text_in_pieces() {
+    // Every text field the agent, a command or the model fills holds the word Qzx.
+    let q = "Qzx";
+    let input = json!({ "command": format!("echo {q}"), format!("{q}-key"): format!("{q} value") });
+    let events = vec![
+        Event::Started { model: format!("{q}-model"), tools: vec![q.into()], gate_connected: true },
+        Event::AgentText(format!("{q} says")),
+        Event::ToolUse { id: "c1".into(), name: format!("Bash{q}"), input: input.clone() },
+        Event::ToolResult { id: "c1".into(), is_error: true, text: format!("Exit code 1\n{q}"), plain_end: false },
+        Event::SkippedGate { id: "c1".into(), tool: q.into(), what: q.into(), harmless: false },
+        Event::ModelSwitch { from: q.into(), to: Some(q.into()), category: q.into(), explanation: q.into() },
+        Event::HookEvent { name: q.into() },
+        Event::Stderr(q.into()),
+        Event::Result {
+            subtype: "success".into(),
+            is_error: false,
+            stop_reason: "end_turn".into(),
+            models: vec![q.into()],
+            text: q.into(),
+        },
+    ];
+    for e in &events {
+        let view = event_view(e, Some(("Bash", &input)));
+        assert_eq!(stray_text(&view, q), Vec::<String>::new(), "{e:?}");
+    }
+    let question = Question {
+        id: 1,
+        tool: format!("Bash{q}"),
+        what: format!("echo {q}"),
+        input: input.clone(),
+        reason: "the file does not ask for this command".into(),
+        fingerprint: "f".into(),
+        asked_at: std::time::Instant::now(),
+    };
+    assert_eq!(stray_text(&question_view(&question, std::time::Duration::from_secs(300)), q), Vec::<String>::new());
+    let mut o = outcome(events);
+    o.faults.push(format!("{q} fault"));
+    o.stopped_by = Some(steplet_run::Tripwire::SkippedCommand(q.into()));
+    o.answers.push(Answer { call: "c1".into(), tool: q.into(), what: q.into(), reply: Reply::No });
+    let changed = vec![format!("?? {q}")];
+    let report = build_report(&o, Some(&changed), Trust::NotRecorded, &[]);
+    assert_eq!(stray_text(&report_view(&report), q), Vec::<String>::new());
 }

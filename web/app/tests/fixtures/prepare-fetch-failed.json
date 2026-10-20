@@ -143,11 +143,34 @@
   "setup": null,
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": null,
   "progress": [
     {
       "kind": "failed",
       "stage": "Fetching the repository",
-      "reason": "Steplet could not fetch https://github.com/octocat/Hello-World.git. Git said: could not resolve host github.com. Nothing ran."
+      "failure": {
+        "reason": "Steplet could not fetch the repository, so nothing ran. Git said:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "fatal: unable to access '"
+          },
+          {
+            "kind": "link",
+            "shown": null,
+            "real": [
+              {
+                "kind": "text",
+                "text": "https://github.com/octocat/Hello-World.git/"
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "text": "': Could not resolve host: github.com"
+          }
+        ]
+      }
     }
   ],
   "after_stop": [],

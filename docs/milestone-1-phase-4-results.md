@@ -2436,3 +2436,69 @@ fmt exit: 0
 (The test files with no Linux-only test, and their empty summary lines, are left out; the totals are counted from all 19 summary lines. The install test, which downloads 1 to 2 GB, was not run again, as the rules say. The 40 ignored in the plain run are the Linux-only tests, one more than before: the new one.)
 
 **What this did not verify:** why Windows refuses a path (unknown); whether it could happen in the middle of a run, to the run's own fresh copy (never seen: each refused path had been started many times over days); a receiver's computer. Each run now writes one 395 KB copy and removes it after; the older content-named copies in `/opt/steplet/gate` stay where they are (the installed one is the source of every run's copy). Decision H8 changes from "a new name for each build" to "a fresh copy for each run"; Task 16 records it in `docs/decisions.md`.
+
+### The code review, and what changed
+
+A code-reviewer agent read Task 9's diff (read-only) and ran the app's tests, clippy and the screen checks (all clean). It found nothing critical, and checked as fine: every other plain-text field holds only Steplet's own words (the not-runnable reason, the checker's reason in a question, the check and end words, the trust line, the notes, a finding's detail, the promises' text); `line()` and `shown()` are used in the right places and never break a link or drop text; the preview's colour logic; `exit_code_of` is exactly the old rule; the app build cannot hold the stand-in. Its Important points, each fixed test-first:
+
+1. **A failed preparation's message could carry git's output as plain text.** Git prints what the repository's host sends, so it is file text. A failure is now Steplet's own sentence plus a separate `detail` in display pieces (`FailureView`), for a run that could not prepare and for a failed install. Test: `what_a_failed_program_printed_is_file_text` (before the fix there was no such type: Task 9's saved `prepare-fetch-failed` put git's words into the plain `reason`).
+2. **Setup's "could not look" line carried other programs' error output as plain text** (`setup::State.trouble` ends with what programs inside the Linux and `wsl.exe` printed). It now goes to the line's `detail`, in display pieces. Test: `what_a_program_printed_when_setup_could_not_look_is_file_text`.
+3. **Setup gave the wrong reason** when Windows' Linux feature is there but Steplet's Linux is not installed yet ("…until Windows' Linux feature is there"). Each line now names the first real cause: the feature missing, the feature too old, Steplet could not look, or its Linux not installed yet. Test: `setup_says_why_it_cannot_look_yet`.
+4. **The stand-in worked out the setup screen itself** after a key was saved or the switch changed (and so left "ready" stale). The saved scenarios now hold the setup screen after each change, worked out by the Rust side (`SetupChanges`), and the stand-in only replays them.
+
+Shown failing by putting the old behaviour back into the new code (then undone), and as Task 9 had saved it:
+
+```
+> cargo test -p steplet-app --offline --test views setup      (old wording and old trouble text planted)
+test setup_says_why_it_cannot_look_yet ... FAILED
+test what_a_program_printed_when_setup_could_not_look_is_file_text ... FAILED
+assertion `left == right` failed
+  left: "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+ right: "Steplet can look at the tools in its Linux once its Linux is installed."
+assertion `left == right` failed: program output outside display pieces
+  left: ["view.gate.text", "view.linux.text", "view.tools.text"]
+ right: []
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+> git show ec1102a:web/app/tests/fixtures/prepare-fetch-failed.json      (Task 9 as committed)
+      "kind": "failed",
+      "stage": "Fetching the repository",
+      "reason": "Steplet could not fetch https://github.com/octocat/Hello-World.git. Git said: could not resolve host github.com. Nothing ran."
+```
+
+The reviewer also asked for wider tests of the rule itself (its points 8 and 9), and one was added: `live_and_report_views_keep_outside_text_in_pieces` puts a marker word in every text the agent, a command or the model fills, and checks it is found only inside display pieces in the live rows, a question and a report. It passed at once: it pins down what the code already did.
+
+```
+> cargo test -p steplet-app --offline --test views
+test setup_says_why_it_cannot_look_yet ... ok
+test a_newline_inside_one_entry_shows_as_a_badge ... ok
+test what_a_failed_program_printed_is_file_text ... ok
+test what_a_program_printed_when_setup_could_not_look_is_file_text ... ok
+test no_view_holds_the_key ... ok
+test live_and_report_views_keep_outside_text_in_pieces ... ok
+test file_text_reaches_the_screen_only_as_segments ... ok
+test the_preview_agrees_with_the_core ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+> STEPLET_BLESS=1 cargo test -p steplet-app --offline --test fixtures      (the scenarios and types written again)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+> cargo test -p steplet-app --offline
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+app exit: 0
+> npm --prefix web run check
+1792526410423 COMPLETED 134 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 62 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit: 0
+```
+
+(The app's empty test lines are left out.) Minor points left for later, each noted for the task it belongs to:
+- The live rows' call ids come from Claude Code's stream; they are used only to match a result to its call, and no screen may draw them (Task 12).
+- When a file's header cannot be read but its signature is valid, the identity line says "new key" without comparing it to the pins (the file is blocked anyway).
+- Two small tidy-ups in `preview()` (the not-runnable branch, and taking the worst finding from the core's outcome).
+- A question's number is cut to 32 bits without a check; bless removes every `.ts` in `web/shared/types`, so nothing hand-written may go there.
+- A dropped file goes to Rust as a list of numbers, several times its size (Task 10 cuts it to 262,145 bytes first).
+- `call_what` could be `what` made public; setup's missing items show Steplet's short check names ("wsl.conf"), which a receiver may not understand (Task 11 words them).

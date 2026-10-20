@@ -143,11 +143,20 @@
   "setup": null,
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": null,
   "progress": [
     {
       "kind": "failed",
       "stage": "Checking out the commit",
-      "reason": "The repository has no commit 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d. Nothing ran."
+      "failure": {
+        "reason": "The repository has no such commit, so nothing ran. Git said:",
+        "detail": [
+          {
+            "kind": "text",
+            "text": "fatal: reference is not a tree: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+          }
+        ]
+      }
     }
   ],
   "after_stop": [],

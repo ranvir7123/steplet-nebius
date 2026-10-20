@@ -143,6 +143,7 @@
   "setup": null,
   "setup_lines": [],
   "setup_error": null,
+  "setup_changes": null,
   "progress": [
     {
       "kind": "prepared",

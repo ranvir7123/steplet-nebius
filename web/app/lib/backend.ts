@@ -24,7 +24,7 @@ export interface Backend {
   openBytes(bytes: Uint8Array): Promise<PreviewView>;
   chooser(): Promise<ChooserView>;
   setupStatus(): Promise<SetupView>;
-  /** Installs Steplet's Linux; each line it prints comes through `onSetupLine`. */
+  /** Installs Steplet's Linux; each line it prints comes through `onSetupLine`. A failure rejects with a FailureView. */
   setupInstall(): Promise<void>;
   saveKey(key: string): Promise<SetupView>;
   forgetKey(): Promise<SetupView>;

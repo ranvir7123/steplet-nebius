@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use steplet_app::views::{
-    self, ChooserView, Fixture, Here, PreviewView, ProgressView, Replies, ReportView, SetupView, Switch, line, preview,
-    progress_view, question_view, report_view, setup_view,
+    self, ChooserView, Fixture, Here, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView, Switch,
+    failure, line, preview, progress_view, question_view, report_view, setup_view,
 };
 use steplet_core::header::Steplet;
 use steplet_core::identity::{Pin, identity};
@@ -360,6 +360,7 @@ fn fixture(screen: &str) -> Fixture {
         setup: None,
         setup_lines: Vec::new(),
         setup_error: None,
+        setup_changes: None,
         progress: Vec::new(),
         after_stop: Vec::new(),
         replies: Replies::default(),
@@ -480,44 +481,44 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     );
 
     // Setup
-    let setup = |view: SetupView| Fixture { setup: Some(view), ..fixture("setup") };
-    let nothing_done = setup_view(&state(ready_wsl(), false, &[], false, None), false, Switch::Off);
-    s.insert("setup-nothing-done", setup(nothing_done.clone()));
-    s.insert("setup-wsl-missing", setup(setup_view(&state(Wsl::Missing, false, &[], false, None), false, Switch::Off)));
+    let setup = |st: State, key: bool, switch: Switch| Fixture {
+        setup: Some(setup_view(&st, key, switch)),
+        setup_changes: Some(SetupChanges::of(&st, key, switch)),
+        ..fixture("setup")
+    };
+    let nothing = || state(ready_wsl(), false, &[], false, None);
+    let all_ready = || state(ready_wsl(), true, &[], true, None);
+    s.insert("setup-nothing-done", setup(nothing(), false, Switch::Off));
+    s.insert("setup-wsl-missing", setup(state(Wsl::Missing, false, &[], false, None), false, Switch::Off));
     s.insert(
         "setup-wsl-too-old",
-        setup(setup_view(
-            &state(Wsl::TooOld { version: "2.0.9.0".into() }, false, &[], false, None),
-            false,
-            Switch::Off,
-        )),
+        setup(state(Wsl::TooOld { version: "2.0.9.0".into() }, false, &[], false, None), false, Switch::Off),
     );
-    s.insert("setup-installing", Fixture { setup_lines: setup_lines(), ..setup(nothing_done.clone()) });
+    s.insert("setup-installing", Fixture { setup_lines: setup_lines(), ..setup(nothing(), false, Switch::Off) });
     s.insert(
         "setup-install-failed",
         Fixture {
             setup_lines: setup_lines()[..4].to_vec(),
-            setup_error: Some(
-                "Setting up Steplet's Linux stopped at \"install the tools\": the download failed (no network?). Try \
-                 again: setup is safe to repeat."
-                    .into(),
-            ),
-            ..setup(nothing_done)
+            setup_error: Some(failure(
+                "Setting up Steplet's Linux stopped at \"install the tools\". Try again: setup is safe to repeat. What \
+                 it printed last:",
+                Some(
+                    "E: Failed to fetch http://archive.ubuntu.com/ubuntu/pool/main/g/git/git_2.51.0-1ubuntu1_amd64.deb \
+                     Temporary failure resolving 'archive.ubuntu.com'",
+                ),
+            )),
+            ..setup(nothing(), false, Switch::Off)
         },
     );
-    s.insert("setup-all-ready", setup(setup_all_ready(Switch::On)));
+    s.insert("setup-all-ready", setup(all_ready(), true, Switch::On));
     s.insert(
         "setup-key-saved",
-        setup(setup_view(&state(ready_wsl(), true, &["claude-code", "srt"], true, None), true, Switch::Off)),
+        setup(state(ready_wsl(), true, &["claude-code", "srt"], true, None), true, Switch::Off),
     );
-    s.insert("setup-switch-broken", setup(setup_all_ready(Switch::Broken)));
+    s.insert("setup-switch-broken", setup(all_ready(), true, Switch::Broken));
     s.insert(
         "setup-could-not-look",
-        setup(setup_view(
-            &state(ready_wsl(), false, &[], false, Some("WSL did not answer within 60 seconds")),
-            true,
-            Switch::Off,
-        )),
+        setup(state(ready_wsl(), false, &[], false, Some("WSL did not answer within 60 seconds")), true, Switch::Off),
     );
 
     // Prepare
@@ -529,16 +530,23 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         "prepare-fetch-failed",
         run_screen(vec![ProgressView::Failed {
             stage: "Fetching the repository".into(),
-            reason: "Steplet could not fetch https://github.com/octocat/Hello-World.git. Git said: could not resolve \
-                     host github.com. Nothing ran."
-                .into(),
+            failure: failure(
+                "Steplet could not fetch the repository, so nothing ran. Git said:",
+                Some(
+                    "fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Could not resolve host: \
+                     github.com",
+                ),
+            ),
         }]),
     );
     s.insert(
         "prepare-commit-missing",
         run_screen(vec![ProgressView::Failed {
             stage: "Checking out the commit".into(),
-            reason: format!("The repository has no commit {COMMIT}. Nothing ran."),
+            failure: failure(
+                "The repository has no such commit, so nothing ran. Git said:",
+                Some(&format!("fatal: reference is not a tree: {COMMIT}")),
+            ),
         }]),
     );
 
