@@ -13,9 +13,10 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use steplet_app::open::preview_file;
 use steplet_app::pins::Pins;
+use steplet_app::session::{ASK_LIMIT, RUN_LIMIT, Relay};
 use steplet_app::views::{
-    self, ChooserView, Fixture, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView, Switch,
-    failure, progress_view, question_view, report_view, setup_view,
+    self, ChooserView, Fixture, Limits, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView,
+    Switch, failure, report_view, setup_view,
 };
 use steplet_core::header::Steplet;
 use steplet_core::identity::Pin;
@@ -23,15 +24,13 @@ use steplet_core::policy::{Action, Decision, Policy};
 use steplet_core::report::check;
 use steplet_run::setup::{State, Wsl};
 use steplet_run::{
-    Answer, Asked, Client, Event, GateAnswer, GateRequest, Prepared, Progress, Question, Reply, RunOutcome, Tripwire,
-    Trust, build_report, fingerprint, promises,
+    Answer, Asked, Check, Client, Event, GateAnswer, GateRequest, NotYes, Prepared, Progress, Question, Reply,
+    RunOutcome, Tripwire, Trust, build_report, fingerprint, promises,
 };
 use ts_rs::{Config, TS};
 
 /// The corpus's own time of viewing (crates/steplet-core/tests/corpus.rs): 11 Oct 2026.
 const NOW: i64 = 1_791_720_000;
-/// The ask limit of S1.
-const ASK_LIMIT: Duration = Duration::from_secs(300);
 const COMMIT: &str = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d";
 const MODEL: &str = "claude-opus-5";
 /// A key's fingerprint that is not the corpus's signing key: "another key" in the identity states.
@@ -196,6 +195,8 @@ struct Run {
     events: Vec<Event>,
     requests: Vec<Asked>,
     answers: Vec<Answer>,
+    /// Each call's check as the gate sent it to the screen (Task 12), by call id.
+    checks: HashMap<String, (Check, Option<String>)>,
     next: u32,
 }
 
@@ -205,7 +206,14 @@ impl Run {
         let policy = Policy::from_steplet(&s, "/work/r1/repo").unwrap();
         let started =
             Event::Started { model: MODEL.into(), tools: vec!["Bash".into(), "Read".into()], gate_connected: true };
-        Run { policy, events: vec![started], requests: Vec::new(), answers: Vec::new(), next: 0 }
+        Run {
+            policy,
+            events: vec![started],
+            requests: Vec::new(),
+            answers: Vec::new(),
+            checks: HashMap::new(),
+            next: 0,
+        }
     }
 
     fn says(&mut self, text: &str) {
@@ -222,19 +230,26 @@ impl Run {
         let id = self.id();
         let input = json!({ "command": command });
         self.events.push(Event::ToolUse { id: id.clone(), name: "Bash".into(), input: input.clone() });
-        let allowed = match self.policy.check(&Action::Command(command)) {
-            Decision::Allow => true,
+        let refused = "the file does not ask for this command, so Steplet refused it";
+        let (allowed, check) = match self.policy.check(&Action::Command(command)) {
+            Decision::Allow => (true, (Check::Allowed, None)),
             Decision::Ask { .. } => {
                 let reply = if yes { Reply::Yes { fingerprint: "f".into() } } else { Reply::No };
                 self.answers.push(Answer { call: id.clone(), tool: "Bash".into(), what: command.into(), reply });
-                yes
+                let check = if yes {
+                    (Check::AllowedByYou { reused: false }, None)
+                } else {
+                    (Check::RefusedWhenAsked { how: NotYes::SaidNo }, None)
+                };
+                (yes, check)
             }
-            Decision::Deny { .. } => false,
+            Decision::Deny { .. } => (false, (Check::Refused, Some(refused.to_string()))),
         };
+        self.checks.insert(id.clone(), check);
         let answer = if allowed {
             GateAnswer::Allow { updated_input: input.clone() }
         } else {
-            GateAnswer::Deny { message: "the file does not ask for this command, so Steplet refused it".into() }
+            GateAnswer::Deny { message: refused.into() }
         };
         self.requests.push(Asked::Decision {
             client: client(),
@@ -280,20 +295,39 @@ impl Run {
         report_view(&build_report(o, Some(&changed), Trust::NotRecorded, &[]))
     }
 
-    /// The progress the screen gets for this run, with the removed agent settings files first.
+    /// The progress the screen gets for this run, with the removed agent settings files first, as the app's own
+    /// relay passes it on (`session::Relay`): each call's check after the call, the questions one at a time.
     fn progress(&self, removed: &[&str]) -> Vec<ProgressView> {
+        self.progress_then(removed, Vec::new())
+    }
+
+    /// The same, with `more` progress after the run's events (questions).
+    fn progress_then(&self, removed: &[&str], more: Vec<(Progress, Duration)>) -> Vec<ProgressView> {
         let prepared = Prepared { commit: COMMIT.into(), removed: removed.iter().map(|r| r.to_string()).collect() };
-        let mut out = vec![progress_view(&Progress::Prepared(prepared), None, ASK_LIMIT).unwrap()];
-        let mut calls: HashMap<String, (String, Value)> = HashMap::new();
+        let mut steps = vec![(Progress::Prepared(prepared), Duration::ZERO)];
         for e in &self.events {
-            if let Event::ToolUse { id, name, input } = e {
-                calls.insert(id.clone(), (name.clone(), input.clone()));
+            steps.push((Progress::Event(e.clone()), Duration::ZERO));
+            if let Event::ToolUse { id, .. } = e
+                && let Some((check, reason)) = self.checks.get(id)
+            {
+                let checked = Progress::Checked { call: id.clone(), check: check.clone(), reason: reason.clone() };
+                steps.push((checked, Duration::ZERO));
             }
-            let call = match e {
-                Event::ToolResult { id, .. } => calls.get(id).map(|(n, i)| (n.as_str(), i)),
-                _ => None,
-            };
-            out.extend(progress_view(&Progress::Event(e.clone()), call, ASK_LIMIT));
+        }
+        steps.extend(more);
+        let mut relay = Relay::new(Limits { ask: ASK_LIMIT, run: RUN_LIMIT });
+        let mut out = Vec::new();
+        for (p, _) in &steps {
+            for mut view in relay.relay(p).views {
+                // A question's wait, as the scenario sets it (the relay measures it from now).
+                if let ProgressView::Question { question } = &mut view
+                    && let Some((_, w)) =
+                        steps.iter().find(|(s, _)| matches!(s, Progress::Asking(q) if q.id == question.id as u64))
+                {
+                    question.waited_ms = w.as_millis() as u32;
+                }
+                out.push(view);
+            }
         }
         out
     }
@@ -316,7 +350,7 @@ fn example_run() -> Run {
 }
 
 /// A question as the runner sends it, with the checker's real reason, waiting `waited` already.
-fn question(id: u64, tool: &str, input: Value, waited: Duration) -> ProgressView {
+fn question(id: u64, tool: &str, input: Value, waited: Duration) -> (Progress, Duration) {
     let s = steplet_of(&read("examples/run-tests.steplet"));
     let policy = Policy::from_steplet(&s, "/work/r1/repo").unwrap();
     let what = steplet_run::call_what(tool, &input);
@@ -342,17 +376,13 @@ fn question(id: u64, tool: &str, input: Value, waited: Duration) -> ProgressView
         fingerprint: fingerprint(&request),
         asked_at: Instant::now(),
     };
-    let mut view = question_view(&q, ASK_LIMIT);
-    view.waited_ms = waited.as_millis() as u32;
-    ProgressView::Question { question: view }
+    (Progress::Asking(q), waited)
 }
 
-fn asked_progress(questions: Vec<ProgressView>) -> Vec<ProgressView> {
+fn asked_progress(questions: Vec<(Progress, Duration)>) -> Vec<ProgressView> {
     let mut r = Run::new();
     r.says("The README is there. I want to note the count in a file.");
-    let mut p = r.progress(&[]);
-    p.extend(questions);
-    p
+    r.progress_then(&[], questions)
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -538,8 +568,13 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     );
 
     // Prepare
-    let run_screen =
-        |progress: Vec<ProgressView>| Fixture { preview: Some(plain_preview(&example)), progress, ..fixture("run") };
+    // A run is reached as the receiver reaches it: the preview, Run, then the chooser's "Run with Claude Code".
+    let run_screen = |progress: Vec<ProgressView>| Fixture {
+        preview: Some(plain_preview(&example)),
+        chooser: Some(chooser_for(&example, true)),
+        progress,
+        ..fixture("run")
+    };
     s.insert("prepare-fetching", run_screen(Vec::new()));
     s.insert("prepare-ready-removed", run_screen(Run::new().progress(&[".claude", ".mcp.json"])[..1].to_vec()));
     s.insert(
@@ -637,22 +672,38 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
             ..run_screen(busy.progress(&[]))
         },
     );
+    // As Claude Code 2.1.220 ends a run whose key Anthropic refuses (measured in Task 12): ten tries, its own
+    // message, and a result carrying HTTP 401. The report's fault comes from the 401.
     let mut wrong_key = Run::new();
+    for attempt in 1..=10 {
+        wrong_key.events.push(Event::ApiRetry {
+            status: Some(401),
+            error: "authentication_failed".into(),
+            attempt,
+            max: 10,
+        });
+    }
+    let said = "Invalid API key \u{b7} Fix external API key";
+    wrong_key.events.push(Event::AgentText(said.into()));
+    wrong_key.events.push(Event::ApiError { status: 401 });
     wrong_key.events.push(Event::Result {
         subtype: "success".into(),
         is_error: true,
         stop_reason: "stop_sequence".into(),
         models: Vec::new(),
-        text: "Invalid API key".into(),
+        text: said.into(),
     });
     let mut o = wrong_key.outcome();
     o.exit_code = Some(1);
-    o.faults.push("Anthropic did not accept the key. Change it in Setup.".into());
     s.insert("run-wrong-key", run_screen(finished(wrong_key.progress(&[]), wrong_key.report(&o, &[]))));
 
     // Ask
-    let ask = |questions: Vec<ProgressView>| run_screen(asked_progress(questions));
+    let ask = |questions: Vec<(Progress, Duration)>| run_screen(asked_progress(questions));
     s.insert("ask-command", ask(vec![question(1, "Bash", json!({"command": "touch asked.txt"}), Duration::ZERO)]));
+    let files: String = (1..=11).map(|i| format!(" notes/part-{i:02}-of-the-count.txt")).collect();
+    let long = format!("touch{files}");
+    assert!(long.len() >= 300, "{}", long.len());
+    s.insert("ask-long-command", ask(vec![question(1, "Bash", json!({ "command": long }), Duration::ZERO)]));
     let content: String = (1..=200).map(|i| format!("Line {i} of the notes the agent wants to write.\n")).collect();
     s.insert(
         "ask-file-write",
@@ -688,7 +739,7 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         "ask-withdrawn",
         ask(vec![
             question(1, "Bash", json!({"command": "touch asked.txt"}), Duration::ZERO),
-            progress_view(&Progress::Answered { question: 1, reply: Reply::Withdrawn }, None, ASK_LIMIT).unwrap(),
+            (Progress::Answered { question: 1, reply: Reply::Withdrawn }, Duration::ZERO),
         ]),
     );
 
@@ -719,6 +770,12 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     }
     forty.ends("Counted the README 40 times.");
     s.insert("report-40-commands", report_screen(forty.report(&forty.outcome(), &[])));
+    // The same 40 commands as a run still going, for the live log (it arrives over time, see scenarios.ts).
+    let mut counting = Run::new();
+    for i in 1..=40 {
+        counting.bash("wc -l README", false, &format!("{i} README\n"), 0);
+    }
+    s.insert("run-40-commands", run_screen(counting.progress(&[])));
     let mut forged = Run::new();
     forged.bash(
         "wc -l README",

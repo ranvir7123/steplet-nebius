@@ -23,6 +23,10 @@ fields: Array<FieldView>,
  */
 reason: string, 
 /**
+ * What still holds if the receiver says yes, in Steplet's words, worded no wider than the tests show.
+ */
+holds: string, 
+/**
  * Bound to the exact request; the yes carries it back (R7).
  */
 fingerprint: string, 

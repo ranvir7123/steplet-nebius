@@ -250,6 +250,19 @@ pub enum Event {
         models: Vec<String>,
         text: String,
     },
+    /// Claude Code got no answer from the model's service and tries again (`system/api_retry`): the service's HTTP
+    /// status, if it sent one, its name for the error, and which try of how many (Task 12, measured with 2.1.220).
+    ApiRetry {
+        status: Option<u16>,
+        error: String,
+        attempt: u32,
+        max: u32,
+    },
+    /// The run ended on an error from the model's service, with its HTTP status: the result line's
+    /// `api_error_status`, put just before that `Result`. 401 is a key the service does not accept.
+    ApiError {
+        status: u16,
+    },
     /// A tool call that did not ask the gate, as the tripwire watcher judged it (Task 9). Steplet's own record, put
     /// right after the call's result. `id` is the call's; `what` is its command, path or address; `harmless` means it
     /// was a harmless read (G2) and the run went on.

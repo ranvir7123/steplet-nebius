@@ -125,6 +125,10 @@ export const backend: Backend = {
   async stopRun() {
     void emit((await fixture()).after_stop);
   },
+  async stopAndClose() {
+    // A page cannot close its own browser window: the stand-in only stops.
+    void emit((await fixture()).after_stop);
+  },
   async saveReport() {
     const f = await fixture();
     if (f.save_error) throw f.save_error;
@@ -133,4 +137,10 @@ export const backend: Backend = {
   async openHelp() {},
   onRunProgress: (cb) => listenTo(progressListeners, cb),
   onSetupLine: (cb) => listenTo(lineListeners, cb),
+  onCloseAsked(cb) {
+    // A test says "Windows asked to close the window" with this page event.
+    const asked = () => cb();
+    window.addEventListener("steplet-stand-in-close", asked);
+    return Promise.resolve(() => window.removeEventListener("steplet-stand-in-close", asked));
+  },
 };

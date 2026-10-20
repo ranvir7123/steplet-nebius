@@ -74,6 +74,28 @@ pub fn install(line: &dyn Fn(Shown)) -> Result<(), FailureView> {
         .map_err(|e| views::setup_failure(&e))
 }
 
+/// What a run needs from setup, if everything is there: Steplet's Linux by its id, this build's gate program on its
+/// disk, and the receiver's key. Otherwise Steplet's sentence saying what to do.
+pub fn ready_for_run(state: &State) -> Result<crate::session::Ready, String> {
+    if !view(state, key::TARGET, Switch::Off).ready {
+        return Err("Set up Steplet first: Setup shows what is missing.".into());
+    }
+    let distro_id = state.linux.clone().ok_or("Set up Steplet first: its own Linux is not installed.")?;
+    let gate = gate_program()?;
+    let key = match key::load(key::TARGET) {
+        Ok(Some(key)) => key,
+        Ok(None) => return Err("Steplet needs your Anthropic key. Add it in Setup.".into()),
+        Err(e) => {
+            return Err(format!("Steplet could not read your key from Windows' Credential Manager. Windows says: {e}"));
+        }
+    };
+    Ok(crate::session::Ready {
+        distro_id,
+        gate_exe: format!("/opt/steplet/gate/{}", steplet_run::gate_file_name(&gate)),
+        key,
+    })
+}
+
 /// One install or removal of Steplet's Linux at a time. The mark that one is going on is cleared however the work
 /// ends, a crash of the work included, so a crash never blocks the next try.
 #[derive(Debug, Default)]

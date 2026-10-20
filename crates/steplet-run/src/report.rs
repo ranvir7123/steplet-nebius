@@ -92,6 +92,8 @@ pub enum Check {
     AllowedByYou { reused: bool },
     /// The gate asked Steplet, and Steplet refused it.
     Refused,
+    /// The gate asked Steplet, the checker asked the receiver, and there was no yes: `how` the question ended.
+    RefusedWhenAsked { how: NotYes },
     /// Steplet refused it at the gate, yet its result came back with no error: it ran anyway. That stops the run
     /// (Task 9), and it is a breach of its own even while the run is being stopped.
     RefusedButRan,
@@ -99,6 +101,29 @@ pub enum Check {
     NotAsked { harmless: bool },
     /// No result came, so there is no evidence it ran (Task 9).
     NotJudged,
+}
+
+/// How a question ended without a yes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotYes {
+    /// The receiver said no (or the answer did not match the request on screen, which counts as a no).
+    SaidNo,
+    /// No answer came within the ask limit.
+    NoAnswer,
+    /// The run was stopping, so Steplet took the question back.
+    TakenBack,
+}
+
+impl NotYes {
+    /// How `reply` ended its question, if it was no yes.
+    pub fn of(reply: &Reply) -> Option<NotYes> {
+        match reply {
+            Reply::Yes { .. } | Reply::Reused => None,
+            Reply::No => Some(NotYes::SaidNo),
+            Reply::NoAnswer => Some(NotYes::NoAnswer),
+            Reply::Withdrawn => Some(NotYes::TakenBack),
+        }
+    }
 }
 
 /// A model refused (E1). `switched_to` is the model Claude Code then used, if it switched (D7).
@@ -162,7 +187,12 @@ pub fn build_report(outcome: &RunOutcome, changed: Option<&[String]>, trust: Tru
         changed_files: changed.map(|files| files.iter().map(|f| scrub.text(f)).collect()),
         trust,
         agent_says: scrub.text(agent_says(&outcome.events)),
-        faults: outcome.faults.iter().map(|f| scrub.text(f)).collect(),
+        faults: outcome
+            .faults
+            .iter()
+            .map(|f| scrub.text(f))
+            .chain(key_refused(&outcome.events).then(|| KEY_REFUSED.to_string()))
+            .collect(),
         answers: outcome
             .answers
             .iter()
@@ -253,6 +283,10 @@ impl Scrubber {
             Event::SkippedGate { id, tool, what, harmless } => {
                 Event::SkippedGate { id: t(id), tool: t(tool), what: t(what), harmless: *harmless }
             }
+            Event::ApiRetry { status, error, attempt, max } => {
+                Event::ApiRetry { status: *status, error: t(error), attempt: *attempt, max: *max }
+            }
+            Event::ApiError { status } => Event::ApiError { status: *status },
             Event::Stderr(text) => Event::Stderr(t(text)),
             Event::Unreadable(text) => Event::Unreadable(t(text)),
             Event::Other(text) => Event::Other(t(text)),
@@ -312,6 +346,13 @@ fn shown(text: &str) -> String {
         .collect()
 }
 
+/// The report's fault when the run ended on Anthropic's HTTP 401: a key it does not accept (Task 12).
+pub const KEY_REFUSED: &str = "Anthropic did not accept the key. Change it in Setup.";
+
+fn key_refused(events: &[Event]) -> bool {
+    events.iter().any(|e| matches!(e, Event::ApiError { status: 401 }))
+}
+
 /// Every tool call, with Steplet's check, its result and whether the stop shaped it.
 fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
     let mut answered: HashMap<&str, bool> = HashMap::new();
@@ -331,6 +372,9 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
             _ => None,
         })
         .collect();
+    // The calls asked about that got no yes, and how each question ended.
+    let not_yes: HashMap<&str, NotYes> =
+        outcome.answers.iter().filter_map(|a| Some((a.call.as_str(), NotYes::of(&a.reply)?))).collect();
     let results = results(&outcome.events);
     let mut skipped: HashMap<&str, bool> = HashMap::new();
     for e in &outcome.events {
@@ -351,7 +395,10 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                     None => Check::Allowed,
                 },
                 (Some(false), _) if result.is_some_and(|r| !r.is_error) => Check::RefusedButRan,
-                (Some(false), _) => Check::Refused,
+                (Some(false), _) => match not_yes.get(id.as_str()) {
+                    Some(&how) => Check::RefusedWhenAsked { how },
+                    None => Check::Refused,
+                },
                 (None, Some(&harmless)) => Check::NotAsked { harmless },
                 (None, None) => Check::NotJudged,
             };

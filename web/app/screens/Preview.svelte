@@ -13,7 +13,8 @@
   let { view, onrun }: { view: PreviewView; onrun: (typed: string | null) => void } = $props();
 
   /** The sentence a red file needs before Run works (J3 A, R9); Rust checks it again. */
-  const SENTENCE = "I understand the risks and want to run this file";
+  // A red file's sentence comes from Rust, which checks it again when the run starts.
+  const sentence = $derived(view.red_sentence);
   let typed = $state("");
 
   const colour: Colour = $derived(view.colour as Colour);
@@ -181,7 +182,7 @@
       {#if view.run_status.kind === "red"}
         <label class="sentence" for="sentence">
           This file is red. To run it anyway, type this sentence exactly:
-          <span class="say">{SENTENCE}</span>
+          <span class="say">{sentence}</span>
         </label>
         <input
           id="sentence"
@@ -196,7 +197,7 @@
         <button
           class="button primary"
           type="button"
-          disabled={view.run_status.kind === "red" && typed !== SENTENCE}
+          disabled={view.run_status.kind === "red" && (sentence === null || typed !== sentence)}
           onclick={() => onrun(view.run_status.kind === "red" ? typed : null)}>Run</button
         >
         <span class="muted">Next you choose how it runs. Nothing runs before that.</span>

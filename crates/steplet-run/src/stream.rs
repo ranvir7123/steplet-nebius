@@ -46,18 +46,31 @@ pub fn parse_line(line: &str) -> Vec<Event> {
             explanation: text(&e, "api_refusal_explanation").into(),
         }],
         "system/thinking_tokens" => Vec::new(),
-        k if k.starts_with("result") => vec![Event::Result {
-            subtype: text(&e, "subtype").into(),
-            is_error: e.get("is_error").and_then(Value::as_bool).unwrap_or(true),
-            stop_reason: text(&e, "stop_reason").into(),
-            models: e
-                .get("modelUsage")
-                .and_then(Value::as_object)
-                .map(|m| m.keys().cloned().collect())
-                .unwrap_or_default(),
-            text: text(&e, "result").into(),
+        "system/api_retry" => vec![Event::ApiRetry {
+            status: e.get("error_status").and_then(Value::as_u64).and_then(|s| u16::try_from(s).ok()),
+            error: text(&e, "error").into(),
+            attempt: number(&e, "attempt"),
+            max: number(&e, "max_retries"),
         }],
+        k if k.starts_with("result") => {
+            let status = e.get("api_error_status").and_then(Value::as_u64).and_then(|s| u16::try_from(s).ok());
+            status.map(|status| Event::ApiError { status }).into_iter().chain([result(&e)]).collect()
+        }
         _ => vec![Event::Other(kind)],
+    }
+}
+
+fn number(e: &Map<String, Value>, key: &str) -> u32 {
+    e.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0)
+}
+
+fn result(e: &Map<String, Value>) -> Event {
+    Event::Result {
+        subtype: text(e, "subtype").into(),
+        is_error: e.get("is_error").and_then(Value::as_bool).unwrap_or(true),
+        stop_reason: text(e, "stop_reason").into(),
+        models: e.get("modelUsage").and_then(Value::as_object).map(|m| m.keys().cloned().collect()).unwrap_or_default(),
+        text: text(e, "result").into(),
     }
 }
 

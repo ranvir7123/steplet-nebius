@@ -18,6 +18,10 @@ const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true };
 const special: Record<string, Partial<Timing>> = {
   "open-reading": { open: null },
   "setup-installing": { installEnds: false },
+  // A question that is on screen a moment before the run takes it back.
+  "ask-withdrawn": { step: 300 },
+  // Rows that keep coming for a few seconds, so the receiver can scroll up while they do.
+  "run-40-commands": { step: 40 },
 };
 
 /** The timing of the scenario `name`. */

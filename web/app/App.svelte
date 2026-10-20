@@ -6,6 +6,7 @@
   import Chooser from "./screens/Chooser.svelte";
   import Open from "./screens/Open.svelte";
   import Preview from "./screens/Preview.svelte";
+  import Run from "./screens/Run.svelte";
   import Setup from "./screens/Setup.svelte";
   import type { PreviewView } from "../shared/types/PreviewView";
 
@@ -16,12 +17,15 @@
     | { kind: "preview"; view: PreviewView }
     // `typed`: the red file's sentence, for Rust to check again when the run starts.
     | { kind: "chooser"; view: PreviewView; typed: string | null }
+    | { kind: "run"; view: PreviewView; typed: string | null }
     // `back`: the screen Setup was opened from.
     | { kind: "setup"; back: Screen };
   let screen = $state<Screen>({ kind: "open" });
   let reading = $state(false);
   let error = $state<string | null>(null);
   let note = $state<string | null>(null);
+  // A file runs: the window offers no other file and no Setup until it ends (one run at a time).
+  let busy = $state(false);
 
   /** A refusal from Rust is Steplet's own sentence; anything else gets one. */
   function words(e: unknown): string {
@@ -63,6 +67,7 @@
 
   function drop(e: DragEvent) {
     e.preventDefault();
+    if (busy) return;
     const file = e.dataTransfer?.files[0];
     if (file) void openFile(file);
   }
@@ -82,22 +87,21 @@
     window.scrollTo(0, 0);
   }
 
-  function start() {
-    // The run itself comes with Task 12 (prepare, the live log and the ask screen).
-  }
 </script>
 
 <svelte:window ondragover={dragover} ondrop={drop} />
 
 <div class="window">
-  <header class="bar">
-    {#if screen.kind === "preview" || screen.kind === "chooser"}
-      <button class="link" type="button" onclick={() => back({ kind: "open" })}>Open another file</button>
-    {/if}
-    {#if screen.kind !== "setup"}
-      <button class="link setup" type="button" onclick={setup}>Setup</button>
-    {/if}
-  </header>
+  {#if !busy}
+    <header class="bar">
+      {#if screen.kind === "preview" || screen.kind === "chooser" || screen.kind === "run"}
+        <button class="link" type="button" onclick={() => back({ kind: "open" })}>Open another file</button>
+      {/if}
+      {#if screen.kind !== "setup"}
+        <button class="link setup" type="button" onclick={setup}>Setup</button>
+      {/if}
+    </header>
+  {/if}
   <main class="page">
     {#if screen.kind === "open"}
       <Open {reading} {error} {note} onfile={openFile} />
@@ -106,7 +110,17 @@
       <Preview {view} onrun={(typed) => choose(view, typed)} />
     {:else if screen.kind === "chooser"}
       {@const view = screen.view}
-      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={start} />
+      {@const typed = screen.typed}
+      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={() => back({ kind: "run", view, typed })} />
+    {:else if screen.kind === "run"}
+      {@const view = screen.view}
+      <Run
+        {view}
+        typed={screen.typed}
+        onback={() => back({ kind: "preview", view })}
+        onopen={() => back({ kind: "open" })}
+        onbusy={(b) => (busy = b)}
+      />
     {:else}
       {@const to = screen.back}
       <Setup onback={() => back(to)} />

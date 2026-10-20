@@ -15,6 +15,10 @@
     "allow-save-key",
     "allow-forget-key",
     "allow-set-opens-steplet-files",
-    "allow-open-help"
+    "allow-open-help",
+    "allow-start-run",
+    "allow-answer",
+    "allow-stop-run",
+    "allow-stop-and-close"
   ]
 }

@@ -1,0 +1,2636 @@
+{
+  "screen": "run",
+  "preview": {
+    "sha256": "01fa37b71e7824a498b73fffc32487e5e68e447244fb3585dd06bc94c12087c2",
+    "outcome": "green",
+    "colour": "green",
+    "run_status": {
+      "kind": "green"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "key_changed": false,
+    "red_sentence": null,
+    "findings": [],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Count the lines of the README in Hello-World"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Ana Lee"
+          }
+        ]
+      },
+      "expires": "2027-09-30",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/octocat/Hello-World.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Check that the README file is there."
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Count the lines in the README file."
+            }
+          ]
+        },
+        {
+          "line": 12,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report the count."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 15,
+          "text": [
+            {
+              "kind": "text",
+              "text": "wc -l README"
+            }
+          ]
+        }
+      ],
+      "domains": [],
+      "read": [],
+      "write": [],
+      "never": [
+        {
+          "line": 17,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change any file."
+            }
+          ]
+        },
+        {
+          "line": 18,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not use the network."
+            }
+          ]
+        }
+      ],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Count the README lines\n\nThe repository is already checked out at the commit above.\n\n1. Check that `README` exists.\n2. Run `wc -l README`.\n3. Report the number it prints, and nothing else.\n"
+        }
+      ],
+      "body_line": 20
+    },
+    "counts": {
+      "steps": 3,
+      "commands": 1,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 2
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": {
+    "claude": {
+      "ready": true,
+      "promises": [
+        {
+          "text": "Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.",
+          "items": [],
+          "tests": [
+            "a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not",
+            "a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next",
+            "a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run",
+            "a_writing_command_made_to_skip_the_gate_stops_the_run",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares"
+          ]
+        },
+        {
+          "text": "The agent cannot fetch any web address, unless you say yes to that exact address.",
+          "items": [],
+          "tests": [
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares",
+            "a_yes_allows_exactly_the_request_shown"
+          ]
+        },
+        {
+          "text": "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run).",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after"
+          ]
+        },
+        {
+          "text": "Your own files are not inside Steplet's Linux, where this task runs.",
+          "items": [],
+          "tests": [
+            "use_case_1_runs_with_none_of_the_receiver_s_files_present"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot start Windows programs.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        }
+      ],
+      "data_leaves": "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
+    },
+    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer."
+  },
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "setup_changes": null,
+  "progress": [
+    {
+      "kind": "prepared",
+      "commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+      "removed": [],
+      "limit_ms": 1800000
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "started",
+        "model": [
+          {
+            "kind": "text",
+            "text": "claude-opus-5"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_01",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_01",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_01",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "1 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_02",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_02",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_02",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "2 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_03",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_03",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_03",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "3 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_04",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_04",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_04",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "4 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_05",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_05",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_05",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "5 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_06",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_06",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_06",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "6 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_07",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_07",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_07",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "7 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_08",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_08",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_08",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "8 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_09",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_09",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_09",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "9 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_10",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_10",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_10",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "10 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_11",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_11",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_11",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "11 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_12",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_12",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_12",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "12 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_13",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_13",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_13",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "13 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_14",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_14",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_14",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "14 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_15",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_15",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_15",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "15 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_16",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_16",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_16",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "16 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_17",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_17",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_17",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "17 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_18",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_18",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_18",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "18 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_19",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_19",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_19",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "19 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_20",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_20",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_20",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "20 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_21",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_21",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_21",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "21 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_22",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_22",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_22",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "22 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_23",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_23",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_23",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "23 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_24",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_24",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_24",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "24 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_25",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_25",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_25",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "25 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_26",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_26",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_26",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "26 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_27",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_27",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_27",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "27 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_28",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_28",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_28",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "28 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_29",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_29",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_29",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "29 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_30",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_30",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_30",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "30 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_31",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_31",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_31",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "31 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_32",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_32",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_32",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "32 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_33",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_33",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_33",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "33 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_34",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_34",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_34",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "34 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_35",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_35",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_35",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "35 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_36",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_36",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_36",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "36 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_37",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_37",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_37",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "37 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_38",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_38",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_38",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "38 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_39",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_39",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_39",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "39 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_40",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_40",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_40",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "40 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    }
+  ],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null,
+  "switch_error": null
+}

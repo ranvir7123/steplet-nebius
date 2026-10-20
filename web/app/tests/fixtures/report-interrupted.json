@@ -11,6 +11,7 @@
       "kind": "unsigned"
     },
     "key_changed": false,
+    "red_sentence": null,
     "findings": [],
     "here": [],
     "file": {
@@ -224,8 +225,8 @@
               }
             ],
             "check": {
-              "kind": "refused",
-              "words": "Refused by Steplet's checker"
+              "kind": "refused_by_you",
+              "words": "Refused: you said no"
             },
             "exit_code": null,
             "output": [

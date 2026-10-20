@@ -21,8 +21,10 @@ export const backend: Backend = {
   startRun: (sha256, typed) => invoke<void>("start_run", { sha256, typed }),
   answer: (question, yes, fingerprint) => invoke<boolean>("answer", { question, yes, fingerprint }),
   stopRun: () => invoke<void>("stop_run"),
+  stopAndClose: () => invoke<void>("stop_and_close"),
   saveReport: () => invoke<string | null>("save_report"),
   openHelp: (topic) => invoke<void>("open_help", { topic }),
   onRunProgress: (cb) => listen<ProgressView>("run-progress", (e) => cb(e.payload)),
   onSetupLine: (cb) => listen<Shown>("setup-line", (e) => cb(e.payload)),
+  onCloseAsked: (cb) => listen("close-asked", () => cb()),
 };

@@ -3036,3 +3036,253 @@ clippy exit: 0
 - The key's text is wiped from one copy in memory, not from every copy (the one the page sent, and the one read back); a Credential Manager read that fails for another reason than "no entry" shows as "no key saved".
 - The words for Claude Code and srt name their versions as fixed text instead of the runner's version constants, so they could drift.
 - An unfinished terminal code (`ESC [` with no letter after) drops the rest of its line.
+
+## Task 12: prepare, the run with its live log, and the question screen
+
+After "Run with Claude Code", the receiver now sees the **run screen**. A bar stays at the top while the log scrolls. It shows where the run is (Preparing, Running, Waiting for your answer, Stopping…, or how it ended), the time against the run's 30-minute limit, and **Stop**, which asks first. Under it:
+
+- **Getting the repository ready:** fetched from where, the commit checked out inside the fence, and which agent settings files were removed (Steplet tells the agent not to load them).
+- **The live log:** what the agent says (quoted, as file text), and each command or file action with Steplet's check ("Allowed by Steplet's checker", "You allowed this exact request", "Refused: you said no", "Ran without asking Steplet: …"), its exit code, and the first 40 lines of what it printed, with "Show all N lines". The log follows the newest row unless the receiver scrolls up; "Show the newest" brings it back.
+
+When the agent wants something the file did not ask for, the **question screen** covers the window and the taskbar flashes. It shows:
+
+- what exactly is asked, with the whole request, nothing cut;
+- why Steplet asks, and what the agent said just before;
+- what still holds on a yes;
+- "No answer in 4:59 means no".
+
+**No** has the focus. **"Yes, allow this exact request for this run"** works only once the question has been on screen for a second. Questions come one at a time ("2 more questions are waiting"). Closing the window during a run asks first ("Stop and close" or "Keep running").
+
+On the Rust side:
+
+- `src/session.rs` runs a file. It checks the file again at Run, writes the crash marker (`%LOCALAPPDATA%\Steplet\run-in-progress.json`), starts `steplet_run::run_live` on its own thread, passes each piece of progress to the window through a `Relay` (one question on screen at a time), and takes the answers.
+- At start, a marker left by a crash means that run is stopped and removed, and the Open screen says so.
+- The window gained the commands `start_run`, `answer`, `stop_run` and `stop_and_close`, and asks before closing during a run.
+
+### Changes from the plan, recorded here
+
+- **The run function is a shared value (`Arc<dyn Fn …>`), not a plain function pointer,** so the tests can give a session a stand-in run and the live tests can point the real one at the scripted model.
+- **Questions wait their turn in Rust, not on the page.** The `Relay` shows one question and holds the rest; the page gets "N more are waiting" (`ProgressView::Waiting`). Test: `a_question_flashes_the_taskbar_and_waits_its_turn`.
+- **Each gate decision reaches the screen as it is made** (`Progress::Checked`, new in the runner), so a log row says "Allowed" or "Refused" before the report exists. Test: `each_decision_reaches_the_screen_as_its_check`. A call that never asked the gate gets its check the same way. Test: `a_call_that_skipped_the_gate_reaches_the_screen_with_its_check`.
+- **A refusal after asking you has its own label.** Before, both the live log and the report called your "no" "Refused by Steplet's checker", with the runner's internal note "the receiver said no" as the reason. Now it is `Check::RefusedWhenAsked` (`NotYes::SaidNo`, `NoAnswer` or `TakenBack`): "Refused: you said no", "Refused: no answer in time", "Refused: Steplet took the question back as the run stopped". Tests: `each_decision_reaches_the_screen_as_its_check` and `answers_and_allowed_by_you_show_in_the_report` (runner), `a_refusal_after_asking_says_how_it_ended` (app), and the Linux test `no_answer_refuses_it`, whose expectation changed with it.
+- **A command that ran without asking and was no harmless read has its own kind** (`ran_without_asking`), so the screen marks it red, not grey like a harmless read. Test: `a_call_that_ran_without_asking_is_not_marked_as_a_harmless_read`.
+- **The red sentence comes from Rust** (`PreviewView.red_sentence`), and **the run's time limit comes with the first progress** (`Prepared.limit_ms`), so the page holds no copy of either.
+- **The run's start checks the same colour the preview showed.** This was found by an automated security review during this task. Before, a run's start looked only at the file's own colour, so a known sender with another key (red on this computer, row 22) could be started without the sentence by a broken page. Now `views::run_status` is the one place both use. Test: `a_known_sender_with_another_key_needs_the_sentence_too`; it failed against the old start, which was planted back for the check and then removed.
+- **The one-run lock is taken only for a moment at start,** to write the sender's pin, then let go; `run_live` takes it itself for the run.
+- **If the run's own thread crashes, the marker stays,** so the next start of Steplet clears what is left. The look at start that does this cannot leave the Open screen's note waiting, even if it crashes.
+- **A wrong key, measured first** (below). The runner now reads Claude Code's "trying again" lines (`Event::ApiRetry`) and the error status at the end (`Event::ApiError`). The report says "Anthropic did not accept the key. Change it in Setup." The live log shows one row that counts the tries, so the three minutes Claude Code spends trying again are not a silent screen. Tests: `a_key_anthropic_refuses_is_read_from_the_stream` (two of the lines exactly as Claude Code wrote them), `a_key_anthropic_refuses_is_a_fault_in_words`, `each_try_after_a_service_error_is_said_in_steplets_words`, `a_wrong_key_shows_each_try_and_says_so`, and the Linux test `a_wrong_key_says_so`. The scripted model now answers a key that is not the expected one with HTTP 401 and Anthropic's own error body.
+- **Two more saved scenarios:** a question with a 346-character command (`ask-long-command`), and a run whose 40 commands keep coming for a few seconds (`run-40-commands`), for the "follows the end" test. The run scenarios now pass through the app's own `Relay` and carry the chooser.
+- **Eight screen tests, not the plan's six:** `closing_the_window_during_a_run_asks_first` and `a_wrong_key_shows_each_try_and_says_so` were added.
+- **The plan's test command `npm --prefix web test -- run` matches every test file,** because the folder path holds "runFile". The commands below use `run.spec`.
+
+### The wrong key, measured
+
+The scripted model answered every request with HTTP 401 and Anthropic's body for a wrong key (`authentication_error`, "invalid x-api-key"). Claude Code 2.1.220 tried 10 times over 186 seconds, its pauses doubling up to about 39 seconds. It wrote each try on its stream, then its own message, then a result carrying the status. Four of its 13 lines (the run's `app-1792536988-3160.jsonl`):
+
+```
+6:{"type":"system","subtype":"api_retry","attempt":5,"max_retries":10,"retry_delay_ms":8418,"error_status":401,"error":"authentication_failed","session_id":"31060bcf-4ad5-4a8e-b398-266bb4476edf","uuid":"51a8c2fd-8ad0-4e8e-a887-1a08aeee527b"}
+11:{"type":"system","subtype":"api_retry","attempt":10,"max_retries":10,"retry_delay_ms":38974,"error_status":401,"error":"authentication_failed","session_id":"31060bcf-4ad5-4a8e-b398-266bb4476edf","uuid":"7036c6cf-5ba7-43f5-9436-8c2e119b20f9"}
+12:{"type":"assistant","message":{"id":"ca03080b-bdd3-4e6b-942c-dcba5b5e08bb","container":null,"model":"<synthetic>","role":"assistant", … ,"content":[{"type":"text","text":"Invalid API key · Fix external API key"}],"context_management":null},"parent_tool_use_id":null,"session_id":"31060bcf-4ad5-4a8e-b398-266bb4476edf","uuid":"c65769d3-64b0-401f-bf42-d5b1a566aa24","timestamp":"2026-10-20T22:59:39.534Z","error":"authentication_failed","is_api_error_message":true}
+13:{"is_error":true,"duration_api_ms":0,"num_turns":1,"stop_reason":"stop_sequence", … ,"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":401,"result":"Invalid API key · Fix external API key","type":"result","duration_ms":186462,"uuid":"2b15c859-a6ae-4d0b-add2-f7a938802e42"}
+```
+
+Where "…" stands, the usage numbers are left out of this page; the stream test holds lines 6 and 13 whole. When each request reached the scripted model, in seconds after the first (read while the run was still going, after 9 of them):
+
+```
+[0.0, 0.8, 2.1, 4.7, 9.8, 18.4, 37.6, 76.9, 110.8]
+```
+
+Before the change, what the screen got ended like this, with no fault (the long lines shortened where "…" stands):
+
+```
+--- {"kind":"event","event":{"kind":"agent_says","text":[{"kind":"text","text":"Invalid API key · Fix external API key"}]}}
+--- {"kind":"event","event":{"kind":"ended","models":[]}}
+--- {"kind":"finished","report":{"end":{"kind":"did_not_finish"},"completed":false, … ,"faults":[], … }}
+
+thread 'a_wrong_key_says_so' (28904) panicked at crates\steplet-app\tests\session_live.rs:161:5:
+[]
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 211.75s
+```
+
+The model's log also shows Claude Code sends the key both as `x-api-key` and as a bearer token (`"bearer_sent": true`); both reach only the address Steplet's settings give it.
+
+### The tests first
+
+The session's own tests, and the runner's new progress, before the code existed:
+
+```
+> cargo test -p steplet-app --offline --test session
+error[E0432]: unresolved import `steplet_app::session`
+  --> crates\steplet-app\tests\session.rs:13:18
+error[E0432]: unresolved import `steplet_app::views::RED_SENTENCE`
+  --> crates\steplet-app\tests\session.rs:14:40
+error: could not compile `steplet-app` (test "session") due to 2 previous errors
+> cargo test -p steplet-run --offline --test ask
+error[E0599]: no variant named `Checked` found for enum `Progress`
+   --> crates\steplet-run\tests\ask.rs:299:27
+error: could not compile `steplet-run` (test "ask") due to 1 previous error
+```
+
+The screen tests, before the run screen existed (`npm --prefix web run build:screens`, then the run screen's tests; the four "real" window tests in the same run failed only because no e2e window was open):
+
+```
+  x   2 [screens] › app\tests\run.spec.ts:32:1 › ask_starts_on_no_and_yes_waits_one_second (6.0s)
+  x  26 [screens] › app\tests\run.spec.ts:52:1 › ask_shows_the_whole_request (5.4s)
+  x  27 [screens] › app\tests\run.spec.ts:67:1 › a_withdrawn_question_closes_with_a_note (5.3s)
+  x  28 [screens] › app\tests\run.spec.ts:79:1 › the_log_follows_the_end_unless_you_scrolled_up (5.2s)
+  x  29 [screens] › app\tests\run.spec.ts:98:1 › stop_asks_first_and_then_says_interrupted (5.3s)
+  x  30 [screens] › app\tests\run.spec.ts:116:1 › a_50000_line_output_keeps_the_log_responsive (5.3s)
+  x  31 [screens] › app\tests\run.spec.ts:138:1 › closing_the_window_during_a_run_asks_first (5.5s)
+```
+
+Each change after that, before its code:
+
+```
+> cargo test -p steplet-app --offline --test session a_call_that
+test a_call_that_skipped_the_gate_reaches_the_screen_with_its_check ... FAILED
+  left: []
+ right: [("toolu_s", "not_asked", "Ran without asking Steplet: a harmless read")]
+> cargo test -p steplet-run --offline --test ask --test report        (the label for a refusal after asking)
+error[E0432]: unresolved import `steplet_run::NotYes`
+error[E0599]: no variant named `RefusedWhenAsked` found for enum `Check`
+error: could not compile `steplet-run` (test "ask") due to 3 previous errors
+error: could not compile `steplet-run` (test "report") due to 3 previous errors
+> cargo build -p steplet-app --offline --tests                       (its words, a_refusal_after_asking_says_how_it_ended)
+error[E0004]: non-exhaustive patterns: `&steplet_run::Check::RefusedWhenAsked { .. }` not covered
+> cargo test -p steplet-app --offline --test views a_call_that_ran
+test a_call_that_ran_without_asking_is_not_marked_as_a_harmless_read ... FAILED
+  left: "not_asked"
+ right: "ran_without_asking"
+> cargo test -p steplet-run --offline --test stream                  (the wrong key, read from the stream)
+error[E0599]: no variant named `ApiRetry` found for enum `steplet_run::Event`
+error[E0599]: no variant named `ApiError` found for enum `steplet_run::Event`
+> cargo test -p steplet-run --offline --test report a_key
+error[E0599]: no variant named `ApiRetry` found for enum `steplet_run::Event`
+error[E0599]: no variant named `ApiError` found for enum `steplet_run::Event`
+> cargo test -p steplet-app --offline --test views each_try
+error[E0004]: non-exhaustive patterns: `&steplet_run::Event::ApiRetry { .. }` and `&steplet_run::Event::ApiError { .. }` not covered
+> npx playwright test --project=screens run.spec -g wrong_key        (before the screen drew the tries)
+  x  1 [screens] › app\tests\run.spec.ts:151:1 › a_wrong_key_shows_each_try_and_says_so (5.5s)
+    Expected: 10
+    Received: 0
+> (the same, once each try was a row: changed to one row that counts the tries, run against that build)
+    Expected: 1
+    Received: 10
+```
+
+Two tests were also run against a fault planted back on purpose, to show they catch it (each time the right code was put back and the file compared):
+
+```
+> (the log made to jump to the end always) npx playwright test --project=screens run.spec -g follows
+  x  1 [screens] › app\tests\run.spec.ts:79:1 › the_log_follows_the_end_unless_you_scrolled_up (7.9s)
+    Error: expect(received).toBe(expected) // Object.is equality
+    Expected: false
+    Received: true
+> (a run's start blind to this computer's findings, as before) cargo test -p steplet-app --offline --test session a_known_sender
+test a_known_sender_with_another_key_needs_the_sentence_too ... FAILED
+  left: Ok(())
+ right: Err("This file is red: type the sentence exactly before you run it.")
+```
+
+### Looking at the screens, and what that found
+
+Every run and question state was screenshotted, in light and dark, at 1100 and 560 wide, both at the newest row and scrolled to the top (by a temporary test, then deleted; Task 14 makes the lasting set). The states were: fetching; ready with files removed; fetch failed; busy; long command; 50,000-line output; tripwire; model refusal; wrong key; a command question; a 200-line file question; a web address question; 2 more waiting. What was wrong, and what changed:
+
+1. **The empty top strip during a run:** the header with "Open another file" and "Setup" is hidden while a file runs, but its space stayed. It is gone now, and the run's bar sits at the very top.
+2. **The bar's line ran wider than the column.** It now lines up with the panels.
+3. **A command you said no to read "Refused by Steplet's checker" and "the receiver said no",** and **"Ended with an error"** for a call that never ran. The label is now "Refused: you said no" (Rust, tests above), and a refused call shows no exit.
+4. **A command that ran without asking got a broken badge:** a style name used twice, so the badge took the look of a "Claude Code printed" block. Renamed; and it is red now (its own kind, test above).
+5. **A failed fetch said "Nothing ran" twice** and kept the half-done "Fetching…" steps on screen. The failure's heading is now its stage ("Fetching the repository"), and the steps are not shown when preparing failed.
+6. **The bar and the panel both said "Getting the repository ready"** while fetching. The bar says "Preparing".
+7. **On the 200-line file question, the reason and "what still holds" were below the fold.** Each long field now scrolls in its own box, so they stay in view; all 200 lines are still there.
+8. **The model refusal read "Its reason: cyber."** It now reads "The kind of request it refused: cyber."
+9. **Ten rows of "tries again"** for a wrong key: now one row that counts (test above).
+
+Right as it was: the question's layout with No first and in colour, Yes greyed for its first second, the countdown, "2 more questions are waiting", the web address as a link chip with "address"; the 40-line output with "Show all 50,000 lines"; "Show the newest" while scrolled up; the end panels (Interrupted, Steplet stopped the run, The model refused, Did not finish) with their colours, words and icons; the narrow layout.
+
+### The tests pass
+
+The whole workspace (the two registry tests left out: they change Windows' settings, and ran with your yes in Task 11):
+
+```
+> npm --prefix web run build; cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+Running tests\fixtures.rs test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\help.rs test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\key.rs test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\open.rs test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\pins.rs test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\register.rs test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out;
+Running tests\session.rs test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\session_live.rs test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out;
+Running tests\setup.rs test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\shell.rs test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\views.rs test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+   (the core: 24 test files, every one ok)
+Running tests\gate.rs test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;           (steplet-gate)
+Running unittests src\lib.rs test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;   (the runner)
+Running tests\ask.rs test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\ask_live.rs test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out;
+Running tests\contain.rs test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out;
+Running tests\decide.rs test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\gate.rs test result: ok. 15 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out;
+Running tests\launch.rs test result: ok. 1 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out;
+Running tests\lock.rs test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\prepare.rs test result: ok. 3 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out;
+Running tests\promises.rs test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\report.rs test result: ok. 22 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out;
+Running tests\settings.rs test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\setup.rs test result: ok. 3 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out;
+Running tests\stream.rs test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\task.rs test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\tripwires.rs test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out;
+Running tests\watch.rs test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\watch_run.rs test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+exit 0
+```
+
+(Each line is cargo's "Running" line joined to its result line; the times and the empty lines of the programs with no tests are left out.)
+
+The screens:
+
+```
+> npm --prefix web run build:screens; npx playwright test --project=screens
+  ok  3 [screens] › app\tests\run.spec.ts:32:1 › ask_starts_on_no_and_yes_waits_one_second (3.5s)
+  ok 16 [screens] › app\tests\run.spec.ts:52:1 › ask_shows_the_whole_request (847ms)
+  ok 19 [screens] › app\tests\run.spec.ts:67:1 › a_withdrawn_question_closes_with_a_note (1.9s)
+  ok 24 [screens] › app\tests\run.spec.ts:79:1 › the_log_follows_the_end_unless_you_scrolled_up (6.1s)
+  ok 25 [screens] › app\tests\run.spec.ts:99:1 › stop_asks_first_and_then_says_interrupted (555ms)
+  ok 26 [screens] › app\tests\run.spec.ts:117:1 › a_50000_line_output_keeps_the_log_responsive (677ms)
+  ok 27 [screens] › app\tests\run.spec.ts:139:1 › closing_the_window_during_a_run_asks_first (428ms)
+  ok 28 [screens] › app\tests\run.spec.ts:151:1 › a_wrong_key_shows_each_try_and_says_so (324ms)
+  28 passed (17.5s)
+> npm --prefix web run check
+1792538237445 COMPLETED 153 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -j 4 -- -D warnings
+clippy exit: 0
+```
+
+(The other 20 screen tests are the Open, Preview, Chooser and Setup ones of Tasks 10 and 11. These screen runs used a Playwright setting that reuses a preview server already running on the test port: a run whose output was cut short by a pipe left its server behind, and stopping that program was not allowed from here. It serves this work folder's own screens build, checked by its page's script name matching the build on disk. The setting is a scratch file, not committed.)
+
+The live session tests, on Steplet's Linux with the scripted model:
+
+```
+> cargo test -p steplet-app --offline -j 2 --test session_live -- --ignored --nocapture --test-threads=1
+test a_session_runs_use_case_1_with_the_scripted_model_and_asks_once ... ok
+test a_wrong_key_says_so ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 230.72s
+```
+
+Picked out of what the two runs sent to the screen (their full output is printed by the tests): the first run's one question closed with `"how":"You said yes to this exact request."` and its report has `"completed":true`; in the second, 10 `"kind":"retry"` rows came, and its report has `"completed":false` and `"faults":[[{"kind":"text","text":"Anthropic did not accept the key. Change it in Setup."}]]`.
+
+### What this task did not verify
+
+- **The real window during a run.** `start_run`, `answer`, `stop_run`, `stop_and_close`, the `run-progress` events, the taskbar's flash and the close question were tested through the session with a stand-in screen, and through the screens with the stand-in backend, but not in the real window. That needs Steplet's Linux finished for this build (its gate program) and a key in Credential Manager: Task 15.
+- **A run with the real model.** The live tests use the scripted model; Task 15 runs the real one, with your yes (Z5).
+- **Stop in a real Linux run started from a session.** The runner's Stop was measured in Task 3; here Stop was tested with a stand-in run only.
+- **A real crash's clean-up.** `clear_leftover` was tested with a planted marker and a stand-in for `discard`; the real `discard` was measured in Task 3.
+- **Escape on the question screen and the Stop question** does nothing (on purpose: Escape never answers). No test presses it.
+- **A wrong key still takes Claude Code about three minutes** of tries before the run ends. Steplet shows each try, but does not stop the run at the first 401. That would save the wait; it is noted for the review.

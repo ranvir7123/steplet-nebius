@@ -39,10 +39,15 @@ export interface Backend {
   /** The receiver's answer to a question, bound to the request's fingerprint; false when no such question is open. */
   answer(question: number, yes: boolean, fingerprint: string): Promise<boolean>;
   stopRun(): Promise<void>;
+  /** The receiver closes the window while a file runs and says yes: Stop, then the window closes once the run is
+   * over. */
+  stopAndClose(): Promise<void>;
   /** Saves the report through Windows' Save dialog; where it was saved, or null when the receiver cancelled. */
   saveReport(): Promise<string | null>;
   /** Opens one of Steplet's own help pages in the browser, from a fixed list (S11). */
   openHelp(topic: string): Promise<void>;
   onRunProgress(cb: (p: ProgressView) => void): Promise<Unlisten>;
   onSetupLine(cb: (line: Shown) => void): Promise<Unlisten>;
+  /** Windows asked to close the window while a file runs: the page asks the receiver first. */
+  onCloseAsked(cb: () => void): Promise<Unlisten>;
 }

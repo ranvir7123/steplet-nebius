@@ -2,7 +2,9 @@
 
 export type CheckView = { 
 /**
- * `allowed`, `allowed_by_you`, `refused`, `refused_but_ran`, `not_asked` or `not_judged`.
+ * `allowed`, `allowed_by_you`, `refused`, `refused_by_you` (refused after asking the receiver),
+ * `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run)
+ * or `not_judged`.
  */
 kind: string, 
 /**

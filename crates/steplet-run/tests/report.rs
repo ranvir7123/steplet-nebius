@@ -20,9 +20,9 @@ use steplet_core::display::is_invisible;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    Answer, ApiKey, Asked, Check, Client, Event, GateAnswer, GateRequest, Refusal, Reply, Report, ReportCommand,
-    RunOutcome, RunPaths, RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files, parse_line, raw_log_line,
-    read_trust, run,
+    Answer, ApiKey, Asked, Check, Client, Event, GateAnswer, GateRequest, NotYes, Refusal, Reply, Report,
+    ReportCommand, RunOutcome, RunPaths, RunRequest, RunSetup, Tripwire, Trust, build_report, changed_files,
+    parse_line, raw_log_line, read_trust, run,
 };
 use support::MADE_UP_KEY;
 
@@ -760,8 +760,8 @@ fn answers_and_allowed_by_you_show_in_the_report() {
         [
             &Check::AllowedByYou { reused: false },
             &Check::AllowedByYou { reused: true },
-            &Check::Refused,
-            &Check::Refused
+            &Check::RefusedWhenAsked { how: NotYes::SaidNo },
+            &Check::RefusedWhenAsked { how: NotYes::NoAnswer }
         ]
     );
     let replies: Vec<(&str, &Reply)> = r.answers.iter().map(|a| (a.what.as_str(), &a.reply)).collect();
@@ -774,4 +774,26 @@ fn answers_and_allowed_by_you_show_in_the_report() {
             ("touch c.txt", &Reply::NoAnswer)
         ]
     );
+}
+
+/// Task 12: a key Anthropic does not accept ends the run with Claude Code's HTTP 401 (as measured with Claude Code
+/// 2.1.220); the report says so in Steplet's words, once, and that the run did not complete. Any other error status
+/// is no key fault.
+#[test]
+fn a_key_anthropic_refuses_is_a_fault_in_words() {
+    let retry =
+        |attempt| Event::ApiRetry { status: Some(401), error: "authentication_failed".into(), attempt, max: 10 };
+    let mut o = outcome(vec![
+        started(),
+        retry(1),
+        retry(2),
+        Event::ApiError { status: 401 },
+        result("success", true, "stop_sequence", "Invalid API key \u{b7} Fix external API key"),
+    ]);
+    o.exit_code = Some(1);
+    let r = report(&o);
+    assert_eq!(r.faults, ["Anthropic did not accept the key. Change it in Setup."]);
+    assert!(!r.completed);
+    let other = outcome(vec![started(), Event::ApiError { status: 529 }, finished("done")]);
+    assert!(report(&other).faults.is_empty(), "{:?}", report(&other).faults);
 }

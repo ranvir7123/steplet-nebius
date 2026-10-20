@@ -14,6 +14,7 @@ pub mod key;
 pub mod open;
 pub mod pins;
 pub mod register;
+pub mod session;
 pub mod setup;
 pub mod views;
 
@@ -61,14 +62,15 @@ pub struct AppState {
     looked: std::sync::Mutex<Option<steplet_run::setup::State>>,
     /// An install or a removal of Steplet's Linux is going on.
     busy: setup::OneAtATime,
+    /// The run, if one goes on in this window.
+    session: session::Session,
+    /// The Open screen's note after a crash's run was cleared: `None` until the look at start is done.
+    note: std::sync::Arc<(std::sync::Mutex<Option<Option<String>>>, std::sync::Condvar)>,
 }
 
 impl AppState {
     fn pins(&self) -> pins::Pins {
-        match &self.pins {
-            Some(p) => pins::load(p),
-            None => pins::Pins::Unreadable("Windows did not say where this user's app data goes".into()),
-        }
+        pins::load_at(self.pins.as_deref())
     }
 
     fn show(&self, mut raw: Vec<u8>) -> views::PreviewView {
@@ -110,10 +112,63 @@ fn open_bytes(state: tauri::State<AppState>, bytes: Vec<u8>) -> views::PreviewVi
     state.show(bytes)
 }
 
-/// A note for the Open screen, in Steplet's words: a run left by a crash was cleared (Task 12 fills it in).
+/// A note for the Open screen, in Steplet's words: a run left by a crash was cleared. It waits for the look at start
+/// (at most the time Steplet takes to remove that run).
+#[tauri::command(async)]
+fn start_note(state: tauri::State<AppState>) -> Option<String> {
+    let (note, ready) = &*state.note;
+    let mut note = note.lock().unwrap_or_else(|e| e.into_inner());
+    while note.is_none() {
+        note = ready.wait(note).unwrap_or_else(|e| e.into_inner());
+    }
+    note.clone().flatten()
+}
+
+/// The window, as a run needs it: progress as `run-progress` events, the taskbar's flash, and closing.
+struct WindowScreen(tauri::WebviewWindow);
+
+impl session::Screen for WindowScreen {
+    fn send(&self, p: views::ProgressView) {
+        use tauri::Emitter;
+        let _ = self.0.emit("run-progress", p);
+    }
+    fn attention(&self) {
+        let _ = self.0.request_user_attention(Some(tauri::UserAttentionType::Critical));
+    }
+    fn close(&self) {
+        let _ = self.0.close();
+    }
+}
+
+/// Starts the run of the file on screen, previewed with the SHA-256 `sha256`; `typed` is a red file's sentence. Rust
+/// checks the file again now (row 30). A refusal is Steplet's own sentence.
+#[tauri::command(async)]
+fn start_run(
+    state: tauri::State<AppState>,
+    window: tauri::WebviewWindow,
+    sha256: String,
+    typed: Option<String>,
+) -> Result<(), String> {
+    let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
+    let ready = setup::ready_for_run(&state.look());
+    state.session.start(&raw, &sha256, typed.as_deref(), ready, std::sync::Arc::new(WindowScreen(window)))
+}
+
+/// The receiver's answer to question `question`, bound to the request's fingerprint (R7).
 #[tauri::command]
-fn start_note() -> Option<String> {
-    None
+fn answer(state: tauri::State<AppState>, question: u32, yes: bool, fingerprint: String) -> bool {
+    state.session.answer(question, yes, &fingerprint)
+}
+
+#[tauri::command]
+fn stop_run(state: tauri::State<AppState>) {
+    state.session.stop();
+}
+
+/// The receiver closes the window while a file runs: Stop, then close once the run is over.
+#[tauri::command]
+fn stop_and_close(state: tauri::State<AppState>) {
+    state.session.stop_and_close();
 }
 
 /// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now.
@@ -187,6 +242,12 @@ fn open_help(topic: String) -> Result<(), String> {
 
 /// Starts the app and returns when its window closes.
 pub fn run() {
+    let places = session::Places::here().unwrap_or_else(|| {
+        // Windows did not say where this user's app data goes: Steplet keeps its run notes with its program.
+        let here = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("Steplet"))).unwrap_or_default();
+        session::Places { marker: here.join("run-in-progress.json"), pins: None, logs: here.join("logs") }
+    });
+    let note: std::sync::Arc<(std::sync::Mutex<Option<Option<String>>>, std::sync::Condvar)> = Default::default();
     let state = AppState {
         pins: pins::location(),
         // Windows starts Steplet with the file to open (a double-click); anything else is not a file.
@@ -196,7 +257,24 @@ pub fn run() {
         opened: std::sync::Mutex::new(None),
         looked: std::sync::Mutex::new(None),
         busy: setup::OneAtATime::default(),
+        session: session::Session::new(
+            std::sync::Arc::new(steplet_run::run_live),
+            std::sync::Arc::new(open::now_unix),
+            places.clone(),
+        ),
+        note: note.clone(),
     };
+    // A run left by a crash is stopped and removed now, off the window's thread; the Open screen then says so.
+    std::thread::spawn(move || {
+        // Even if that look fails badly, the Open screen's note stops waiting.
+        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            session::Session::clear_leftover(&places, &|paths| steplet_run::discard(paths))
+        }))
+        .unwrap_or(None);
+        let (slot, ready) = &*note;
+        *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(said);
+        ready.notify_all();
+    });
     tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
@@ -210,8 +288,22 @@ pub fn run() {
             save_key,
             forget_key,
             set_opens_steplet_files,
-            open_help
+            open_help,
+            start_run,
+            answer,
+            stop_run,
+            stop_and_close
         ])
+        .on_window_event(|window, event| {
+            // Closing while a file runs asks first: the page shows the question (`close-asked`).
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                use tauri::{Emitter, Manager};
+                if !window.state::<AppState>().session.may_close() {
+                    api.prevent_close();
+                    let _ = window.emit("close-asked", ());
+                }
+            }
+        })
         .setup(|app| {
             let config = app
                 .config()

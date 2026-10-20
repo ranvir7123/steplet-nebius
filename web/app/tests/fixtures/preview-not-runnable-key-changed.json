@@ -12,6 +12,7 @@
       "kind": "unsigned"
     },
     "key_changed": true,
+    "red_sentence": null,
     "findings": [
       {
         "rule": "note.no-repository",

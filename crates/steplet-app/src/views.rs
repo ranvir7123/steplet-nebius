@@ -18,8 +18,8 @@ use steplet_core::report::Report as FileReport;
 use steplet_core::rules::{self, Finding, Outcome, Severity};
 use steplet_core::sig::SigStatus;
 use steplet_run::{
-    Answer, Check, Event, Progress, Promise, Question, Refusal, Reply, Report, ReportCommand, Tripwire, Trust,
-    call_what, exit_code_of,
+    Answer, Check, Event, GateError, LaunchError, NotYes, PrepareError, Progress, Promise, Question, Refusal, Reply,
+    Report, ReportCommand, RunError, Tripwire, Trust, call_what, exit_code_of,
 };
 use ts_rs::TS;
 
@@ -206,6 +206,8 @@ pub struct PreviewView {
     /// The sender name is pinned here to another key, or the file is unsigned under a pinned name (`id.key-changed`,
     /// rows 16 and 22): the identity line starts with that warning, whose detail is in `here`.
     pub key_changed: bool,
+    /// For a red file: the sentence the receiver types before Run works (J3 A, R9). Rust checks it again at Run.
+    pub red_sentence: Option<String>,
     /// The file's findings, worst first, as the core ordered them.
     pub findings: Vec<FindingView>,
     /// Findings about this computer ("On this computer"): a changed sender key, a damaged list of known senders.
@@ -226,6 +228,9 @@ pub struct Here {
     /// Why the file cannot run here, if it cannot.
     pub not_runnable: Option<String>,
 }
+
+/// The sentence a red file needs before it runs (J3 A, R9).
+pub const RED_SENTENCE: &str = "I understand the risks and want to run this file";
 
 /// Why a file with no repository cannot run (in Steplet's words only).
 pub const NO_REPOSITORY: &str = "This file names no repository, so Steplet has nothing to fetch and run.";
@@ -248,13 +253,14 @@ fn and_list(items: &[&str]) -> String {
     }
 }
 
-/// The preview of a file read as `raw`, with the core's report on it and what is true on this computer.
-pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
+/// The file's colour here, the worst of its own findings and this computer's (row 22), and whether Run is offered.
+/// The preview shows it, and a run's start checks it again (row 30).
+pub fn run_status(report: &FileReport, here: &Here) -> (Outcome, RunStatus) {
     let file_worst = report.rating.findings.first().map(|f| f.rule.severity);
     let here_worst = here.findings.iter().map(|f| f.rule.severity).max();
     let worst = file_worst.into_iter().chain(here_worst).max();
     let colour = worst.map(Outcome::of).unwrap_or(Outcome::Green);
-    let run_status = match colour {
+    let status = match colour {
         Outcome::Blocked => RunStatus::Blocked,
         _ if here.not_runnable.is_some() => {
             RunStatus::NotRunnable { reason: here.not_runnable.clone().unwrap_or_default() }
@@ -263,6 +269,12 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
         Outcome::Amber => RunStatus::Amber,
         Outcome::Green => RunStatus::Green,
     };
+    (colour, status)
+}
+
+/// The preview of a file read as `raw`, with the core's report on it and what is true on this computer.
+pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
+    let (colour, run_status) = run_status(report, here);
     let identity = match (&here.identity, &report.signature) {
         (Some(i), _) => identity_view(i),
         (None, None) => IdentityView::Unchecked,
@@ -270,6 +282,7 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
         (None, Some(SigStatus::Invalid { .. })) => IdentityView::Invalid,
         (None, Some(SigStatus::Valid { fingerprint })) => IdentityView::NewKey { key: fingerprint.clone() },
     };
+    let red_sentence = (run_status == RunStatus::Red).then(|| RED_SENTENCE.to_string());
     let s = report.steplet.as_ref();
     let count = |f: fn(&Steplet) -> usize| s.map_or(0, |s| f(s) as u32);
     PreviewView {
@@ -279,6 +292,7 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
         run_status,
         identity,
         key_changed: here.findings.iter().any(|f| f.rule.id == rules::KEY_CHANGED.id),
+        red_sentence,
         findings: report.rating.findings.iter().map(finding_view).collect(),
         here: here.findings.iter().map(finding_view).collect(),
         file: s.map(file_view),
@@ -591,6 +605,8 @@ pub enum EventView {
     Ended { models: Vec<Shown> },
     /// A line of Claude Code's error output, or a line Steplet could not read.
     Note { text: Shown },
+    /// Claude Code tries again after an error from the model's service, in Steplet's words.
+    Retry { words: String },
 }
 
 /// The live log's row for `e`. `call` is the tool name and request of the call a result belongs to, when known.
@@ -623,8 +639,21 @@ pub fn event_view(e: &Event, call: Option<(&str, &Value)>) -> Option<EventView> 
         Event::HookEvent { name } => EventView::Hook { name: line(name) },
         Event::Result { models, .. } => EventView::Ended { models: models.iter().map(|m| line(m)).collect() },
         Event::Stderr(text) | Event::Unreadable(text) => EventView::Note { text: shown(text) },
-        Event::Other(_) => return None,
+        Event::ApiRetry { status, attempt, max, .. } => {
+            EventView::Retry { words: retry_words(*status, *attempt, *max) }
+        }
+        // The report's fault says what it means (a key Anthropic does not accept); the row would only repeat it.
+        Event::ApiError { .. } | Event::Other(_) => return None,
     })
+}
+
+fn retry_words(status: Option<u16>, attempt: u32, max: u32) -> String {
+    let again = format!("({attempt} of {max})");
+    match status {
+        Some(401) => format!("Anthropic did not accept the key. Claude Code tries again {again}."),
+        Some(code) => format!("Anthropic's service answered with error {code}. Claude Code tries again {again}."),
+        None => format!("Claude Code could not reach Anthropic's service. It tries again {again}."),
+    }
 }
 
 /// Every field of a request, in its own order: strings as they are, anything else as JSON.
@@ -657,6 +686,8 @@ pub struct QuestionView {
     pub fields: Vec<FieldView>,
     /// Why Steplet asks: the checker's reason, in Steplet's words.
     pub reason: String,
+    /// What still holds if the receiver says yes, in Steplet's words, worded no wider than the tests show.
+    pub holds: String,
     /// Bound to the exact request; the yes carries it back (R7).
     pub fingerprint: String,
     /// How long the question had already waited when this view was made, and how long it may wait in all.
@@ -675,6 +706,25 @@ pub fn ask_words(tool: &str) -> &'static str {
     }
 }
 
+/// What still holds after a yes to a request of `tool`: the fence for commands (the chooser's lines 3 to 6), the
+/// working copy for file changes (J1 refuses any outside it before a question), Steplet's own Linux for reads.
+pub fn holds_words(tool: &str) -> &'static str {
+    match tool {
+        "Bash" => {
+            "If you say yes, the command still runs inside the fence: it can change files only inside the working \
+             copy, and your own files are not in Steplet's Linux."
+        }
+        "Write" | "Edit" => {
+            "If you say yes, only this file changes, inside the working copy, which Steplet deletes after the run."
+        }
+        "Read" | "Glob" | "Grep" => {
+            "If you say yes, the agent reads it inside Steplet's Linux, where none of your own files are."
+        }
+        "WebFetch" => "If you say yes, the agent fetches this exact address and no other.",
+        _ => "If you say yes, Steplet allows this exact request and nothing else.",
+    }
+}
+
 /// The ask screen's view of `q`, asked with `limit` to answer.
 pub fn question_view(q: &Question, limit: Duration) -> QuestionView {
     QuestionView {
@@ -684,6 +734,7 @@ pub fn question_view(q: &Question, limit: Duration) -> QuestionView {
         what: shown(&q.what),
         fields: fields(&q.input),
         reason: q.reason.clone(),
+        holds: holds_words(&q.tool).into(),
         fingerprint: q.fingerprint.clone(),
         waited_ms: q.asked_at.elapsed().as_millis().min(u32::MAX as u128) as u32,
         limit_ms: limit.as_millis().min(u32::MAX as u128) as u32,
@@ -754,10 +805,12 @@ impl Default for Replies {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProgressView {
-    /// The working copy is ready at `commit`; these agent settings files were removed from it (D3, S7).
+    /// The working copy is ready at `commit`; these agent settings files were removed from it (D3, S7). The agent
+    /// starts now, and the run may last `limit_ms` from here.
     Prepared {
         commit: String,
         removed: Vec<Shown>,
+        limit_ms: u32,
     },
     Event {
         event: EventView,
@@ -768,6 +821,17 @@ pub enum ProgressView {
     QuestionClosed {
         id: u32,
         how: String,
+    },
+    /// How many more questions wait behind the one on screen (each comes on screen when the one before is closed).
+    Waiting {
+        count: u32,
+    },
+    /// Steplet's decision on the agent's call `call` (the id of its `Event::Call`, never drawn), as it was made: the
+    /// check, and Steplet's reason when it refused. The report is the last word.
+    Checked {
+        call: String,
+        check: CheckView,
+        reason: Option<String>,
     },
     Finished {
         report: ReportView,
@@ -790,6 +854,75 @@ pub struct FailureView {
 
 pub fn failure(reason: &str, detail: Option<&str>) -> FailureView {
     FailureView { reason: reason.into(), detail: detail.map(shown) }
+}
+
+/// Why a run could not start or prepare, in Steplet's words, with what a program printed as file text; and the
+/// stage it was at. Nothing of the agent ran in any of these.
+pub fn run_failure(e: &RunError) -> (String, FailureView) {
+    let starting = "Starting the run".to_string();
+    let said = |reason: &str, detail: &str| failure(reason, (!detail.trim().is_empty()).then_some(detail));
+    match e {
+        RunError::Prepare(p) => {
+            let stage = "Getting the repository ready".to_string();
+            let f = match p {
+                PrepareError::Refused(what) => {
+                    failure(&format!("Steplet will not hand this {} to its Linux, so nothing ran.", what.0), None)
+                }
+                PrepareError::Wsl(why) => {
+                    said("Steplet could not start its own Linux, so nothing ran. Windows said:", why)
+                }
+                PrepareError::Step { step: "clone the repository", detail } => {
+                    said("Steplet could not fetch the repository, so nothing ran. Git said:", detail)
+                }
+                PrepareError::Step { step: "find the declared commit", detail } => {
+                    said("The repository does not have the commit this file names, so nothing ran. Git said:", detail)
+                }
+                PrepareError::Step { step, detail } => said(
+                    &format!("Steplet stopped while trying to {step}, so nothing ran. What it printed last:"),
+                    detail,
+                ),
+            };
+            (stage, f)
+        }
+        RunError::Busy => {
+            (starting, failure("Another Steplet window is running a file. Finish or stop it first.", None))
+        }
+        RunError::Lock(why) => (
+            starting,
+            failure(
+                &format!(
+                    "Windows would not let Steplet make sure that only one file runs at a time, so nothing ran. Windows says: {why}"
+                ),
+                None,
+            ),
+        ),
+        RunError::Refused(what) => {
+            (starting, failure(&format!("Steplet will not hand this {} to its gate, so nothing ran.", what.0), None))
+        }
+        RunError::Random(why) => (
+            starting,
+            failure(
+                &format!(
+                    "Windows gave Steplet no random numbers for the run's secret, so nothing ran. Windows says: {why}"
+                ),
+                None,
+            ),
+        ),
+        RunError::Gate(GateError::Taken) => (
+            starting,
+            failure("Another program holds the name of this run's safety gate, so Steplet did not start it.", None),
+        ),
+        RunError::Gate(GateError::Start(why) | GateError::Install(why)) => {
+            (starting, said("Steplet's safety gate could not start, so nothing ran. What went wrong:", why))
+        }
+        RunError::Launch(LaunchError::Refused(what)) => {
+            (starting, failure(&format!("Steplet will not hand this {} to Claude Code, so nothing ran.", what.0), None))
+        }
+        RunError::Launch(LaunchError::Start(why)) => {
+            (starting, said("Claude Code could not start, so nothing ran. What went wrong:", why))
+        }
+        RunError::Limits => (starting, failure("Steplet's own time limits do not fit together, so nothing ran.", None)),
+    }
 }
 
 /// Why setup stopped, in Steplet's words, with the end of what the failed step printed as file text.
@@ -836,18 +969,30 @@ fn without_terminal_codes(text: &str) -> String {
     out
 }
 
+/// A run's limits, as the screen shows them: how long a question may wait, and how long the run may last.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    pub ask: Duration,
+    pub run: Duration,
+}
+
 /// The screen's view of one piece of live progress. `call` is the tool name and request of the call a result belongs
-/// to, when known; `ask_limit` is how long a question may wait.
-pub fn progress_view(p: &Progress, call: Option<(&str, &Value)>, ask_limit: Duration) -> Option<ProgressView> {
+/// to, when known.
+pub fn progress_view(p: &Progress, call: Option<(&str, &Value)>, limits: Limits) -> Option<ProgressView> {
+    let ask_limit = limits.ask;
     Some(match p {
         Progress::Prepared(prepared) => ProgressView::Prepared {
             commit: prepared.commit.clone(),
             removed: prepared.removed.iter().map(|r| line(r)).collect(),
+            limit_ms: limits.run.as_millis().min(u32::MAX as u128) as u32,
         },
         Progress::Event(e) => ProgressView::Event { event: event_view(e, call)? },
         Progress::Asking(q) => ProgressView::Question { question: question_view(q, ask_limit) },
         Progress::Answered { question, reply } => {
             ProgressView::QuestionClosed { id: *question as u32, how: reply_words(reply).into() }
+        }
+        Progress::Checked { call, check, reason } => {
+            ProgressView::Checked { call: call.clone(), check: check_view(check), reason: reason.clone() }
         }
     })
 }
@@ -871,7 +1016,9 @@ pub enum EndView {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct CheckView {
-    /// `allowed`, `allowed_by_you`, `refused`, `refused_but_ran`, `not_asked` or `not_judged`.
+    /// `allowed`, `allowed_by_you`, `refused`, `refused_by_you` (refused after asking the receiver),
+    /// `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run)
+    /// or `not_judged`.
     pub kind: String,
     /// Steplet's words for it.
     pub words: String,
@@ -883,9 +1030,16 @@ pub fn check_view(c: &Check) -> CheckView {
         Check::AllowedByYou { reused: false } => ("allowed_by_you", "You allowed this exact request"),
         Check::AllowedByYou { reused: true } => ("allowed_by_you", "Allowed by your earlier yes to this exact request"),
         Check::Refused => ("refused", "Refused by Steplet's checker"),
+        Check::RefusedWhenAsked { how: NotYes::SaidNo } => ("refused_by_you", "Refused: you said no"),
+        Check::RefusedWhenAsked { how: NotYes::NoAnswer } => ("refused_by_you", "Refused: no answer in time"),
+        Check::RefusedWhenAsked { how: NotYes::TakenBack } => {
+            ("refused_by_you", "Refused: Steplet took the question back as the run stopped")
+        }
         Check::RefusedButRan => ("refused_but_ran", "Refused by Steplet, yet it ran: Steplet stopped the run"),
         Check::NotAsked { harmless: true } => ("not_asked", "Ran without asking Steplet: a harmless read"),
-        Check::NotAsked { harmless: false } => ("not_asked", "Ran without asking Steplet: Steplet stopped the run"),
+        Check::NotAsked { harmless: false } => {
+            ("ran_without_asking", "Ran without asking Steplet: Steplet stopped the run")
+        }
         Check::NotJudged => ("not_judged", "No result came, so there is no sign it ran"),
     };
     CheckView { kind: kind.into(), words: words.into() }

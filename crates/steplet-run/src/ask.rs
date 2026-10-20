@@ -16,7 +16,7 @@ use steplet_core::policy::{Decision, Policy};
 
 use crate::decide::{check, no_one_to_ask};
 use crate::live::{Live, Progress, StopSignal};
-use crate::report::Scrubber;
+use crate::report::{Check, NotYes, Scrubber};
 use crate::types::{GateAnswer, GateRequest};
 use crate::watch::what;
 
@@ -147,18 +147,35 @@ impl Asker {
     }
 
     /// The gate's answer to `req`; blocks at most the ask limit, and stops waiting once the run is being stopped.
+    /// The decision also goes to the screen, as the call's check.
     pub fn decide(&self, policy: &Policy, req: &GateRequest) -> GateAnswer {
+        let (answer, reply) = self.answer(policy, req);
+        let (check, reason) = match (&answer, &reply) {
+            (GateAnswer::Allow { .. }, Some(r)) => (Check::AllowedByYou { reused: matches!(r, Reply::Reused) }, None),
+            (GateAnswer::Allow { .. }, None) => (Check::Allowed, None),
+            // Refused after asking: how the question ended says why; the reason is the agent's, not the receiver's.
+            (GateAnswer::Deny { message }, reply) => match reply.as_ref().and_then(NotYes::of) {
+                Some(how) => (Check::RefusedWhenAsked { how }, None),
+                None => (Check::Refused, Some(message.clone())),
+            },
+        };
+        (self.live.on_progress)(Progress::Checked { call: self.scrub.text(&req.tool_use_id), check, reason });
+        answer
+    }
+
+    /// The gate's answer to `req`, and the receiver's reply when that decided it (a question now, or a yes reused).
+    fn answer(&self, policy: &Policy, req: &GateRequest) -> (GateAnswer, Option<Reply>) {
         let reason = match check(policy, req) {
-            Err(message) => return deny(message),
-            Ok(Decision::Allow) => return allow(req),
-            Ok(Decision::Deny { reason, .. }) => return deny(reason),
+            Err(message) => return (deny(message), None),
+            Ok(Decision::Allow) => return (allow(req), None),
+            Ok(Decision::Deny { reason, .. }) => return (deny(reason), None),
             Ok(Decision::Ask { reason }) => reason,
         };
-        let Some(answers) = &self.live.answers else { return no_one_to_ask(reason) };
+        let Some(answers) = &self.live.answers else { return (no_one_to_ask(reason), None) };
         // A yes covers exactly the request on screen, so a request the screen cannot show exactly (cleaning would
         // change it) is never asked about.
         if self.scrub.value(&req.input) != req.input || self.scrub.text(&req.tool_name) != req.tool_name {
-            return deny(CANNOT_SHOW);
+            return (deny(CANNOT_SHOW), None);
         }
         let print = fingerprint(req);
         let (tool, what) = (self.scrub.text(&req.tool_name), self.scrub.text(&what(&req.tool_name, &req.input)));
@@ -173,7 +190,7 @@ impl Asker {
         };
         if self.approved.lock().unwrap_or_else(PoisonError::into_inner).contains(&print) {
             note(&Reply::Reused);
-            return allow(req);
+            return (allow(req), Some(Reply::Reused));
         }
         let id = self.last.fetch_add(1, Ordering::SeqCst) + 1;
         self.open.fetch_add(1, Ordering::SeqCst);
@@ -204,9 +221,9 @@ impl Asker {
             }
         };
         note(&reply);
-        (self.live.on_progress)(Progress::Answered { question: id, reply });
+        (self.live.on_progress)(Progress::Answered { question: id, reply: reply.clone() });
         self.open.fetch_sub(1, Ordering::SeqCst);
-        answer
+        (answer, Some(reply))
     }
 
     /// At the end of a run: takes back every question still open (`live.stop` is set) and waits a moment, at most

@@ -166,7 +166,10 @@ fn no_answer_refuses_it() {
     let (r, _) = run_with_screen("p4t4b", &script, 47966, false, Duration::from_secs(2));
     println!("--- the report:\n{r:#?}");
     let c = &r.commands[0];
-    assert_eq!((c.command.as_str(), &c.check), ("touch asked.txt", &Check::Refused));
+    assert_eq!(
+        (c.command.as_str(), &c.check),
+        ("touch asked.txt", &Check::RefusedWhenAsked { how: steplet_run::NotYes::NoAnswer })
+    );
     assert!(c.output.contains("no answer in time"), "{:?}", c.output);
     assert_eq!(r.changed_files, Some(vec![]), "asked.txt was never made");
     assert!(matches!(r.answers[..], [steplet_run::Answer { reply: Reply::NoAnswer, .. }]), "{:?}", r.answers);

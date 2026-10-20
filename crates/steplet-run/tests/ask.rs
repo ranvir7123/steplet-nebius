@@ -16,8 +16,8 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    Answers, Asker, GateAnswer, GateRequest, Live, Progress, Question, Reply, RunError, RunPaths, RunRequest, RunSetup,
-    StopSignal, fingerprint, run_live,
+    Answers, Asker, Check, GateAnswer, GateRequest, Live, NotYes, Progress, Question, Reply, RunError, RunPaths,
+    RunRequest, RunSetup, StopSignal, fingerprint, run_live,
 };
 use support::MADE_UP_KEY;
 
@@ -188,7 +188,7 @@ fn the_checkers_allow_and_deny_never_ask() {
         ..bash("", "u3")
     };
     assert!(matches!(asker.decide(&policy(), &write), GateAnswer::Deny { .. }), "J1: refused without a question");
-    assert!(seen.lock().unwrap().is_empty(), "nothing was asked");
+    assert!(questions(&seen).is_empty(), "nothing was asked");
     assert!(asker.answers().is_empty());
 }
 
@@ -273,4 +273,51 @@ fn run_live_refuses_an_ask_limit_the_gate_deadline_cannot_cover() {
     };
     let got = run_live(&req, &paths, &policy(), &setup, live);
     assert!(matches!(got, Err(RunError::Limits)), "{got:?}");
+}
+
+/// Task 12: each decision reaches the screen as it happens, as the call's check (the report's own words later), with
+/// Steplet's reason for a refusal: the live log can then say "Allowed", "You allowed this" or "Refused: …" per call.
+#[test]
+fn each_decision_reaches_the_screen_as_its_check() {
+    let (yes_asker, seen, _, _) = asker(yes(), LIMIT);
+    let write = GateRequest {
+        tool_name: "Write".into(),
+        input: json!({"file_path": "/tmp/x", "content": "made up"}),
+        ..bash("", "c4")
+    };
+    yes_asker.decide(&policy(), &bash("cargo test", "c1"));
+    yes_asker.decide(&policy(), &bash("touch asked.txt", "c2"));
+    yes_asker.decide(&policy(), &bash("touch asked.txt", "c3"));
+    yes_asker.decide(&policy(), &write);
+    let (no_asker, no_seen, _, _) = asker(Box::new(|_| Some(Reply::No)), LIMIT);
+    no_asker.decide(&policy(), &bash("touch other.txt", "c5"));
+    let (silent, silent_seen, _, _) = asker(Box::new(|_| None), Duration::from_millis(50));
+    silent.decide(&policy(), &bash("touch other.txt", "c6"));
+    let checks = |seen: &Mutex<Vec<Progress>>| -> Vec<(String, Check, Option<String>)> {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter_map(|p| match p {
+                Progress::Checked { call, check, reason } => Some((call.clone(), check.clone(), reason.clone())),
+                _ => None,
+            })
+            .collect()
+    };
+    let refused = |why: &str| Some(why.to_string());
+    assert_eq!(
+        checks(&seen),
+        [
+            ("c1".to_string(), Check::Allowed, None),
+            ("c2".to_string(), Check::AllowedByYou { reused: false }, None),
+            ("c3".to_string(), Check::AllowedByYou { reused: true }, None),
+            (
+                "c4".to_string(),
+                Check::Refused,
+                refused("the agent's file tools may change files only inside the working copy")
+            ),
+        ]
+    );
+    // Refused after asking: the check says how the question ended, and the log's question row says the rest.
+    assert_eq!(checks(&no_seen), [("c5".to_string(), Check::RefusedWhenAsked { how: NotYes::SaidNo }, None)]);
+    assert_eq!(checks(&silent_seen), [("c6".to_string(), Check::RefusedWhenAsked { how: NotYes::NoAnswer }, None)]);
 }

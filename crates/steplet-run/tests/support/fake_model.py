@@ -12,7 +12,8 @@ already in the conversation, so retries and side requests never move the script 
   {"refusal": {"message": {...}, "delta": {...}},    the model refuses: stop reason "refusal", with the given
    "text_after_refusal": "..."}                       fields merged in; a repeat request at the same step
                                                       gets text_after_refusal instead
-Requests without tools (titles, summaries) get the text "ok". One JSON line is logged per request; the agent loop's
+A request that sends a key other than the expected one gets HTTP 401 with Anthropic's own error body for a wrong
+key (phase 4 Task 12). Requests without tools (titles, summaries) get the text "ok". One JSON line is logged per request; the agent loop's
 first request also logs the text blocks of the first user message, so a test can check the task arrived whole.
 Keys are never logged: only whether one was sent, and whether its SHA-256 equals the expected one.
 """
@@ -108,6 +109,11 @@ class Handler(BaseHTTPRequestHandler):
         entry = {"method": "POST", "path": self.path, "model": body.get("model"), "stream": bool(body.get("stream")),
                  "tools_offered": tools, "api_key_sent": key is not None, "api_key_matches_expected": matches,
                  "bearer_sent": self.headers.get("authorization") is not None}
+        if matches is False:
+            entry.update(kind="wrong key")
+            log(entry)
+            return self.send_json(401, {"type": "error",
+                                        "error": {"type": "authentication_error", "message": "invalid x-api-key"}})
         if path.endswith("/v1/messages/count_tokens"):
             log(entry)
             return self.send_json(200, {"input_tokens": 1})

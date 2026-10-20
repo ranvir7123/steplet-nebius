@@ -55,6 +55,15 @@ fn is_name(name: &str) -> bool {
     !name.trim().is_empty() && name.chars().count() <= MAX_SENDER_CHARS && !name.chars().any(char::is_control)
 }
 
+/// The pins at `path`, or unreadable when there is no place for them (Windows did not say where this user's app data
+/// goes). Reading changes nothing.
+pub fn load_at(path: Option<&Path>) -> Pins {
+    match path {
+        Some(p) => load(p),
+        None => Pins::Unreadable("Windows did not say where this user's app data goes".into()),
+    }
+}
+
 /// The pins in `path`. Reading changes nothing.
 pub fn load(path: &Path) -> Pins {
     let bytes = match std::fs::metadata(path) {

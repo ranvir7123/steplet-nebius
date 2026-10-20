@@ -180,3 +180,22 @@ fn nothing_is_dropped_and_nothing_panics() {
     let every = RECORDED.lines().flat_map(parse_line).count();
     assert_eq!(every, 11, "12 lines, of which only the thinking one gives no event");
 }
+
+/// Task 12, measured with the scripted model answering HTTP 401 (a key Anthropic does not accept): Claude Code 2.1.220
+/// tries again ten times over about three minutes, saying so on its stream each time, then ends with a result that
+/// carries the status. These are two of its lines as it wrote them.
+#[test]
+fn a_key_anthropic_refuses_is_read_from_the_stream() {
+    let retry = r#"{"type":"system","subtype":"api_retry","attempt":5,"max_retries":10,"retry_delay_ms":8418,"error_status":401,"error":"authentication_failed","session_id":"31060bcf-4ad5-4a8e-b398-266bb4476edf","uuid":"51a8c2fd-8ad0-4e8e-a887-1a08aeee527b"}"#;
+    assert_eq!(
+        parse_line(retry),
+        vec![Event::ApiRetry { status: Some(401), error: "authentication_failed".into(), attempt: 5, max: 10 }]
+    );
+    let result = r#"{"is_error":true,"duration_api_ms":0,"num_turns":1,"stop_reason":"stop_sequence","session_id":"31060bcf-4ad5-4a8e-b398-266bb4476edf","total_cost_usd":0,"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","iterations":[],"speed":"standard"},"modelUsage":{},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","subtype":"success","api_error_status":401,"result":"Invalid API key · Fix external API key","type":"result","duration_ms":186462,"uuid":"2b15c859-a6ae-4d0b-add2-f7a938802e42"}"#;
+    match parse_line(result).as_slice() {
+        [Event::ApiError { status: 401 }, Event::Result { is_error: true, text, .. }] => {
+            assert_eq!(text, "Invalid API key · Fix external API key")
+        }
+        other => panic!("{other:?}"),
+    }
+}

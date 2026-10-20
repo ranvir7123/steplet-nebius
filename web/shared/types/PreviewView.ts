@@ -25,6 +25,10 @@ colour: string, run_status: RunStatus, identity: IdentityView,
  */
 key_changed: boolean, 
 /**
+ * For a red file: the sentence the receiver types before Run works (J3 A, R9). Rust checks it again at Run.
+ */
+red_sentence: string | null, 
+/**
  * The file's findings, worst first, as the core ordered them.
  */
 findings: Array<FindingView>, 

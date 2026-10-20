@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use crate::ask::{Answers, Question, Reply};
 use crate::prepare::Prepared;
+use crate::report::Check;
 use crate::types::Event;
 
 /// The receiver's Stop button. Clones share one signal. Steplet also sets it when it stops a run itself (a tripwire,
@@ -40,6 +41,10 @@ pub enum Progress {
     Asking(Question),
     /// The question is closed, and how.
     Answered { question: u64, reply: Reply },
+    /// Steplet decided the agent's call `call` (its id on Claude Code's stream): its check, as the report says it,
+    /// and Steplet's reason when it refused. Said as the decision is made; the report, built afterwards from Steplet's
+    /// own records, is the last word on what happened to the call.
+    Checked { call: String, check: Check, reason: Option<String> },
 }
 
 /// Who follows a run as it goes: where its progress goes, and the Stop button. `on_progress` is called on the run's

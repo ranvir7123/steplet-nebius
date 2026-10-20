@@ -11,6 +11,7 @@
       "kind": "unsigned"
     },
     "key_changed": false,
+    "red_sentence": null,
     "findings": [],
     "here": [],
     "file": {

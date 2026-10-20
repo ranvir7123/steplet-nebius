@@ -400,3 +400,53 @@ fn steplets_own_words_carry_no_decision_codes() {
     assert_eq!(coded(&setups), Vec::<String>::new(), "the setup screen");
     assert_eq!(coded("as decided (D1) and (R16)"), ["D1", "R16"], "the check itself finds them");
 }
+
+/// A call refused after Steplet asked the receiver says how the question ended, never "Steplet's checker".
+#[test]
+fn a_refusal_after_asking_says_how_it_ended() {
+    use steplet_app::views::check_view;
+    use steplet_run::{Check, NotYes};
+    let words = |how| check_view(&Check::RefusedWhenAsked { how });
+    for (how, said) in [
+        (NotYes::SaidNo, "Refused: you said no"),
+        (NotYes::NoAnswer, "Refused: no answer in time"),
+        (NotYes::TakenBack, "Refused: Steplet took the question back as the run stopped"),
+    ] {
+        let v = words(how);
+        assert_eq!((v.kind.as_str(), v.words.as_str()), ("refused_by_you", said));
+    }
+    assert_eq!(check_view(&Check::Refused).words, "Refused by Steplet's checker");
+}
+
+/// A call that ran without asking Steplet and was no harmless read stopped the run: its kind says so, so the screen
+/// marks it as it marks a refusal that ran, not as a harmless read.
+#[test]
+fn a_call_that_ran_without_asking_is_not_marked_as_a_harmless_read() {
+    use steplet_app::views::check_view;
+    use steplet_run::Check;
+    assert_eq!(check_view(&Check::NotAsked { harmless: true }).kind, "not_asked");
+    assert_eq!(check_view(&Check::NotAsked { harmless: false }).kind, "ran_without_asking");
+}
+
+/// Task 12: while Claude Code tries again after an error from the model's service, the live log says so in
+/// Steplet's words (a wrong key takes about three minutes of tries); the error at the end shows nothing of its own,
+/// since the report's fault says it.
+#[test]
+fn each_try_after_a_service_error_is_said_in_steplets_words() {
+    use std::time::Duration;
+    use steplet_app::views::{EventView, Limits, progress_view};
+    use steplet_run::Progress;
+    let limits = Limits { ask: Duration::from_secs(300), run: Duration::from_secs(1800) };
+    let said = |status, attempt| match progress_view(
+        &Progress::Event(Event::ApiRetry { status, error: "x".into(), attempt, max: 10 }),
+        None,
+        limits,
+    ) {
+        Some(ProgressView::Event { event: EventView::Retry { words } }) => words,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(said(Some(401), 1), "Anthropic did not accept the key. Claude Code tries again (1 of 10).");
+    assert_eq!(said(Some(529), 3), "Anthropic's service answered with error 529. Claude Code tries again (3 of 10).");
+    assert_eq!(said(None, 2), "Claude Code could not reach Anthropic's service. It tries again (2 of 10).");
+    assert_eq!(progress_view(&Progress::Event(Event::ApiError { status: 401 }), None, limits), None);
+}

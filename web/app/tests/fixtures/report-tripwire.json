@@ -11,6 +11,7 @@
       "kind": "unsigned"
     },
     "key_changed": false,
+    "red_sentence": null,
     "findings": [],
     "here": [],
     "file": {
@@ -232,7 +233,7 @@
               }
             ],
             "check": {
-              "kind": "not_asked",
+              "kind": "ran_without_asking",
               "words": "Ran without asking Steplet: Steplet stopped the run"
             },
             "exit_code": 0,

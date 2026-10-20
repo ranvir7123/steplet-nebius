@@ -11,6 +11,7 @@
       "kind": "unsigned"
     },
     "key_changed": false,
+    "red_sentence": null,
     "findings": [],
     "here": [],
     "file": {
@@ -141,7 +142,65 @@
   },
   "open_error": null,
   "note": null,
-  "chooser": null,
+  "chooser": {
+    "claude": {
+      "ready": true,
+      "promises": [
+        {
+          "text": "Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.",
+          "items": [],
+          "tests": [
+            "a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not",
+            "a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next",
+            "a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run",
+            "a_writing_command_made_to_skip_the_gate_stops_the_run",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares"
+          ]
+        },
+        {
+          "text": "The agent cannot fetch any web address, unless you say yes to that exact address.",
+          "items": [],
+          "tests": [
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares",
+            "a_yes_allows_exactly_the_request_shown"
+          ]
+        },
+        {
+          "text": "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run).",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after"
+          ]
+        },
+        {
+          "text": "Your own files are not inside Steplet's Linux, where this task runs.",
+          "items": [],
+          "tests": [
+            "use_case_1_runs_with_none_of_the_receiver_s_files_present"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot start Windows programs.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        }
+      ],
+      "data_leaves": "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
+    },
+    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer."
+  },
   "setup": null,
   "setup_lines": [],
   "setup_error": null,
@@ -150,7 +209,8 @@
     {
       "kind": "prepared",
       "commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
-      "removed": []
+      "removed": [],
+      "limit_ms": 1800000
     },
     {
       "kind": "event",
@@ -210,114 +270,19 @@
           }
         ],
         "reason": "the file does not ask for this command",
+        "holds": "If you say yes, the command still runs inside the fence: it can change files only inside the working copy, and your own files are not in Steplet's Linux.",
         "fingerprint": "b0af7442108596d900bcc5955ec932fff1c5876c3397d810360315eb438dd5b9",
         "waited_ms": 4000,
         "limit_ms": 300000
       }
     },
     {
-      "kind": "question",
-      "question": {
-        "id": 2,
-        "ask": "Run this command",
-        "tool": [
-          {
-            "kind": "text",
-            "text": "Bash"
-          }
-        ],
-        "what": [
-          {
-            "kind": "text",
-            "text": "touch second.txt"
-          }
-        ],
-        "fields": [
-          {
-            "name": [
-              {
-                "kind": "text",
-                "text": "command"
-              }
-            ],
-            "value": [
-              {
-                "kind": "text",
-                "text": "touch second.txt"
-              }
-            ]
-          }
-        ],
-        "reason": "the file does not ask for this command",
-        "fingerprint": "ac970f188b60e4130fe4fd69bbc8810c0b7ecd66db870c7c1f628ae10b4e0195",
-        "waited_ms": 2000,
-        "limit_ms": 300000
-      }
+      "kind": "waiting",
+      "count": 1
     },
     {
-      "kind": "question",
-      "question": {
-        "id": 3,
-        "ask": "Open this web address",
-        "tool": [
-          {
-            "kind": "text",
-            "text": "WebFetch"
-          }
-        ],
-        "what": [
-          {
-            "kind": "link",
-            "shown": null,
-            "real": [
-              {
-                "kind": "text",
-                "text": "https://example.org/third"
-              }
-            ]
-          }
-        ],
-        "fields": [
-          {
-            "name": [
-              {
-                "kind": "text",
-                "text": "prompt"
-              }
-            ],
-            "value": [
-              {
-                "kind": "text",
-                "text": "Read it."
-              }
-            ]
-          },
-          {
-            "name": [
-              {
-                "kind": "text",
-                "text": "url"
-              }
-            ],
-            "value": [
-              {
-                "kind": "link",
-                "shown": null,
-                "real": [
-                  {
-                    "kind": "text",
-                    "text": "https://example.org/third"
-                  }
-                ]
-              }
-            ]
-          }
-        ],
-        "reason": "the file does not ask for this site",
-        "fingerprint": "8f816200b6c7c1632e704de0b7e39545af5828a8513183a2f219113f4a3c64f7",
-        "waited_ms": 0,
-        "limit_ms": 300000
-      }
+      "kind": "waiting",
+      "count": 2
     }
   ],
   "after_stop": [],

@@ -34,7 +34,8 @@ pub use prepare::{
 };
 pub use promises::{Promise, promises};
 pub use report::{
-    Check, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line, read_trust,
+    Check, NotYes, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line,
+    read_trust,
 };
 pub use run::{BACKSTOP, RunError, RunOutcome, RunSetup, RunningAgent, run, run_live, watch_run};
 pub use settings::{mcp_json, settings_json};
