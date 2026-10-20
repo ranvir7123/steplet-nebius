@@ -20,7 +20,7 @@ use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
     ApiKey, Asked, Event, GateAnswer, GateError, GateLink, GateRequest, GateService, RunPaths, RunRequest, decide,
-    discard, launch, prepare, serve,
+    discard, gate_for_run, launch, prepare, serve,
 };
 use support::{MADE_UP_KEY, logs_dir, scripted_model};
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
@@ -835,11 +835,12 @@ fn a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_ne
         {"tool": "Write", "input": {"file_path": "/work/t8b/repo/second.txt", "content": "2\n"}},
         {"text": "Task 8: done."}]}"#;
     // The first decision ends the gate program from outside before answering (F39); every other is allowed.
-    let killer = |_: &RunPaths| -> Box<dyn Fn(&GateRequest) -> GateAnswer + Send + Sync> {
+    let killer = |paths: &RunPaths| -> Box<dyn Fn(&GateRequest) -> GateAnswer + Send + Sync> {
         let first = std::sync::atomic::AtomicBool::new(true);
+        // The run's own copy of the gate (gate_for_run): "<run id>.<random>.exe".
+        let name = format!("{}.*", paths.run_id());
         Box::new(move |r: &GateRequest| {
             if first.swap(false, Ordering::SeqCst) {
-                let name = support::gate_file_name();
                 let out = std::process::Command::new(r"C:\Windows\System32\taskkill.exe")
                     .args(["/F", "/IM", &name])
                     .output()
@@ -920,4 +921,33 @@ fn a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run() {
     assert!(took >= Duration::from_secs(3) && took < Duration::from_secs(4), "{took:?}");
     assert!(events.iter().any(|e| matches!(e, Event::Result { .. })));
     discard(&paths).unwrap();
+}
+
+/// Found while running Task 9's Linux checks (phase 4, 21 Oct 2026): Windows can come to refuse to start a program from
+/// one exact `\wsl.localhost\steplet\...` path ("Error performing inpage operation"), whatever file is put there,
+/// while the same bytes start from any new path. A gate path used by run after run can stop working for good, and
+/// every run then fails closed. So each run starts the gate from a fresh copy of its own, removed with the run.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn each_run_starts_the_gate_from_a_path_of_its_own() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let installed = support::install_gate(&distro);
+    let paths = RunPaths::new(&distro, "tgp1").unwrap();
+    let a = gate_for_run(&paths, &installed).unwrap();
+    let b = gate_for_run(&paths, &installed).unwrap();
+    assert_ne!(a, b, "two runs never share a gate path");
+    for p in [&a, &b] {
+        assert!(p.starts_with("/opt/steplet/gate/runs/tgp1.") && p.ends_with(".exe"), "{p}");
+        let facts = support::root_sh(
+            &distro,
+            &format!("stat -c '%U %G %a' {p}; sha256sum {p} {installed} | cut -d' ' -f1 | uniq | wc -l"),
+        );
+        assert_eq!(facts, "root root 755\n1", "{p}: owned by root, not writable by the agent, the same program");
+        let started = support::root_sh(&distro, &format!("{p} --version 2>&1; echo \"exit $?\""));
+        assert!(started.contains("unknown option") && started.ends_with("exit 2"), "{p} starts: {started}");
+    }
+    discard(&paths).unwrap();
+    let left = support::root_sh(&distro, "ls /opt/steplet/gate/runs/ | grep -c '^tgp1[.]' || true");
+    assert_eq!(left, "0", "the run's gate copies are removed with the run");
 }

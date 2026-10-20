@@ -19,8 +19,12 @@ main() {
     local ID=$1
     stop_steplet
     rm -rf -- "/work/$ID" "/var/lib/steplet/runs/$ID" "/tmp/steplet-run-$ID"
+    # The run's own copies of the gate (gate.rs, gate_for_run): "<id>.<random>.exe". A run id holds no ".", so this
+    # matches this run's copies only.
+    rm -f -- /opt/steplet/gate/runs/"$ID".*.exe
     if pgrep -u steplet > /dev/null || [ -e "/work/$ID" ] || [ -e "/var/lib/steplet/runs/$ID" ] ||
-        [ -e "/tmp/steplet-run-$ID" ] || [ -L "/tmp/steplet-run-$ID" ]; then
+        [ -e "/tmp/steplet-run-$ID" ] || [ -L "/tmp/steplet-run-$ID" ] ||
+        compgen -G "/opt/steplet/gate/runs/$ID.*.exe" > /dev/null; then
         echo "steplet-discard: run $ID could not be removed completely" >&2
         exit 20
     fi

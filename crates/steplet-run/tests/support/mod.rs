@@ -91,7 +91,10 @@ pub fn serve_gate(
     deadline: Duration,
     decide: impl Fn(&GateRequest) -> GateAnswer + Send + Sync + 'static,
 ) -> (GateLink, GateService) {
-    let exe = install_gate(distro);
+    // Like a product run, each test run starts the gate from a fresh copy of its own (gate_for_run); the run's
+    // `discard` removes it.
+    let paths = steplet_run::RunPaths::new(distro, run_id).unwrap();
+    let exe = steplet_run::gate_for_run(&paths, &install_gate(distro)).unwrap();
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
     // At least 20 characters, so `count_key.py` can count it.
     let token = format!("{run_id}-token-{nanos:016x}");

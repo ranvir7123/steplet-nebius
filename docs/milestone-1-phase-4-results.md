@@ -2337,3 +2337,102 @@ clippy exit: 0
 - **The stand-in backend in a browser:** no screen uses it yet; Task 10's screen tests are its first users. Only the type checker has seen it against the interface.
 - **The real backend:** none of its commands exists in Rust yet (Tasks 10 to 13).
 - **Look-alike sender names and unusual text in a fixture's live rows** beyond what the core's display pieces already cover (phase 1's display tests).
+
+### Found while running Task 9's Linux checks: Windows refused to start the gate from its usual place
+
+**What happened.** The runner's Linux-only report tests failed: Claude Code ran with no gate, so every tool call failed closed (nothing ran unchecked). Claude Code's own error output said why:
+
+```
+> type %LOCALAPPDATA%\Steplet\logs\t10a.stderr.txt
+apiKeyHelper failed: exited 1: /opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe: Invalid argument
+Error: MCP tool mcp__gate__decide (passed via --permission-prompt-tool) not found. Available MCP tools: none
+```
+
+The gate program had not changed: `steplet-gate-ba1474290a83aa52.exe` is the copy installed on 17 Oct, and its last good run was on 20 Oct at 16:48. Phase 3 met the same failure once (its Task 7, on another path) and did not find the cause; its remedy was a new file name for each build, which this shows is not enough. What was measured this time, step by step:
+
+```
+> wsl -d steplet -u root -- /opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe --version
+/opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe: Invalid argument
+> wsl -d steplet -u root -- /opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe --version      (an older copy)
+/opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe: Invalid argument
+> (WSL's handler for Windows programs, in Steplet's Linux)
+enabled
+interpreter /init
+flags: P
+> wsl --terminate steplet, then the same start
+/opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe: Invalid argument
+> wsl -d Ubuntu -- /mnt/c/Windows/System32/whoami.exe ; and a copy of it on Ubuntu's own disk, /tmp/w.exe
+laptop-r1rg22o7\ranvir
+laptop-r1rg22o7\ranvir
+> gate_probe.sh, in Steplet's Linux as root (each start with an empty input)
+the installed file: exit 1 /opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe: Invalid argument
+same name, in /tmp/p: exit 2 steplet-gate: unknown option "--version"
+other name, gate folder: exit 2 steplet-gate: unknown option "--version"
+same pattern, gate folder: exit 2 steplet-gate: unknown option "--version"
+> touch_probe.sh: a new timestamp on the refused file, then a new file (new inode) with the same bytes at the same path
+before touch: exit 1 /opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe: Invalid argument
+after touch: exit 1 /opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe: Invalid argument
+before: exit 1 /opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe: Invalid argument
+inode 14394
+inode 1665
+fresh file, same path: exit 1 /opt/steplet/gate/steplet-gate-14b2ba5f90b138dd.exe: Invalid argument
+> from Windows (PowerShell), the refused path and a fresh copy of the same bytes, both through \\wsl.localhost\steplet
+zz-control.exe -> exit 2 : steplet-gate: unknown option "--version"
+steplet-gate-ba1474290a83aa52.exe -> start failed: Program 'steplet-gate-ba1474290a83aa52.exe' failed to run: Error performing inpage operation
+```
+
+(Exit code 2 with "unknown option" is the gate itself answering: it started.) So Windows refuses to start a program from that one exact path ("Error performing inpage operation": Windows could not load the program's pages), whatever file is put there, while the same bytes start from any new path. It is not this session's own restrictions either: the same PowerShell started the fresh copy. The phase 3 path that failed then (`spike-gate.exe`) starts again today, so such a refusal can also pass. **Why Windows does this is still not known.**
+
+**The fix.** A gate path that Windows refuses stops every later run, on this laptop or a receiver's. So each run now starts the gate from a fresh copy of its own: `gate_for_run` copies the installed gate to `/opt/steplet/gate/runs/<run id>.<16 random hex digits>.exe` as root (mode 755, so the agent cannot change the program Windows starts), checks that the copy has the same SHA-256, and `run_live` uses it for the run's settings and for the gate service's check of who connects. `discard.sh` removes the run's copies with its folders (a run id holds no `.`, so no other run's copies match), and says so if one is left. The test harness's own gate (`support::serve_gate`) does the same. One test that ended the gate by its old file name now ends the run's own copy (`taskkill /IM <run id>.*`).
+
+```
+> cargo test -p steplet-run --offline --test gate --no-run      (the test written first)
+error[E0432]: unresolved import `steplet_run::gate_for_run`
+  --> crates\steplet-run\tests\gate.rs:23:14
+> cargo test -p steplet-run --offline --test gate each_run_starts -- --ignored --test-threads=1
+test each_run_starts_the_gate_from_a_path_of_its_own ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 3.31s
+> cargo test -p steplet-run --offline --test report -- --ignored --test-threads=1      (the two that failed)
+test no_error_from_claude_code_does_not_always_mean_exit_code_0 ... ok
+test use_case_1_report_shows_the_test_command_s_real_exit_code_and_no_trust ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 26.20s
+> ls -la /opt/steplet/gate/runs/      (after those runs)
+total 8
+drwxr-xr-x 2 root root 4096 Oct 20 19:54 .
+drwxr-xr-x 3 root root 4096 Oct 20 19:53 ..
+```
+
+The first full Linux run after the fix stopped at `a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next`: the test ended the gate by its old file name, so nothing was ended (`--- taskkill /F /IM steplet-gate-ba1474290a83aa52.exe:` printed nothing) and both writes were allowed (`left: [true, true]`, `right: [false, true]`). The test now ends the run's own copy. The whole Linux suite, run again with that change:
+
+```
+> cargo test -p steplet-run --offline --no-fail-fast -- --ignored --test-threads=1 --skip install_makes_a_ready_linux_from_nothing
+Running tests\ask_live.rs (target\debug\deps\ask_live-c45a1842be6b2015.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 68.76s
+Running tests\contain.rs (target\debug\deps\contain-e9ca5c3e4707e558.exe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 71.72s
+Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 29.77s
+Running tests\launch.rs (target\debug\deps\launch-2c821a776c9bbf7e.exe)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 60.95s
+Running tests\prepare.rs (target\debug\deps\prepare-ca0ff602a7cf43dc.exe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 23.70s
+Running tests\report.rs (target\debug\deps\report-ff7dc5d64e57faad.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 23.50s
+Running tests\setup.rs (target\debug\deps\setup-e14c5120c2aa1fe9.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 35.01s
+Running tests\tripwires.rs (target\debug\deps\tripwires-8535515b103c05f7.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 33.55s
+exit: 0
+19 summary lines: 39 passed, 0 failed, 0 ignored
+> cargo test -p steplet-run --offline
+19 summary lines: 114 passed, 0 failed, 40 ignored
+plain exit: 0
+> cargo clippy -p steplet-run --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.95s
+> cargo fmt --all -- --check
+fmt exit: 0
+```
+
+(The test files with no Linux-only test, and their empty summary lines, are left out; the totals are counted from all 19 summary lines. The install test, which downloads 1 to 2 GB, was not run again, as the rules say. The 40 ignored in the plain run are the Linux-only tests, one more than before: the new one.)
+
+**What this did not verify:** why Windows refuses a path (unknown); whether it could happen in the middle of a run, to the run's own fresh copy (never seen: each refused path had been started many times over days); a receiver's computer. Each run now writes one 395 KB copy and removes it after; the older content-named copies in `/opt/steplet/gate` stay where they are (the installed one is the source of every run's copy). Decision H8 changes from "a new name for each build" to "a fresh copy for each run"; Task 16 records it in `docs/decisions.md`.

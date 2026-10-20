@@ -23,13 +23,15 @@ use tokio::sync::oneshot;
 use windows_sys::Win32::System::Pipes::WaitNamedPipeW;
 
 use crate::client::{Client, MEDIUM_INTEGRITY, Permissions, wait_until_read};
-use crate::types::{GateAnswer, GateLink, GateRequest, is_guid};
+use crate::types::{GateAnswer, GateLink, GateRequest, RunPaths, is_guid};
 use crate::wsl;
 
 /// The longest request Steplet reads: a write's request carries the whole file.
 const LONGEST_REQUEST: usize = 16 << 20;
 /// Where the gate program lives on Steplet's Linux disk (Task 1).
 const GATE_FOLDER: &str = "/opt/steplet/gate";
+/// Where each run's own copy of the gate goes; `discard.sh` removes a run's copies with its folders.
+const RUN_GATES: &str = "/opt/steplet/gate/runs";
 const ERROR_ACCESS_DENIED: i32 = 5;
 /// How long sending one answer may take. The gate reads its answer at once; this only ends a client that never does.
 const SEND_LIMIT: Duration = Duration::from_secs(5);
@@ -542,6 +544,42 @@ pub fn install_gate(distro_id: &str, program: &[u8]) -> Result<String, GateError
     match sum(found) {
         Some(got) if got == wanted => Ok(path),
         _ => Err(GateError::Install(format!("{path} on Steplet's Linux is not this gate program"))),
+    }
+}
+
+/// A fresh copy of the installed gate program (`installed`, where `install_gate` put it) for one run, at a path no
+/// run used before: `/opt/steplet/gate/runs/<run id>.<16 random hex digits>.exe`, owned by root and not writable by
+/// anyone else, so the agent cannot change the program Windows starts. Windows can come to refuse to start a program
+/// from one exact `\wsl.localhost` path ("Error performing inpage operation", seen twice: phase 3 Task 7 and phase
+/// 4 Task 9), whatever file is then put there, while the same bytes start from any new path; a gate path used run
+/// after run would then stop every later run. Run ids never hold a `.`, so `discard` removes this run's copies and no
+/// other run's.
+pub fn gate_for_run(paths: &RunPaths, installed: &str) -> Result<String, GateError> {
+    let name = installed.strip_prefix(GATE_FOLDER).and_then(|n| n.strip_prefix("/steplet-gate-"));
+    let plain = name
+        .and_then(|n| n.strip_suffix(".exe"))
+        .is_some_and(|h| h.len() == 16 && h.bytes().all(|b| b.is_ascii_hexdigit()));
+    if !plain {
+        return Err(GateError::Install(format!("{installed} is not where install_gate puts the gate program")));
+    }
+    let random = crate::run::random_hex::<8>().map_err(|e| GateError::Install(format!("no random name: {e}")))?;
+    let path = format!("{RUN_GATES}/{}.{random}.exe", paths.run_id());
+    let root = |argv: &[&str]| {
+        wsl::run(paths.distro_id(), "root", argv, b"").map_err(|e| GateError::Install(format!("Steplet's Linux: {e}")))
+    };
+    let copy = ["/usr/bin/install", "-D", "-o", "root", "-g", "root", "-m", "755", "-T", "--", installed, &path];
+    let made = root(&copy)?;
+    if made.status != Some(0) {
+        return Err(GateError::Install(format!(
+            "could not copy the gate program for this run: {}",
+            made.stderr.trim()
+        )));
+    }
+    let sums = root(&["/usr/bin/sha256sum", "--", installed, &path])?;
+    let mut found = sums.stdout.lines().filter_map(|l| l.split_whitespace().next());
+    match (sums.status, found.next(), found.next()) {
+        (Some(0), Some(a), Some(b)) if a == b => Ok(path),
+        _ => Err(GateError::Install(format!("{path} on Steplet's Linux is not a copy of the gate program"))),
     }
 }
 

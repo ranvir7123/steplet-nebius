@@ -23,7 +23,9 @@ pub mod wsl;
 pub use ask::{Answer, Answers, Asker, Question, Reply, fingerprint};
 pub use client::Client;
 pub use decide::decide;
-pub use gate::{ApiKey, Asked, GateError, GateService, gate_file_name, gate_on_windows, install_gate, serve};
+pub use gate::{
+    ApiKey, Asked, GateError, GateService, gate_file_name, gate_for_run, gate_on_windows, install_gate, serve,
+};
 pub use launch::{LaunchError, RunHandle, launch};
 pub use live::{Live, Progress, StopSignal};
 pub use lock::RunLock;

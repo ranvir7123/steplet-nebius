@@ -15,7 +15,7 @@ use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG
 
 use crate::ask::{Answer, Asker};
 use crate::decide::decide;
-use crate::gate::{ApiKey, Asked, GateError, GateService, gate_on_windows, serve};
+use crate::gate::{ApiKey, Asked, GateError, GateService, gate_for_run, gate_on_windows, serve};
 use crate::launch::{LaunchError, RunHandle, launch};
 use crate::live::{Live, Progress, StopSignal};
 use crate::lock::RunLock;
@@ -126,10 +126,17 @@ pub fn run_live(
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
-    let link = GateLink::new(&setup.gate_exe, &pipe, &token, &log.to_string_lossy(), setup.decision_deadline)
-        .map_err(RunError::Refused)?;
+    // The gate starts from a copy of its own for this run (see `gate_for_run`); `discard` removes it with the run.
+    let gate_exe = gate_for_run(paths, &setup.gate_exe).map_err(RunError::Gate)?;
+    let link = match GateLink::new(&gate_exe, &pipe, &token, &log.to_string_lossy(), setup.decision_deadline) {
+        Ok(link) => link,
+        Err(e) => {
+            let _ = discard(paths);
+            return Err(RunError::Refused(e));
+        }
+    };
     let checker = policy.clone();
-    let program = gate_on_windows(DISTRIBUTION, &setup.gate_exe);
+    let program = gate_on_windows(DISTRIBUTION, &gate_exe);
     // With someone to ask, the checker's "ask" becomes a question on their screen; without, a refusal.
     let asker = Arc::new(Asker::new(live.clone(), &secrets));
     let gate = if live.answers.is_some() {
@@ -137,8 +144,14 @@ pub fn run_live(
         serve(&link, &program, setup.key.clone(), move |r| asking.decide(&checker, r))
     } else {
         serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r))
-    }
-    .map_err(RunError::Gate)?;
+    };
+    let gate = match gate {
+        Ok(gate) => gate,
+        Err(e) => {
+            let _ = discard(paths);
+            return Err(RunError::Gate(e));
+        }
+    };
     let prepared = prepare_until_stopped(req, paths, &link, &live);
     let started = match prepared {
         // A Stop while preparing ends what preparing started, so preparing fails: the receiver's Stop, not a fault.
@@ -374,7 +387,7 @@ fn already_come(agent: &mut impl RunningAgent) -> Vec<Event> {
 }
 
 /// `N` random bytes from Windows' own generator, as lower-case hexadecimal.
-fn random_hex<const N: usize>() -> io::Result<String> {
+pub(crate) fn random_hex<const N: usize>() -> io::Result<String> {
     let mut bytes = [0u8; N];
     // SAFETY: `bytes` is writable for `N` bytes; the system's preferred generator needs no algorithm handle.
     let status = unsafe { BCryptGenRandom(null_mut(), bytes.as_mut_ptr(), N as u32, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
