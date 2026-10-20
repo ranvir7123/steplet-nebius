@@ -11,15 +11,18 @@ export interface Timing {
   line: number;
   /** Whether the install ends after its last line (with the saved error, if there is one). */
   installEnds: boolean;
+  /** Whether the first answer to a question fails on its way to Rust, as a broken channel to the window would. */
+  answerFails: boolean;
 }
 
-const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true };
+const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true, answerFails: false };
 
 const special: Record<string, Partial<Timing>> = {
   "open-reading": { open: null },
   "setup-installing": { installEnds: false },
   // A question that is on screen a moment before the run takes it back.
   "ask-withdrawn": { step: 300 },
+  "ask-answer-fails": { answerFails: true },
   // Rows that keep coming for a few seconds, so the receiver can scroll up while they do.
   "run-40-commands": { step: 40 },
 };

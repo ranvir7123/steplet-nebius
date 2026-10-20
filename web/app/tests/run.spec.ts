@@ -158,3 +158,17 @@ test("a_wrong_key_shows_each_try_and_says_so", async ({ page }) => {
   await expect(end).toBeVisible();
   await expect(end).toContainText("Anthropic did not accept the key. Change it in Setup.");
 });
+
+test("an_answer_that_did_not_reach_steplet_can_be_given_again", async ({ page }) => {
+  await runOf(page, "ask-answer-fails");
+  const f = saved("ask-answer-fails");
+  const dialog = page.getByRole("dialog", { name: questionOf(f).ask });
+  await expect(dialog).toBeVisible();
+  const no = dialog.getByRole("button", { name: "No", exact: true });
+  await no.click();
+  await expect(dialog.getByRole("alert")).toHaveText("Steplet could not pass on your answer. Try again.");
+  await expect(no).toBeEnabled();
+  await no.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(log(page)).toContainText(f.replies.no);
+});

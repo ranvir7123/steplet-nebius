@@ -97,6 +97,16 @@ pub struct RunOutcome {
     pub answers: Vec<Answer>,
 }
 
+/// The gate's deadline covers the ask limit with room to spare, when someone may be asked.
+fn limits_fit(live: &Live, setup: &RunSetup) -> Result<(), RunError> {
+    if live.answers.is_some()
+        && live.ask_limit.checked_add(ASK_MARGIN).is_none_or(|needed| setup.decision_deadline < needed)
+    {
+        return Err(RunError::Limits);
+    }
+    Ok(())
+}
+
 /// Runs `req` as run `paths`, with `policy` deciding every request, and returns the receiver's report: `run_live`
 /// with no one watching.
 pub fn run(req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup) -> Result<Report, RunError> {
@@ -116,12 +126,22 @@ pub fn run_live(
     setup: &RunSetup,
     live: Arc<Live>,
 ) -> Result<Report, RunError> {
-    if live.answers.is_some()
-        && live.ask_limit.checked_add(ASK_MARGIN).is_none_or(|needed| setup.decision_deadline < needed)
-    {
-        return Err(RunError::Limits);
-    }
-    let _one_run = RunLock::take()?;
+    limits_fit(&live, setup)?;
+    let one_run = RunLock::take()?;
+    run_live_locked(&one_run, req, paths, policy, setup, live)
+}
+
+/// `run_live` for a caller that already holds the one-run lock. The app takes it when Run is pressed and keeps it
+/// until the run is over, so its note of a run in progress is never taken for a crash's leftover by another window.
+pub fn run_live_locked(
+    _held: &RunLock,
+    req: &RunRequest,
+    paths: &RunPaths,
+    policy: &Policy,
+    setup: &RunSetup,
+    live: Arc<Live>,
+) -> Result<Report, RunError> {
+    limits_fit(&live, setup)?;
     let pipe = format!("steplet-{}-{}", paths.run_id(), random_hex::<8>().map_err(RunError::Random)?);
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();

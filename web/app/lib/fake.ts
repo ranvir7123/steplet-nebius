@@ -45,6 +45,7 @@ async function emit(items: ProgressView[]) {
 }
 
 let setup: SetupView | null = null;
+let answerFailed = false;
 async function currentSetup(): Promise<SetupView> {
   if (!setup) {
     const f = await fixture();
@@ -119,6 +120,10 @@ export const backend: Backend = {
   },
   async answer(question, yes) {
     const f = await fixture();
+    if (t.answerFails && !answerFailed) {
+      answerFailed = true;
+      throw `${STAND_IN_MARK}: the answer did not get through`;
+    }
     void emit([{ kind: "question_closed", id: question, how: yes ? f.replies.yes : f.replies.no }]);
     return true;
   },

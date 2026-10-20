@@ -26,7 +26,7 @@ const PAIRS = [
   ["red-fg", "bg", 4.5], // the preview's changed-key warning, on the page itself
   ["green-fg", "surface", 4.5], // "Saved", "Setup finished" and the chooser's ticks, in a panel
   ["amber-fg", "surface", 4.5], // the live log's "tries again" rows, in its panel
-  ["red-fg", "surface", 3], // the cross beside each of the run's faults, an icon in a panel
+  ["red-fg", "surface", 4.5], // the cross beside each of the run's faults, and "could not pass on your answer"
   ...SURFACES.map((bg) => ["focus", bg, 3]),
   ...SURFACES.map((bg) => ["control-border", bg, 3]),
 ];

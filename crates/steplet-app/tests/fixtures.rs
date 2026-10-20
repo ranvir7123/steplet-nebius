@@ -700,6 +700,8 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     // Ask
     let ask = |questions: Vec<(Progress, Duration)>| run_screen(asked_progress(questions));
     s.insert("ask-command", ask(vec![question(1, "Bash", json!({"command": "touch asked.txt"}), Duration::ZERO)]));
+    // The same question; the stand-in's first answer does not get through (scenarios.ts).
+    s.insert("ask-answer-fails", ask(vec![question(1, "Bash", json!({"command": "touch asked.txt"}), Duration::ZERO)]));
     let files: String = (1..=11).map(|i| format!(" notes/part-{i:02}-of-the-count.txt")).collect();
     let long = format!("touch{files}");
     assert!(long.len() >= 300, "{}", long.len());

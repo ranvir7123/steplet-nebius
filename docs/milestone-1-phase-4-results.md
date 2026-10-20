@@ -3286,3 +3286,111 @@ Picked out of what the two runs sent to the screen (their full output is printed
 - **A real crash's clean-up.** `clear_leftover` was tested with a planted marker and a stand-in for `discard`; the real `discard` was measured in Task 3.
 - **Escape on the question screen and the Stop question** does nothing (on purpose: Escape never answers). No test presses it.
 - **A wrong key still takes Claude Code about three minutes** of tries before the run ends. Steplet shows each try, but does not stop the run at the first 401. That would save the wait; it is noted for the review.
+
+### The code review, and what changed
+
+A read-only reviewer read the task's commit (3314092). It checked and found right:
+
+- a yes is bound to its question and its request's fingerprint, and a late click cannot answer the next question;
+- the page cannot start a run the preview would not have offered, nor another file;
+- the question screen's one-second wait and countdown start again for each question;
+- cutting an output to 40 lines never changes a character;
+- no raw HTML, no inline styles, and the key reaches no view or error.
+
+It found one critical point and six important ones. Each was checked against the code; six were real and are fixed:
+
+1. **Critical: a second Steplet window could wipe a run that was still going.** The note "a run is going on" is one file. Every Steplet clears a leftover note when it starts, and a double-click on a second `.steplet` file starts a second Steplet. That one would have taken the first window's run for a crash's leftover and removed its folders in the middle of the run. Now:
+   - the window that runs a file holds Windows' one-run lock from Run until the run is over, and passes it to the runner (`run_live_locked`);
+   - the clean-up at start acts only when it can take that lock itself, so a run going on elsewhere is left alone;
+   - in this window, a Run waits until that clean-up is done.
+   Test: `clearing_at_start_leaves_a_run_in_another_window_alone`.
+2. **Important: two Runs at once (a double click) could both start,** and then Stop and the questions reached only the second. The run now counts as going on from the first moment Run is pressed, so the second Run is refused. Test: `two_starts_at_once_start_one_run`.
+3. **Important: Stop, or closing the window, in the first seconds of a Run was lost.** Steplet was still checking the file, and nothing yet counted as running. Now Stop is kept, and the agent never starts: "You stopped the run before it started. Nothing ran." Closing then asks first. And "Stop and close", pressed just as a run ended, closes the window at once instead of leaving it on "Closing" and closing it at the end of the next run. Tests: `stop_pressed_while_starting_is_kept`, `closing_when_no_run_goes_on_closes_now_and_only_now`.
+4. **Important: progress from two threads could reach the screen out of order,** for example a question's close after the next question, leaving a wrong "N more are waiting". The pieces are now sent while the relay is held. Test: `progress_reaches_the_screen_in_the_order_it_was_made`.
+5. **Important: "Run again" after a crash wrote over the crash's note,** so its folders were never removed. The next run in that window now removes them first. Test: `a_crashed_run_is_cleared_before_the_next_run_starts`.
+6. **Important: an answer that did not get through left the question stuck,** with both buttons off until the five minutes ran out. It now says "Steplet could not pass on your answer. Try again." and the buttons work again. Test: `an_answer_that_did_not_reach_steplet_can_be_given_again` (a new saved scenario, `ask-answer-fails`, whose first answer fails).
+
+Re-graded as minor, not fixed: **no limit on how much of a command's output reaches the window.** A run stops after 40 turns, so the log has at most 40 calls. Claude Code itself shortens a long command output before Steplet sees it. And the screens test showed 50,000 lines drawn quickly. Not measured: the cost of a very large output in the real window, through Tauri's channel (Task 15 runs the real window).
+
+The tests, before their fixes:
+
+```
+> cargo test -p steplet-app --offline --test session          (the six new tests, before the fixes)
+error[E0061]: this function takes 3 arguments but 4 arguments were supplied        (8 times)
+error[E0432]: unresolved import `steplet_app::session::DiscardFn`
+error[E0593]: closure is expected to take 5 arguments, but it takes 6 arguments    (8 times)
+error[E0599]: no method named `clear_leftover` found for struct `Session` in the current scope    (4 times)
+error[E0600]: cannot apply unary operator `!` to type `()`
+error: could not compile `steplet-app` (test "session") due to 22 previous errors
+> npx playwright test --project=screens run.spec -g did_not_reach
+  x  1 [screens] › app\tests\run.spec.ts:162:1 › an_answer_that_did_not_reach_steplet_can_be_given_again (5.8s)
+    Error: expect(locator).toHaveText(expected) failed
+    Error: element(s) not found
+  1 failed
+```
+
+A test that only fails to compile proves little, so each fix was also undone on purpose, one at a time, and its test run against the old behaviour (the fixed file was then put back, and compared: identical):
+
+```
+=== planted: no-lock-at-clean-up
+test clearing_at_start_leaves_a_run_in_another_window_alone ... FAILED
+  left: Some("Steplet was closed while a file was running. It stopped what was left of that run and removed its folders. Nothing of it is left.")
+ right: None
+=== planted: late-slot
+test two_starts_at_once_start_one_run ... FAILED
+  left: [Ok(()), Err("Another Steplet window is running a file. Finish or stop it first.")]
+ right: [Ok(()), Err("A file is running in this window already.")]
+test stop_pressed_while_starting_is_kept ... FAILED
+=== planted: stale-close
+test closing_when_no_run_goes_on_closes_now_and_only_now ... FAILED
+=== planted: send-outside-relay
+test progress_reaches_the_screen_in_the_order_it_was_made ... FAILED
+  left: ["question 1", "waiting 1", "closed 1", "closed 2", "question 2", "waiting 0", "finished"]
+ right: ["question 1", "waiting 1", "closed 1", "question 2", "waiting 0", "closed 2", "finished"]
+=== planted: no-clear-before-run
+test a_crashed_run_is_cleared_before_the_next_run_starts ... FAILED
+  left: []
+ right: ["{44f36236-99b1-42c0-84bd-7ff8392d51ba} app-1791720000-42028"]
+restored: identical
+```
+
+(In the second one, the old start did let the second Run through to the one-run lock, which then refused it with the words for another window.)
+
+The tests pass:
+
+```
+> npm --prefix web run build; cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+Running tests\fixtures.rs test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\help.rs test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\key.rs test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\open.rs test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\pins.rs test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\register.rs test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out;
+Running tests\session.rs test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\session_live.rs test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out;
+Running tests\setup.rs test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\shell.rs test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+Running tests\views.rs test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;
+   (the app's 11 test files above; 65 test programs in all, every one ok, as in the Task 12 run above)
+exit 0
+> cargo test -p steplet-app --offline -j 2 --test session_live -- --ignored --nocapture --test-threads=1
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 217.55s
+> npm --prefix web run build:screens; npx playwright test --project=screens
+  29 passed (16.9s)
+> npm --prefix web run check
+1792539305286 COMPLETED 153 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+clippy exit: 0
+```
+
+Minor points left for later:
+- The "Stop the run?" and "Close Steplet?" questions have no description for screen readers, and Escape does nothing there; Escape could mean "Keep running" (on the question screen it must stay off).
+- The live log is a polite live region, so a screen reader reads every new row; the bar alone might be enough.
+- Rows are found by a search through the log; fine for 40 calls.
+- The sender is pinned before the marker is written and the runner starts; if those then fail, the sender is pinned for a run that never started.
+- A run's id is its second and Steplet's process number: two runs in one second in one window would share an id (their raw log files).
+- The real window's close question and `close-asked` event are not tested in the real window (the screen test drives it with a stand-in event); Stop during "Preparing" is tested in Rust, not in the real window.

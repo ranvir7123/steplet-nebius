@@ -214,10 +214,11 @@
     onbusy(false);
   });
 
-  function answer(yes: boolean) {
+  /** False when the question is no longer open (its close is on its way); a failure on the way rejects. */
+  function answer(yes: boolean): Promise<boolean> {
     const q = question;
-    if (!q) return;
-    void backend.answer(q.id, yes, q.fingerprint);
+    if (!q) return Promise.resolve(false);
+    return backend.answer(q.id, yes, q.fingerprint);
   }
 
   async function stop() {

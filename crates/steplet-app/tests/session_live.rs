@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use steplet_app::session::{Places, Ready, RunFn, Screen, Session};
 use steplet_app::views::{ProgressView, Replies};
 use steplet_core::policy::Policy;
-use steplet_run::{ApiKey, Live, RunPaths, RunRequest, RunSetup};
+use steplet_run::{ApiKey, Live, RunLock, RunPaths, RunRequest, RunSetup};
 use support::{MADE_UP_KEY, scripted_model, steplet_linux};
 
 static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
@@ -83,18 +83,25 @@ fn run_session(name: &str, script: &Value, port: u16, key: &str) -> Arc<Receiver
     let _model = scripted_model(&distro, name, &script.to_string(), port);
     let url = format!("http://127.0.0.1:{port}");
     // The app's own run function, pointed at the scripted model instead of Anthropic.
-    let run: RunFn =
-        Arc::new(move |req: &RunRequest, paths: &RunPaths, policy: &Policy, setup: &RunSetup, live: Arc<Live>| {
+    let run: RunFn = Arc::new(
+        move |held: &RunLock,
+              req: &RunRequest,
+              paths: &RunPaths,
+              policy: &Policy,
+              setup: &RunSetup,
+              live: Arc<Live>| {
             let setup = RunSetup { model_url: Some(url.clone()), ..setup.clone() };
-            steplet_run::run_live(req, paths, policy, &setup, live)
-        });
+            steplet_run::run_live_locked(held, req, paths, policy, &setup, live)
+        },
+    );
     let dir = scratch(name);
     let places = Places {
         marker: dir.join("run-in-progress.json"),
         pins: Some(dir.join("senders.json")),
         logs: support::logs_dir(),
     };
-    let session = Arc::new(Session::new(run, Arc::new(steplet_app::open::now_unix), places.clone()));
+    let discard = Arc::new(|paths: &RunPaths| steplet_run::discard(paths));
+    let session = Arc::new(Session::new(run, discard, Arc::new(steplet_app::open::now_unix), places.clone()));
     let screen = Arc::new(Receiver::default());
     *screen.session.lock().unwrap() = Arc::downgrade(&session);
     let raw = std::fs::read(root().join("examples/run-tests.steplet")).unwrap();

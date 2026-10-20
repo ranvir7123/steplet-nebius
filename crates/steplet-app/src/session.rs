@@ -33,9 +33,11 @@ pub const DECISION_DEADLINE: Duration = Duration::from_secs(5 * 60 + 15);
 pub const RUN_LIMIT: Duration = Duration::from_secs(30 * 60);
 pub const MAX_TURNS: u32 = 40;
 
-/// The runner, as the session calls it: `steplet_run::run_live` in the app, a stand-in in tests.
-pub type RunFn =
-    Arc<dyn Fn(&RunRequest, &RunPaths, &Policy, &RunSetup, Arc<Live>) -> Result<Report, RunError> + Send + Sync>;
+/// The runner, as the session calls it, with the one-run lock the session holds for the run:
+/// `steplet_run::run_live_locked` in the app, a stand-in in tests.
+pub type RunFn = Arc<
+    dyn Fn(&RunLock, &RunRequest, &RunPaths, &Policy, &RunSetup, Arc<Live>) -> Result<Report, RunError> + Send + Sync,
+>;
 
 /// The window, as a run needs it.
 pub trait Screen: Send + Sync {
@@ -86,7 +88,7 @@ struct Marker {
     distro_id: String,
 }
 
-/// The run going on now.
+/// The run going on now, from the moment Run is pressed: a Stop or an answer given while it still starts is kept.
 struct Current {
     stop: StopSignal,
     answers: Answers,
@@ -96,21 +98,34 @@ struct Current {
 const CLEARED: &str = "Steplet was closed while a file was running. It stopped what was left of that run and removed its \
                        folders. Nothing of it is left.";
 
+/// Removes what a run left on Steplet's Linux: `steplet_run::discard` in the app, a stand-in in tests.
+pub type DiscardFn = Arc<dyn Fn(&RunPaths) -> Result<(), PrepareError> + Send + Sync>;
+
+/// The note for the Open screen when a crash's run could not be removed yet.
+const LEFT_BEHIND: &str = "Steplet was closed while a file was running, and could not yet remove everything that run \
+                           left in its Linux. It tries again the next time it starts.";
+
 pub struct Session {
     run: RunFn,
+    discard: DiscardFn,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
     places: Places,
+    /// The run of this window, from the moment Run is pressed until the run is over.
     current: Arc<Mutex<Option<Current>>>,
+    /// The receiver chose "Stop and close": the window closes once the run is over. Read and changed only while
+    /// `current` is locked, so the run's end never misses it.
     close_after: Arc<AtomicBool>,
 }
 
 impl Session {
-    pub fn new(run: RunFn, now: Arc<dyn Fn() -> i64 + Send + Sync>, places: Places) -> Session {
-        Session { run, now, places, current: Arc::default(), close_after: Arc::default() }
+    pub fn new(run: RunFn, discard: DiscardFn, now: Arc<dyn Fn() -> i64 + Send + Sync>, places: Places) -> Session {
+        Session { run, discard, now, places, current: Arc::default(), close_after: Arc::default() }
     }
 
     /// Starts the run of the file read as `raw`, previewed with the SHA-256 `previewed`; `typed` is the red file's
-    /// sentence. A refusal is Steplet's own sentence; once started, the run's end comes as progress.
+    /// sentence. A refusal is Steplet's own sentence; once started, the run's end comes as progress. The run counts
+    /// as going on from the first moment, so a Stop, or closing the window, while Steplet still checks the file is
+    /// kept, and a second Run is refused.
     pub fn start(
         &self,
         raw: &[u8],
@@ -119,9 +134,41 @@ impl Session {
         ready: Result<Ready, String>,
         screen: Arc<dyn Screen>,
     ) -> Result<(), String> {
-        if self.running() {
-            return Err("A file is running in this window already.".into());
+        let (stop, answers) = (StopSignal::new(), Answers::default());
+        {
+            let mut current = lock(&self.current);
+            if current.is_some() {
+                return Err("A file is running in this window already.".into());
+            }
+            *current = Some(Current { stop: stop.clone(), answers: answers.clone() });
+            // A close asked for while an earlier run was ending is not carried over to this one.
+            self.close_after.store(false, Ordering::SeqCst);
         }
+        let started = self.begin(raw, previewed, typed, ready, screen.clone(), stop, answers);
+        if started.is_err() {
+            let close = {
+                let mut current = lock(&self.current);
+                *current = None;
+                self.close_after.swap(false, Ordering::SeqCst)
+            };
+            if close {
+                screen.close();
+            }
+        }
+        started
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn begin(
+        &self,
+        raw: &[u8],
+        previewed: &str,
+        typed: Option<&str>,
+        ready: Result<Ready, String>,
+        screen: Arc<dyn Screen>,
+        stop: StopSignal,
+        answers: Answers,
+    ) -> Result<(), String> {
         let sha: String = Sha256::digest(raw).iter().map(|b| format!("{b:02x}")).collect();
         if sha != previewed {
             return Err("This file changed after you opened it. Open it again to see what it asks for now.".into());
@@ -131,6 +178,17 @@ impl Session {
         let here = crate::open::here(&report, &pins::load_at(self.places.pins.as_deref()));
         let file = runnable(&report, &here, typed)?;
         let ready = ready?;
+        // One run at a time on this computer, from now until this run is over: refused now if another window runs
+        // one. While it is held, the marker below is this run's, and no other window's clean-up touches it.
+        let one_run = RunLock::take().map_err(|e| views::run_failure(&e).1.reason)?;
+        // A run of this window that crashed left its folders behind: they go before this run starts.
+        if self.places.marker.exists() && self.clear_held().is_err() {
+            return Err(
+                "Steplet could not yet remove what an earlier run left in its Linux, so it did not start this \
+                        one. Try again in a moment."
+                    .into(),
+            );
+        }
         let run_id = format!("app-{}-{}", (self.now)().max(0), std::process::id());
         let paths = RunPaths::new(&ready.distro_id, &run_id)
             .map_err(|_| "Steplet's Linux is not set up as Steplet expects. Check again in Setup.".to_string())?;
@@ -145,14 +203,10 @@ impl Session {
             max_turns: MAX_TURNS,
             deadline: RUN_LIMIT,
         };
-        // One run at a time on this computer: refused now if another window runs one. The sender is pinned while
-        // Steplet holds the lock, so two windows never write the list at once; the runner takes the lock again.
-        {
-            let _one = RunLock::take().map_err(|e| views::run_failure(&e).1.reason)?;
-            if let (Some(path), Some(SigStatus::Valid { fingerprint })) = (&self.places.pins, &report.signature) {
-                // A list Steplet cannot read is kept as it is; the preview already said it cannot warn.
-                let _ = pins::record(path, &req.steplet.sender.text, fingerprint);
-            }
+        // The sender is pinned while Steplet holds the lock, so two windows never write the list at once.
+        if let (Some(path), Some(SigStatus::Valid { fingerprint })) = (&self.places.pins, &report.signature) {
+            // A list Steplet cannot read is kept as it is; the preview already said it cannot warn.
+            let _ = pins::record(path, &req.steplet.sender.text, fingerprint);
         }
         let setup = RunSetup {
             gate_exe: ready.gate_exe,
@@ -166,13 +220,14 @@ impl Session {
             format!("Steplet could not note that a run is starting, so it did not start it. Windows says: {e}")
         })?;
 
-        let (stop, answers) = (StopSignal::new(), Answers::default());
-        *lock(&self.current) = Some(Current { stop: stop.clone(), answers: answers.clone() });
         let relay = Mutex::new(Relay::new(views::Limits { ask: ASK_LIMIT, run: RUN_LIMIT }));
         let to_screen = screen.clone();
         let live = Arc::new(Live {
             on_progress: Box::new(move |p| {
-                let out = lock(&relay).relay(&p);
+                // Sent while the relay is held: progress made on two threads at once (the gate's and the event
+                // stream's) reaches the screen in the order the relay made it.
+                let mut relay = lock(&relay);
+                let out = relay.relay(&p);
                 for view in out.views {
                     to_screen.send(view);
                 }
@@ -180,39 +235,54 @@ impl Session {
                     to_screen.attention();
                 }
             }),
-            stop,
+            stop: stop.clone(),
             answers: Some(answers),
             ask_limit: ASK_LIMIT,
         });
         let (run, current, close_after, marker_path) =
             (self.run.clone(), self.current.clone(), self.close_after.clone(), self.places.marker.clone());
         std::thread::spawn(move || {
-            // A crash inside the run still ends it here: the marker goes and the window is not left "running".
-            let ran =
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&req, &paths, &policy, &setup, live)));
-            let end = match ran {
-                Ok(Ok(report)) => ProgressView::Finished { report: views::report_view(&report) },
-                Ok(Err(e)) => {
-                    let (stage, failure) = views::run_failure(&e);
-                    ProgressView::Failed { stage, failure }
+            let end = if stop.is_set() {
+                // Stop came while Steplet was still checking the file: the agent never starts.
+                ProgressView::Failed {
+                    stage: "Starting the run".into(),
+                    failure: views::failure("You stopped the run before it started. Nothing ran.", None),
                 }
-                Err(_) => ProgressView::Failed {
-                    stage: "Running the file".into(),
-                    failure: views::failure(
-                        "Something went wrong inside Steplet, so it ended the run. Its folders are removed the next \
-                         time Steplet starts.",
-                        None,
-                    ),
-                },
+            } else {
+                // A crash inside the run still ends it here, so the window is not left "running".
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run(&one_run, &req, &paths, &policy, &setup, live)
+                }));
+                match ran {
+                    Ok(Ok(report)) => ProgressView::Finished { report: views::report_view(&report) },
+                    Ok(Err(e)) => {
+                        let (stage, failure) = views::run_failure(&e);
+                        ProgressView::Failed { stage, failure }
+                    }
+                    Err(_) => ProgressView::Failed {
+                        stage: "Running the file".into(),
+                        failure: views::failure(
+                            "Something went wrong inside Steplet, so it ended the run. Its folders are removed before \
+                             the next run, or the next time Steplet starts.",
+                            None,
+                        ),
+                    },
+                }
             };
-            // After a crash the run's folders may still be there: the marker stays, so the next start removes them.
+            // After a crash the run's folders may still be there: the marker stays, so they are removed before the
+            // next run. The marker goes before the lock, so no window ever finds a marker of a run that is over.
             let crashed = matches!(end, ProgressView::Failed { ref stage, .. } if stage == "Running the file");
             if !crashed {
                 let _ = std::fs::remove_file(&marker_path);
             }
-            *lock(&current) = None;
+            drop(one_run);
+            let close = {
+                let mut current = lock(&current);
+                *current = None;
+                close_after.swap(false, Ordering::SeqCst)
+            };
             screen.send(end);
-            if close_after.swap(false, Ordering::SeqCst) {
+            if close {
                 screen.close();
             }
         });
@@ -226,7 +296,8 @@ impl Session {
         lock(&self.current).as_ref().is_some_and(|c| c.answers.give(question.into(), reply))
     }
 
-    /// The receiver's Stop: the run stops as at a tripwire, and its folders are removed (D4).
+    /// The receiver's Stop: the run stops as at a tripwire, and its folders are removed (D4). Pressed while the run
+    /// still starts, it is kept, and the agent never starts.
     pub fn stop(&self) {
         if let Some(c) = lock(&self.current).as_ref() {
             c.stop.stop();
@@ -237,38 +308,54 @@ impl Session {
         lock(&self.current).is_some()
     }
 
-    /// Whether the window may close now; while a run goes on it asks first.
+    /// Whether the window may close now; while a run goes on (or starts) it asks first.
     pub fn may_close(&self) -> bool {
         !self.running()
     }
 
-    /// The receiver chose to close the window while the run goes on: Stop, and close once the run is over.
-    pub fn stop_and_close(&self) {
+    /// The receiver chose to close the window while the run goes on: Stop, and close once the run is over. False
+    /// when no run goes on any more: the window closes now.
+    pub fn stop_and_close(&self) -> bool {
+        let current = lock(&self.current);
+        let Some(c) = current.as_ref() else { return false };
         self.close_after.store(true, Ordering::SeqCst);
-        self.stop();
+        c.stop.stop();
+        true
     }
 
-    /// At start: a marker left behind means Steplet was closed or crashed during a run. That run is stopped and its
-    /// folders removed (`discard`), and the Open screen gets a note. Nothing left: `None`.
-    pub fn clear_leftover(places: &Places, discard: &dyn Fn(&RunPaths) -> Result<(), PrepareError>) -> Option<String> {
-        let text = std::fs::read(&places.marker).ok()?;
+    /// At Steplet's start: a marker left behind means Steplet was closed or crashed during a run. That run is
+    /// stopped and its folders removed, and the Open screen gets a note. A run that another Steplet window is doing
+    /// right now holds the one-run lock, and its marker is left alone. Nothing to clear: `None`.
+    pub fn clear_leftover(&self) -> Option<String> {
+        if !self.places.marker.exists() {
+            return None;
+        }
+        let Ok(_one) = RunLock::take() else { return None };
+        match self.clear_held() {
+            Ok(true) => Some(CLEARED.into()),
+            Ok(false) => None,
+            Err(said) => Some(said),
+        }
+    }
+
+    /// With the one-run lock held: removes what the run named in the marker left, then the marker. `Ok(true)` when a
+    /// run was removed, `Ok(false)` when the marker named no run Steplet could have started, and the note to show when
+    /// the run could not be removed yet (the marker stays, for the next try).
+    fn clear_held(&self) -> Result<bool, String> {
+        let Ok(text) = std::fs::read(&self.places.marker) else { return Ok(false) };
         let paths =
             serde_json::from_slice::<Marker>(&text).ok().and_then(|m| RunPaths::new(&m.distro_id, &m.run_id).ok());
         let Some(paths) = paths else {
             // Not a marker Steplet wrote: nothing can be stopped by it, so it goes.
-            let _ = std::fs::remove_file(&places.marker);
-            return None;
+            let _ = std::fs::remove_file(&self.places.marker);
+            return Ok(false);
         };
-        match discard(&paths) {
+        match (self.discard)(&paths) {
             Ok(()) => {
-                let _ = std::fs::remove_file(&places.marker);
-                Some(CLEARED.into())
+                let _ = std::fs::remove_file(&self.places.marker);
+                Ok(true)
             }
-            Err(_) => Some(
-                "Steplet was closed while a file was running, and could not yet remove everything that run left in its \
-                 Linux. It tries again the next time it starts."
-                    .into(),
-            ),
+            Err(_) => Err(LEFT_BEHIND.into()),
         }
     }
 }

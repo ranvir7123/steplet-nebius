@@ -22,7 +22,8 @@
     waiting: number;
     /** What the agent said last before it asked, if anything. */
     said: Shown | null;
-    onanswer: (yes: boolean) => void;
+    /** Rejects when the answer did not get through to Steplet. */
+    onanswer: (yes: boolean) => Promise<boolean>;
   } = $props();
 
   const HOLD_MS = 1000;
@@ -32,6 +33,7 @@
   let remaining = $state(left());
   let ready = $state(false);
   let answered = $state(false);
+  let failed = $state(false);
   const hold = setTimeout(() => (ready = true), HOLD_MS);
   const tick = setInterval(() => (remaining = left()), 250);
   onDestroy(() => {
@@ -50,10 +52,17 @@
     ...question.fields.filter((f) => !same(f.value, question.what)),
   ]);
 
-  function answer(yes: boolean) {
+  async function answer(yes: boolean) {
     if (answered || (yes && !ready)) return;
     answered = true;
-    onanswer(yes);
+    failed = false;
+    try {
+      // When the question is no longer open, its close is on its way and the buttons stay off.
+      await onanswer(yes);
+    } catch {
+      answered = false;
+      failed = true;
+    }
   }
 </script>
 
@@ -89,6 +98,9 @@
     <p class="countdown" role="timer" aria-live="off">No answer in {clock(remaining)} means no.</p>
     {#if waiting > 0}
       <p class="waiting">{waiting === 1 ? "1 more question is waiting." : `${waiting} more questions are waiting.`}</p>
+    {/if}
+    {#if failed}
+      <p class="failed" role="alert">Steplet could not pass on your answer. Try again.</p>
     {/if}
     <div class="actions">
       <button class="button primary" type="button" data-first disabled={answered} onclick={() => answer(false)}>No</button>
@@ -216,6 +228,11 @@
 
   .waiting {
     color: var(--text-muted);
+  }
+
+  .failed {
+    color: var(--red-fg);
+    font-weight: 600;
   }
 
   .actions {

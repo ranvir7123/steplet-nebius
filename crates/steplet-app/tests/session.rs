@@ -10,7 +10,7 @@ use std::time::Duration;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use steplet_app::pins::{self, Pins};
-use steplet_app::session::{Places, Ready, RunFn, Screen, Session};
+use steplet_app::session::{DiscardFn, Places, Ready, RunFn, Screen, Session};
 use steplet_app::views::{ProgressView, RED_SENTENCE};
 use steplet_core::policy::Policy;
 use steplet_run::{
@@ -118,12 +118,12 @@ fn empty_report() -> Report {
 
 /// A stand-in run that ends at once.
 fn quick() -> RunFn {
-    Arc::new(|_: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| Ok(empty_report()))
+    Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| Ok(empty_report()))
 }
 
 /// A stand-in run that waits until Stop is pressed.
 fn until_stopped() -> RunFn {
-    Arc::new(|_: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, live: Arc<Live>| {
+    Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, live: Arc<Live>| {
         while !live.stop.is_set() {
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -141,7 +141,23 @@ fn bash(command: &str, id: &str) -> GateRequest {
 }
 
 fn session(run: RunFn, now: i64, dir: &std::path::Path) -> Session {
-    Session::new(run, Arc::new(move || now), places(dir))
+    Session::new(run, nothing_to_discard(), Arc::new(move || now), places(dir))
+}
+
+/// Removing a leftover run, as the tests see it: nothing to do.
+fn nothing_to_discard() -> DiscardFn {
+    Arc::new(|_: &RunPaths| Ok(()))
+}
+
+/// Removing a leftover run, recorded: "distro run-id" for each run removed.
+fn recording_discard() -> (DiscardFn, Arc<Mutex<Vec<String>>>) {
+    let cleared: Arc<Mutex<Vec<String>>> = Arc::default();
+    let keep = cleared.clone();
+    let discard: DiscardFn = Arc::new(move |paths: &RunPaths| {
+        keep.lock().unwrap().push(format!("{} {}", paths.distro_id(), paths.run_id()));
+        Ok(())
+    });
+    (discard, cleared)
 }
 
 #[test]
@@ -207,14 +223,15 @@ fn an_answer_reaches_the_runner_bound_to_its_question() {
     let raw = read("examples/run-tests.steplet");
     let decided: Arc<Mutex<Vec<GateAnswer>>> = Arc::default();
     let keep = decided.clone();
-    let run: RunFn = Arc::new(move |_: &RunRequest, _: &RunPaths, policy: &Policy, _: &RunSetup, live: Arc<Live>| {
-        let asker = Asker::new(live, &[]);
-        for (command, id) in [("touch first.txt", "toolu_01"), ("touch second.txt", "toolu_02")] {
-            let answer = asker.decide(policy, &bash(command, id));
-            keep.lock().unwrap().push(answer);
-        }
-        Ok(empty_report())
-    });
+    let run: RunFn =
+        Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, policy: &Policy, _: &RunSetup, live: Arc<Live>| {
+            let asker = Asker::new(live, &[]);
+            for (command, id) in [("touch first.txt", "toolu_01"), ("touch second.txt", "toolu_02")] {
+                let answer = asker.decide(policy, &bash(command, id));
+                keep.lock().unwrap().push(answer);
+            }
+            Ok(empty_report())
+        });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
     s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
@@ -246,19 +263,20 @@ fn a_question_flashes_the_taskbar_and_waits_its_turn() {
     let _one = alone();
     let dir = scratch("turn");
     let raw = read("examples/run-tests.steplet");
-    let run: RunFn = Arc::new(|_: &RunRequest, _: &RunPaths, policy: &Policy, _: &RunSetup, live: Arc<Live>| {
-        let asker = Arc::new(Asker::new(live, &[]));
-        let second = {
-            let (asker, policy) = (asker.clone(), policy.clone());
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(100));
-                asker.decide(&policy, &bash("touch second.txt", "toolu_02"))
-            })
-        };
-        asker.decide(policy, &bash("touch first.txt", "toolu_01"));
-        second.join().unwrap();
-        Ok(empty_report())
-    });
+    let run: RunFn =
+        Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, policy: &Policy, _: &RunSetup, live: Arc<Live>| {
+            let asker = Arc::new(Asker::new(live, &[]));
+            let second = {
+                let (asker, policy) = (asker.clone(), policy.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(100));
+                    asker.decide(&policy, &bash("touch second.txt", "toolu_02"))
+                })
+            };
+            asker.decide(policy, &bash("touch first.txt", "toolu_01"));
+            second.join().unwrap();
+            Ok(empty_report())
+        });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
     s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
@@ -299,12 +317,9 @@ fn a_run_left_by_a_crash_is_cleared_at_start() {
     let dir = scratch("crash");
     let p = places(&dir);
     std::fs::write(&p.marker, format!(r#"{{"run_id": "app-1791720000-77", "distro_id": "{DISTRO}"}}"#)).unwrap();
-    let cleared: Arc<Mutex<Vec<String>>> = Arc::default();
-    let keep = cleared.clone();
-    let note = Session::clear_leftover(&p, &move |paths: &RunPaths| {
-        keep.lock().unwrap().push(format!("{} {}", paths.distro_id(), paths.run_id()));
-        Ok(())
-    });
+    let (discard, cleared) = recording_discard();
+    let s = Session::new(quick(), discard, Arc::new(|| NOW), p.clone());
+    let note = s.clear_leftover();
     assert_eq!(*cleared.lock().unwrap(), [format!("{DISTRO} app-1791720000-77")], "that run was stopped and removed");
     assert_eq!(
         note.as_deref(),
@@ -314,7 +329,7 @@ fn a_run_left_by_a_crash_is_cleared_at_start() {
         )
     );
     assert!(!p.marker.exists(), "the marker is gone");
-    assert_eq!(Session::clear_leftover(&p, &|_: &RunPaths| Ok(())), None, "nothing left the next time");
+    assert_eq!(s.clear_leftover(), None, "nothing left the next time");
 }
 
 #[test]
@@ -328,7 +343,9 @@ fn the_pins_are_written_when_run_starts_and_not_before() {
     let _ = steplet_app::open::preview_file(&raw, NOW, &pins::load(&pins_path));
     assert!(!pins_path.exists(), "opening wrote no pin");
     let screen = Arc::new(Seen::default());
-    Session::new(quick(), Arc::new(|| NOW), p).start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p)
+        .start(&raw, &sha(&raw), None, ready(), screen.clone())
+        .unwrap();
     wait_until("the run's end", || screen.ended());
     let Pins::Known(known) = pins::load(&pins_path) else { panic!("the pins file reads") };
     assert_eq!(known.iter().map(|k| (k.sender.as_str(), k.runs)).collect::<Vec<_>>(), [("Steplet test vectors", 1)]);
@@ -339,8 +356,9 @@ fn a_run_that_cannot_start_says_why_in_words() {
     let _one = alone();
     let dir = scratch("cannot");
     let raw = read("examples/run-tests.steplet");
-    let run: RunFn =
-        Arc::new(|_: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| Err(RunError::Busy));
+    let run: RunFn = Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| {
+        Err(RunError::Busy)
+    });
     let screen = Arc::new(Seen::default());
     session(run, NOW, &dir).start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.ended());
@@ -396,7 +414,7 @@ fn a_known_sender_with_another_key_needs_the_sentence_too() {
     let raw = read("corpus/hostile/sig.invalid.near.steplet");
     let preview = steplet_app::open::preview_file(&raw, NOW, &pins::load(&pins_path));
     assert_eq!(preview.colour, "red", "the preview is red here");
-    let s = Session::new(quick(), Arc::new(|| NOW), p);
+    let s = Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p);
     assert_eq!(
         s.start(&raw, &sha(&raw), None, ready(), Arc::new(Seen::default())),
         Err("This file is red: type the sentence exactly before you run it.".to_string())
@@ -406,4 +424,214 @@ fn a_known_sender_with_another_key_needs_the_sentence_too() {
     let screen = Arc::new(Seen::default());
     assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), ready(), screen.clone()), Ok(()));
     wait_until("the run's end", || screen.ended());
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// Task 12's review
+
+/// Review 1: the clean-up at start never touches a run that another Steplet window is doing right now (a double-click
+/// on a second file starts a second Steplet). Only a marker no run holds the lock for is a crash's leftover.
+#[test]
+fn clearing_at_start_leaves_a_run_in_another_window_alone() {
+    let _one = alone();
+    let dir = scratch("other-window");
+    let p = places(&dir);
+    std::fs::write(&p.marker, format!(r#"{{"run_id": "app-1791720000-77", "distro_id": "{DISTRO}"}}"#)).unwrap();
+    let (discard, cleared) = recording_discard();
+    let s = Session::new(quick(), discard, Arc::new(|| NOW), p.clone());
+    let other_window = RunLock::take().unwrap();
+    assert_eq!(s.clear_leftover(), None, "no note: nothing was cleared");
+    assert!(cleared.lock().unwrap().is_empty(), "the other window's run was not removed");
+    assert!(p.marker.exists(), "its marker stays");
+    drop(other_window);
+    assert!(s.clear_leftover().is_some(), "once no run holds the lock, it is a leftover");
+    assert_eq!(cleared.lock().unwrap().len(), 1);
+}
+
+/// Review 5: after a crash inside this window's run, the next Run first removes what that run left, and only then
+/// starts (its marker is never written over).
+#[test]
+fn a_crashed_run_is_cleared_before_the_next_run_starts() {
+    let _one = alone();
+    let dir = scratch("crash-then-run");
+    let p = places(&dir);
+    let raw = read("examples/run-tests.steplet");
+    let runs = Arc::new(Mutex::new(0));
+    let count = runs.clone();
+    let crash_once: RunFn =
+        Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| {
+            let mut n = count.lock().unwrap();
+            *n += 1;
+            if *n == 1 {
+                drop(n);
+                panic!("a made-up crash inside the run");
+            }
+            Ok(empty_report())
+        });
+    let (discard, cleared) = recording_discard();
+    // Each start gets its own second, so the two runs have different ids.
+    let clock = Arc::new(std::sync::atomic::AtomicI64::new(NOW));
+    let tick = clock.clone();
+    let now: Arc<dyn Fn() -> i64 + Send + Sync> = Arc::new(move || tick.load(std::sync::atomic::Ordering::SeqCst));
+    let s = Session::new(crash_once, discard, now, p.clone());
+    let first = Arc::new(Seen::default());
+    s.start(&raw, &sha(&raw), None, ready(), first.clone()).unwrap();
+    wait_until("the crash's end", || first.ended() && !s.running());
+    assert!(p.marker.exists(), "the crashed run's marker stays");
+    let crashed: serde_json::Value = serde_json::from_slice(&std::fs::read(&p.marker).unwrap()).unwrap();
+    clock.store(NOW + 5, std::sync::atomic::Ordering::SeqCst);
+    let second = Arc::new(Seen::default());
+    s.start(&raw, &sha(&raw), None, ready(), second.clone()).unwrap();
+    wait_until("the second run's end", || second.ended() && !s.running());
+    assert_eq!(
+        *cleared.lock().unwrap(),
+        [format!("{DISTRO} {}", crashed["run_id"].as_str().unwrap())],
+        "the crashed run was removed before the next one"
+    );
+    assert!(matches!(second.sent.lock().unwrap().last(), Some(ProgressView::Finished { .. })), "and the next one ran");
+    assert!(!p.marker.exists(), "the second run's marker is gone after it");
+}
+
+/// A `now` that takes its time on its first use, so a test can act while a start is still checking the file.
+fn slow_now(first: Duration) -> Arc<dyn Fn() -> i64 + Send + Sync> {
+    let waited = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    Arc::new(move || {
+        if !waited.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            std::thread::sleep(first);
+        }
+        NOW
+    })
+}
+
+/// Review 2: two starts at once (a double click on Run) start one run, and the other is refused.
+#[test]
+fn two_starts_at_once_start_one_run() {
+    let _one = alone();
+    let dir = scratch("two-starts");
+    let raw = read("examples/run-tests.steplet");
+    let s = Arc::new(Session::new(
+        until_stopped(),
+        nothing_to_discard(),
+        slow_now(Duration::from_millis(300)),
+        places(&dir),
+    ));
+    let screen = Arc::new(Seen::default());
+    let starts: Vec<_> = (0..2)
+        .map(|_| {
+            let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
+            std::thread::spawn(move || s.start(&raw, &sha(&raw), None, ready(), screen))
+        })
+        .collect();
+    let mut got: Vec<Result<(), String>> = starts.into_iter().map(|t| t.join().unwrap()).collect();
+    got.sort();
+    assert_eq!(got, [Ok(()), Err("A file is running in this window already.".to_string())]);
+    s.stop();
+    wait_until("the run's end", || screen.ended() && !s.running());
+}
+
+/// Review 3: Stop pressed while the start is still checking the file is kept: nothing runs. Closing then asks first.
+#[test]
+fn stop_pressed_while_starting_is_kept() {
+    let _one = alone();
+    let dir = scratch("stop-while-starting");
+    let raw = read("examples/run-tests.steplet");
+    let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw = ran.clone();
+    let run: RunFn =
+        Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, live: Arc<Live>| {
+            saw.store(true, std::sync::atomic::Ordering::SeqCst);
+            while !live.stop.is_set() {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Ok(empty_report())
+        });
+    let s = Arc::new(Session::new(run, nothing_to_discard(), slow_now(Duration::from_millis(300)), places(&dir)));
+    let screen = Arc::new(Seen::default());
+    let starting = {
+        let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
+        std::thread::spawn(move || s.start(&raw, &sha(&raw), None, ready(), screen))
+    };
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(!s.may_close(), "closing while it starts asks first");
+    s.stop();
+    assert_eq!(starting.join().unwrap(), Ok(()));
+    wait_until("the run's end", || screen.ended() && !s.running());
+    assert!(!ran.load(std::sync::atomic::Ordering::SeqCst), "the agent never started");
+    let sent = screen.sent.lock().unwrap();
+    let Some(ProgressView::Failed { failure, .. }) = sent.last() else { panic!("{sent:?}") };
+    assert_eq!(failure.reason, "You stopped the run before it started. Nothing ran.");
+}
+
+/// Review 3: "Stop and close" when the run has just ended closes at once, and leaves nothing behind that would close
+/// the window at the end of the next run.
+#[test]
+fn closing_when_no_run_goes_on_closes_now_and_only_now() {
+    let _one = alone();
+    let dir = scratch("close-now");
+    let raw = read("examples/run-tests.steplet");
+    let s = session(quick(), NOW, &dir);
+    assert!(!s.stop_and_close(), "nothing runs: the window closes now");
+    let screen = Arc::new(Seen::default());
+    s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    wait_until("the run's end", || screen.ended() && !s.running());
+    assert!(!*screen.closed.lock().unwrap(), "the next run's end does not close the window");
+}
+
+/// A screen that takes a moment for each piece, as a busy window might.
+#[derive(Default)]
+struct Slow(Seen);
+
+impl Screen for Slow {
+    fn send(&self, p: ProgressView) {
+        std::thread::sleep(Duration::from_millis(40));
+        self.0.send(p);
+    }
+    fn attention(&self) {}
+    fn close(&self) {}
+}
+
+/// Review 4: progress made on two threads at once (the gate's and the event stream's) reaches the screen in the order
+/// it was made: here the last word on waiting questions is that none waits.
+#[test]
+fn progress_reaches_the_screen_in_the_order_it_was_made() {
+    let _one = alone();
+    let dir = scratch("order");
+    let raw = read("examples/run-tests.steplet");
+    let run: RunFn =
+        Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, live: Arc<Live>| {
+            use steplet_run::{Progress, Question, Reply};
+            let q = |id: u64, what: &str| Question {
+                id,
+                tool: "Bash".into(),
+                what: what.into(),
+                input: json!({ "command": what }),
+                reason: "the file does not ask for this command".into(),
+                fingerprint: format!("f{id}"),
+                asked_at: std::time::Instant::now(),
+            };
+            (live.on_progress)(Progress::Asking(q(1, "touch a")));
+            (live.on_progress)(Progress::Asking(q(2, "touch b")));
+            // Question 1 is answered (the second comes on screen, none waits) while question 2 is then taken back.
+            std::thread::scope(|t| {
+                t.spawn(|| (live.on_progress)(Progress::Answered { question: 1, reply: Reply::No }));
+                std::thread::sleep(Duration::from_millis(10));
+                t.spawn(|| (live.on_progress)(Progress::Answered { question: 2, reply: Reply::Withdrawn }));
+            });
+            Ok(empty_report())
+        });
+    let screen = Arc::new(Slow::default());
+    session(run, NOW, &dir).start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    wait_until("the run's end", || screen.0.ended());
+    let sent = screen.0.sent.lock().unwrap();
+    let kinds: Vec<String> = sent
+        .iter()
+        .map(|p| match p {
+            ProgressView::Question { question } => format!("question {}", question.id),
+            ProgressView::QuestionClosed { id, .. } => format!("closed {id}"),
+            ProgressView::Waiting { count } => format!("waiting {count}"),
+            ProgressView::Finished { .. } => "finished".into(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(kinds, ["question 1", "waiting 1", "closed 1", "question 2", "waiting 0", "closed 2", "finished"]);
 }

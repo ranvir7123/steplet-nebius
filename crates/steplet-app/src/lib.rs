@@ -63,7 +63,7 @@ pub struct AppState {
     /// An install or a removal of Steplet's Linux is going on.
     busy: setup::OneAtATime,
     /// The run, if one goes on in this window.
-    session: session::Session,
+    session: std::sync::Arc<session::Session>,
     /// The Open screen's note after a crash's run was cleared: `None` until the look at start is done.
     note: std::sync::Arc<(std::sync::Mutex<Option<Option<String>>>, std::sync::Condvar)>,
 }
@@ -71,6 +71,16 @@ pub struct AppState {
 impl AppState {
     fn pins(&self) -> pins::Pins {
         pins::load_at(self.pins.as_deref())
+    }
+
+    /// Waits until the look at start (a crash's run cleared) is done, and returns its note for the Open screen.
+    fn looked_at_start(&self) -> Option<String> {
+        let (note, ready) = &*self.note;
+        let mut note = note.lock().unwrap_or_else(|e| e.into_inner());
+        while note.is_none() {
+            note = ready.wait(note).unwrap_or_else(|e| e.into_inner());
+        }
+        note.clone().flatten()
     }
 
     fn show(&self, mut raw: Vec<u8>) -> views::PreviewView {
@@ -116,12 +126,7 @@ fn open_bytes(state: tauri::State<AppState>, bytes: Vec<u8>) -> views::PreviewVi
 /// (at most the time Steplet takes to remove that run).
 #[tauri::command(async)]
 fn start_note(state: tauri::State<AppState>) -> Option<String> {
-    let (note, ready) = &*state.note;
-    let mut note = note.lock().unwrap_or_else(|e| e.into_inner());
-    while note.is_none() {
-        note = ready.wait(note).unwrap_or_else(|e| e.into_inner());
-    }
-    note.clone().flatten()
+    state.looked_at_start()
 }
 
 /// The window, as a run needs it: progress as `run-progress` events, the taskbar's flash, and closing.
@@ -150,6 +155,8 @@ fn start_run(
     typed: Option<String>,
 ) -> Result<(), String> {
     let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
+    // The clean-up at start holds the one-run lock while it removes a crash's run; a run starts after it.
+    state.looked_at_start();
     let ready = setup::ready_for_run(&state.look());
     state.session.start(&raw, &sha256, typed.as_deref(), ready, std::sync::Arc::new(WindowScreen(window)))
 }
@@ -165,10 +172,13 @@ fn stop_run(state: tauri::State<AppState>) {
     state.session.stop();
 }
 
-/// The receiver closes the window while a file runs: Stop, then close once the run is over.
+/// The receiver closes the window while a file runs: Stop, then close once the run is over. When the run has
+/// ended in the meantime, the window closes now.
 #[tauri::command]
-fn stop_and_close(state: tauri::State<AppState>) {
-    state.session.stop_and_close();
+fn stop_and_close(state: tauri::State<AppState>, window: tauri::WebviewWindow) {
+    if !state.session.stop_and_close() {
+        let _ = window.close();
+    }
 }
 
 /// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now.
@@ -257,20 +267,19 @@ pub fn run() {
         opened: std::sync::Mutex::new(None),
         looked: std::sync::Mutex::new(None),
         busy: setup::OneAtATime::default(),
-        session: session::Session::new(
-            std::sync::Arc::new(steplet_run::run_live),
+        session: std::sync::Arc::new(session::Session::new(
+            std::sync::Arc::new(steplet_run::run_live_locked),
+            std::sync::Arc::new(|paths: &steplet_run::RunPaths| steplet_run::discard(paths)),
             std::sync::Arc::new(open::now_unix),
-            places.clone(),
-        ),
+            places,
+        )),
         note: note.clone(),
     };
     // A run left by a crash is stopped and removed now, off the window's thread; the Open screen then says so.
+    let clearing = state.session.clone();
     std::thread::spawn(move || {
         // Even if that look fails badly, the Open screen's note stops waiting.
-        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            session::Session::clear_leftover(&places, &|paths| steplet_run::discard(paths))
-        }))
-        .unwrap_or(None);
+        let said = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| clearing.clear_leftover())).unwrap_or(None);
         let (slot, ready) = &*note;
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(said);
         ready.notify_all();
