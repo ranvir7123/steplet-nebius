@@ -31,9 +31,14 @@ pub fn browser_args() -> &'static str {
     if cfg!(feature = "e2e") { concat!(base_args!(), " --remote-debugging-port=9333") } else { base_args!() }
 }
 
-/// Whether `url` is the app's own page: WebView2 serves it at `http://tauri.localhost`.
+/// Whether `url` is the app's own page: WebView2 serves it at `http://tauri.localhost`, with no port and no user
+/// name or password in the address.
 pub fn is_own_page(url: &Url) -> bool {
-    url.scheme() == "http" && url.host_str() == Some("tauri.localhost") && url.port().is_none()
+    url.scheme() == "http"
+        && url.host_str() == Some("tauri.localhost")
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
 }
 
 /// Starts the app and returns when its window closes.

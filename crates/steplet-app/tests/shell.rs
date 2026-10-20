@@ -95,6 +95,40 @@ fn the_browser_keeps_wrys_default_arguments() {
     );
 }
 
+/// The names in the app's one `generate_handler![…]` list, read from its source. Tauri checks a call of an app
+/// command against capabilities/main.json only when `COMMANDS` lists that command (tauri-build writes the app's
+/// permission list from it, and only when it is not empty), so a command registered but not listed would be open to
+/// the page with no check at all.
+fn registered_commands() -> Vec<String> {
+    let src = format!("{}/src", env!("CARGO_MANIFEST_DIR"));
+    let mut lists = Vec::new();
+    for entry in std::fs::read_dir(&src).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for (at, _) in text.match_indices("generate_handler!") {
+            let rest = &text[at..];
+            let open = rest.find('[').expect("generate_handler! takes a [list]");
+            let close = rest.find(']').expect("the list ends");
+            lists.push((path.clone(), rest[open + 1..close].to_owned()));
+        }
+    }
+    assert!(lists.len() <= 1, "the app registers its commands in one place: {lists:?}");
+    let mut names: Vec<String> = lists
+        .iter()
+        .flat_map(|(_, list)| list.split(',').map(|n| n.trim().rsplit("::").next().unwrap().to_owned()))
+        .filter(|n| !n.is_empty())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn every_command_the_app_registers_is_listed_for_tauri_to_check() {
+    let mut listed: Vec<String> = steplet_app::COMMANDS.iter().map(|c| c.to_string()).collect();
+    listed.sort();
+    assert_eq!(registered_commands(), listed, "src/commands.rs must list exactly the commands the app registers");
+}
+
 #[test]
 fn the_web_view_sends_nothing_to_the_network() {
     // Every request the web view would send goes to a closed port on this computer instead, so nothing can leave
@@ -118,6 +152,9 @@ fn the_window_goes_nowhere_but_the_apps_own_page() {
         "http://tauri.localhost:8080/",
         "http://tauri.localhost.example.com/",
         "http://user@example.com/",
+        "http://user@tauri.localhost/",
+        "http://user:pw@tauri.localhost/",
+        "http://:pw@tauri.localhost/",
         "https://github.com/",
         "file:///C:/Users/",
         "data:text/html,hi",

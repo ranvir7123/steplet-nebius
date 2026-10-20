@@ -2077,3 +2077,79 @@ workspace tests exit: 0
 - **Whether WebView2 itself sends anything outside the page,** for example its own update checks or its crash reports. The proxy covers the web view's network traffic; WebView2's own updater runs as a separate Windows service and was not watched.
 - **That port 47 stays closed.** If a program on this computer ever listened on port 127.0.0.1:47, the web view's requests would reach that program (still nothing leaves the computer).
 - **The app's commands under Tauri's check:** the list is still empty, so a command refused for lack of its `allow-` line is first seen in Task 10.
+
+### The code review, and what changed
+
+A code-reviewer agent read Task 8's diff (read-only) and ran the app's tests and clippy (6 passed, clean). It found nothing critical, and checked as fine: the proxy setting cannot fall back to a direct connection; the page rules in `tauri.conf.json` are exactly the ones the test pins, and Tauri adds nothing to them (the built page has no inline script or style); the permission file grants only the two event permissions; the debugging port exists only in the `e2e` build; and the Open screen has one heading, real buttons and a visible focus ring. Its Important points, each fixed test-first:
+
+1. **The comments claimed more than Tauri does.** Listing the app's commands makes Tauri check each call against `capabilities/main.json`, but only once the list holds at least one command: with an empty list tauri-build writes no permission list for the app, and Tauri then lets the page call any command the app registers. So a command registered but left off the list would have no check at all. The comments now say so, and a new test reads the app's source and fails unless the commands it registers (`generate_handler![…]`) are exactly the ones listed. Shown failing with a planted command:
+
+```
+> cargo test -p steplet-app --offline --test shell every_command      (a command `planted` registered, not listed)
+test every_command_the_app_registers_is_listed_for_tauri_to_check ... FAILED
+assertion `left == right` failed: src/commands.rs must list exactly the commands the app registers
+  left: ["planted"]
+ right: []
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+```
+
+2. **The real test's check of the channel to Rust was weak.** If Tauri's own channel (`http://ipc.localhost`) fails, Tauri quietly sends the call another way and only warns on the console, so "Tauri refused the made-up command" passed either way. The test now also requires the channel's own answer and no such warning. It passed on the fixed build at once, which confirms the closed-port proxy leaves the channel working. To show the new check is not empty, the channel's address was taken out of the page rules in one build (then put back): the old check still passed, the new one failed:
+
+```
+> npm --prefix web test -- real-open        (a build whose page rules leave out http://ipc.localhost)
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (148ms)
+  x  2 [real] › app\tests\real-open.spec.ts:25:1 › the real window reaches nothing outside the app (3.1s)
+    Error: expect(received).toContain(expected) // indexOf
+    Expected value: "http://ipc.localhost/no_such_command"
+    Received array: []
+      75 |     expect(ipc).toMatch(/^refused by Tauri: .*no_such_command/);
+    > 76 |     expect(answered).toContain("http://ipc.localhost/no_such_command");
+      77 |     expect(warnings.filter((w) => w.includes("IPC custom protocol failed"))).toEqual([]);
+  1 failed
+  1 passed (7.2s)
+> npm --prefix web test -- real-open        (the fixed build)
+Running 2 tests using 1 worker
+saved docs/screens/phase-4/real-open-empty-light.png
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (162ms)
+  ok 2 [real] › app\tests\real-open.spec.ts:25:1 › the real window reaches nothing outside the app (3.0s)
+  2 passed (7.2s)
+```
+
+3. **The own-page check took an address with a user name in it** (`http://user@tauri.localhost/`). Harmless today (it is the same page), but the test did not try it. It now refuses a user name or a password:
+
+```
+> cargo test -p steplet-app --offline --test shell        (before the fix)
+test the_window_goes_nowhere_but_the_apps_own_page ... FAILED
+thread 'the_window_goes_nowhere_but_the_apps_own_page' (48656) panicked at crates\steplet-app\tests\shell.rs:165:9:
+http://user@tauri.localhost/ is not the app's own page
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-app --offline         (after)
+test no_debug_port_without_the_e2e_feature ... ok
+test the_browser_keeps_wrys_default_arguments ... ok
+test the_page_is_titled_steplet ... ok
+test the_web_view_sends_nothing_to_the_network ... ok
+test the_window_goes_nowhere_but_the_apps_own_page ... ok
+test the_window_and_security_settings_are_fixed ... ok
+test every_command_the_app_registers_is_listed_for_tauri_to_check ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit: 0
+> npm --prefix web run check
+1792524127548 COMPLETED 97 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 62 pairs
+```
+
+(The app's four empty test lines are left out.)
+
+Minor points left for later, each noted for the task it belongs to:
+- The crate names libraries nothing uses yet (`windows-sys`, `ts-rs`, `serde`, the core and the runner); Tasks 9 to 11 use them.
+- In a release build, a start-up failure (for example WebView2 missing) shows nothing at all; phase 4 runs only from the build folder, where a console shows the message. Recorded for "not verified" at Task 16.
+- The test pins the page rules as written in the config, not as the window receives them. The reviewer read Tauri's code and found nothing added for this page; a real test could read the page's own header.
+- The raw-HTML check compares letter case exactly and line by line, scans six kinds of file, and does not list `<iframe`, `<svelte:element>` or `DOMParser`. The page rules still block inline scripts and frames from outside.
+- The contrast check's pairs are written by hand: a screen that puts a colour on a background not in the list, or misspells a colour's name, is not noticed. Tasks 10 to 14 add each pair they use.
+- `npm_ages.py` takes a package's name from its folder, which would be wrong for a renamed (aliased) package; there is none in this lock file.
+- "Open a file…" and "Setup" do nothing yet (Task 10 and Task 11 wire them).
+- Nothing stops a release build with the `e2e` feature on; it is off unless asked for.

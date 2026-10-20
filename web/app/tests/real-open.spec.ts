@@ -32,6 +32,8 @@ test("the real window reaches nothing outside the app", async () => {
     const fresh = (what: string) => `https://example.com/?steplet-test=${what}-${Date.now()}`;
     const answered: string[] = [];
     page.on("response", (r) => answered.push(r.url()));
+    const warnings: string[] = [];
+    page.on("console", (m) => warnings.push(m.text()));
 
     // The page rules refuse a request to the internet before it is made.
     const fetched = await page.evaluate((u) =>
@@ -58,7 +60,10 @@ test("the real window reaches nothing outside the app", async () => {
 
     expect(answered.filter((u) => !u.startsWith("http://tauri.localhost/"))).toEqual([]);
 
-    // The app's own channel to Rust still works: a call reaches Tauri, which refuses an unknown command.
+    // The app's own channel to Rust still works through the closed-port proxy: a call reaches Tauri on its own
+    // channel (http://ipc.localhost, which the web view hands to Tauri without the network), and Tauri refuses the
+    // unknown command. Tauri would quietly fall back to another channel if that one failed, saying so on the console,
+    // so the test also requires the channel's own answer and no such warning.
     const ipc = await page.evaluate(() =>
       (window as unknown as { __TAURI_INTERNALS__: { invoke(c: string): Promise<unknown> } }).__TAURI_INTERNALS__
         .invoke("no_such_command")
@@ -68,6 +73,8 @@ test("the real window reaches nothing outside the app", async () => {
         ),
     );
     expect(ipc).toMatch(/^refused by Tauri: .*no_such_command/);
+    expect(answered).toContain("http://ipc.localhost/no_such_command");
+    expect(warnings.filter((w) => w.includes("IPC custom protocol failed"))).toEqual([]);
   } finally {
     await browser.close();
   }
