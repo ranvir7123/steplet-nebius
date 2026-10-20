@@ -22,6 +22,31 @@ test("the real window opens on the empty Open screen", async () => {
   }
 });
 
+test("the real window opens a file and shows what it asks for", async () => {
+  const browser = await chromium.connectOverCDP("http://127.0.0.1:9333");
+  try {
+    const page = browser.contexts()[0].pages()[0];
+    const file = fileURLToPath(new URL("../../../examples/run-tests.steplet", import.meta.url));
+    await page.locator("input[type=file]").setInputFiles(file);
+    await expect(page.getByRole("heading", { name: "What Steplet found" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "From the file" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Run", exact: true })).toBeVisible();
+    expect(await page.title()).toBe("Steplet");
+    const dark = await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches);
+    const name = `real-preview-${dark ? "dark" : "light"}.png`;
+    await page.screenshot({
+      path: fileURLToPath(new URL(`../../../docs/screens/phase-4/${name}`, import.meta.url)),
+      fullPage: true,
+    });
+    console.log(`saved docs/screens/phase-4/${name}`);
+    // Back to the empty Open screen, where the first test expects the window.
+    await page.getByRole("button", { name: "Open another file" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Open a .steplet file to see what it asks for.");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("the real window reaches nothing outside the app", async () => {
   const browser = await chromium.connectOverCDP("http://127.0.0.1:9333");
   try {

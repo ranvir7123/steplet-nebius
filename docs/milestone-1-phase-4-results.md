@@ -2502,3 +2502,192 @@ clippy exit: 0
 - A question's number is cut to 32 bits without a check; bless removes every `.ts` in `web/shared/types`, so nothing hand-written may go there.
 - A dropped file goes to Rust as a list of numbers, several times its size (Task 10 cuts it to 262,145 bytes first).
 - `call_what` could be `what` made public; setup's missing items show Steplet's short check names ("wsl.conf"), which a receiver may not understand (Task 11 words them).
+
+## Task 10: the Open and Preview screens, and pins
+
+A receiver can now open a file and read everything it asks for before anything runs. The Open screen takes a file through "Open a file…" (Windows' own Open dialog, through the page's file picker) or a drop anywhere on the window; the Preview screen shows, from top to bottom, the colour as a word, an icon and its one line of meaning; who signed the file; the counts and the expiry date; what Steplet found; the file's own words in their marked "From the file" panel; what is true on this computer and not in the file; and the Run button last. A red file's Run works only once the sentence is typed exactly; a blocked file has no Run, only the advice of its first blocked finding. `crates/steplet-app/src/open.rs` reads at most 262,145 bytes of a file and rates it with the core; `src/pins.rs` keeps the senders this computer knows in `%LOCALAPPDATA%\Steplet\senders.json` (read when a file is opened, written only through a temporary file and a rename, and only when Run starts, which comes with Task 12). Text from the file is drawn only by `web/shared/FileText.svelte`, as plain text with a badge for each character that shows nothing, and links as their shown text plus their real address, never clickable.
+
+### Changes from the plan, recorded here
+
+- **No `open_path` command.** A web page cannot learn the path of a file dropped on it or chosen in its file picker, so the page never asks Rust to read a path: it sends the first 262,145 bytes (`openBytes`). A double-clicked file (Task 11) reaches Rust as the program's own start argument and is read there (`initial_preview`).
+- **A damaged list of known senders is a finding about this computer** (`here.pins-unreadable`, amber), the app's own fact like the runner's host list. The list is then left exactly as it is: Steplet never overwrites a file it cannot read.
+- **Two small public functions,** each so the app and the runner use one rule: `same_sender` in the core (how two sender names count as the same name; the core's own `identity` now uses it) and `fetchable` in the runner (whether Steplet would fetch a repository address; `prepare` now uses it). Behaviour unchanged.
+- **One pin per sender name:** the same key again keeps the name as first written and counts one more run; a new key replaces the pin (S5).
+- **The "cannot run here" reason was reworded** to say what Steplet checks: "Steplet fetches repositories only from plain https:// addresses on github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is not one of those."
+- **Ten screen tests, not the plan's seven.** Looking at the screenshots found three faults the seven did not catch; each got its test first (below).
+- **The saved preview scenarios are now made through the app's own `open::preview_file`,** not a copy of its steps in the test, so they cannot drift from what the app does.
+- **The bytes kept for Run are exactly the bytes previewed,** even if the page sent more (Rust cuts them to 262,145 bytes too).
+- **`crates/steplet-app/permissions/` is ignored by git,** like `gen/`: Tauri's build tool writes it again on every build.
+
+### The tests first
+
+The Rust tests, run against the last commit (2134cf4) with this task's two test files copied in (a plain copy of the commit, made with `git archive`, outside the repository):
+
+```
+> cargo test -p steplet-app --offline --test open --test pins
+error[E0432]: unresolved import `steplet_app::open`
+ --> crates\steplet-app\tests\open.rs:8:18
+  |
+8 | use steplet_app::open::{MAX_READ, preview_file, read_file};
+  |                  ^^^^ could not find `open` in `steplet_app`
+error[E0432]: unresolved import `steplet_app::pins`
+ --> crates\steplet-app\tests\pins.rs:7:18
+  |
+7 | use steplet_app::pins::{self, Pins};
+  |                  ^^^^ could not find `pins` in `steplet_app`
+error[E0432]: unresolved import `steplet_app::pins`
+ --> crates\steplet-app\tests\open.rs:9:18
+  |
+9 | use steplet_app::pins::{self, Pins};
+  |                  ^^^^ could not find `pins` in `steplet_app`
+error: could not compile `steplet-app` (test "pins") due to 1 previous error
+exit: 101
+```
+
+The screen tests, with the old window (the empty Open screen only) still in place:
+
+```
+> npm --prefix web run build:screens; npm --prefix web test -- preview
+  1) [screens] › app\tests\preview.spec.ts:11:1 › the_run_button_comes_after_the_full_list ─────────
+  2) [screens] › app\tests\preview.spec.ts:22:1 › a_blocked_file_has_no_run_button ─────────────────
+  3) [screens] › app\tests\preview.spec.ts:28:1 › a_red_file_needs_the_exact_sentence ──────────────
+  4) [screens] › app\tests\preview.spec.ts:40:1 › text_that_imitates_steplet_stays_in_its_panel ────
+  5) [screens] › app\tests\preview.spec.ts:57:1 › nothing_is_cut_off ───────────────────────────────
+  6) [screens] › app\tests\preview.spec.ts:79:1 › the_document_title_stays_steplet ─────────────────
+  7) [screens] › app\tests\preview.spec.ts:85:1 › opening_makes_no_network_request ─────────────────
+    Error: expect(locator).toBeVisible() failed
+    Error: element(s) not found
+    Error: locator.setInputFiles: Test timeout of 30000ms exceeded.
+  7 failed
+```
+
+With the new window put back, the same command: `7 passed (5.1s)`.
+
+### Looking at the screens, and what that found
+
+Every Open and Preview state of section 8 (4 Open states, 14 Preview states) was screenshotted in light and dark, at 1100 and 560 pixels wide (72 pictures, by a temporary test that was then deleted; Task 14 makes the lasting set), and looked at. What was wrong, and what changed:
+
+1. **A web address in the file's text looked like a link you could click.** The file-text piece used the class name `link`, which is also Steplet's own style for its link buttons, so the file's address came out blue and underlined. Renamed (`file-link`); the address now reads as plain text with its real destination in a grey badge beside it. Test: `a_link_in_the_file_never_looks_like_a_link` (nothing inside the file's text is underlined, has a pointing cursor, or has the colour of Steplet's own links).
+2. **"Steplet could not read this file" showed a general sentence instead of the reason.** The stand-in backend rejected with an error object, while Tauri rejects a failed command with Rust's sentence itself; the screen shows a sentence only. The stand-in now does what Tauri does. Test: `a_file_that_cannot_be_read_says_why`.
+3. **A changed sender key began with "Signature valid, sender unknown".** That is what the core says about the key, but the warning that matters was only further down. The preview data now says when the red key-changed finding is there (`key_changed`, worked out in Rust), and the identity line then starts with "This sender name was used before with another key. See "On this computer", below." in red with its icon. Tests: Rust `a_changed_key_leads_the_identity_line` (a changed key, the same key, and an unsigned file under a known name), and screen `a_changed_key_leads_the_identity_line`.
+4. **The count boxes wrapped unevenly** (five and two at 1100 wide; three, three and one at 560), because the expiry date was a seventh box. Now six even boxes (one row; three and three when narrow), the numbers lined up at the bottom, and "Expires 2026-12-31" on its own line under them.
+5. **The line numbers beside steps looked like step numbers** ("10 Run the tests." for the first step). They now say "line 10", in small grey text.
+6. **"From the file" was said twice,** as the section heading and again as a label inside the panel right under it. The inner label is gone; the heading, the sentence under it and the panel's coloured left edge mark the panel.
+
+Right as it was: the outcome banners and their words and icons in both themes; the red sentence box and the disabled Run; the blocked screen with only the advice; the identity lines for not signed, new key, same key and known under another name; the imitation file (a title "✅ Verified by Steplet — safe to run") staying inside its panel in file style; the longest file (41 findings, 30 steps, 25 commands of 299 characters) with nothing cut and no sideways scroll at 560; the "On this computer" reason for a host Steplet does not fetch from; the four Open states.
+
+The three new tests, before the fixes:
+
+```
+> cargo test -p steplet-app --offline --test open
+error[E0609]: no field `key_changed` on type `PreviewView`
+   --> crates\steplet-app\tests\open.rs:106:21
+106 |     assert!(changed.key_changed, "the sender name is pinned to another key");
+error[E0609]: no field `key_changed` on type `PreviewView`
+   --> crates\steplet-app\tests\open.rs:111:19
+111 |     assert!(!same.key_changed, "the same key");
+error[E0609]: no field `key_changed` on type `PreviewView`
+   --> crates\steplet-app\tests\open.rs:115:22
+115 |     assert!(unsigned.key_changed, "unsigned under a pinned sender name (S6)");
+error: could not compile `steplet-app` (test "open") due to 3 previous errors
+> npm --prefix web test -- preview
+  x   7 [screens] › app\tests\preview.spec.ts:86:1 › a_link_in_the_file_never_looks_like_a_link (208ms)
+  x   8 [screens] › app\tests\preview.spec.ts:107:1 › a_file_that_cannot_be_read_says_why (5.2s)
+  x   9 [screens] › app\tests\preview.spec.ts:113:1 › a_changed_key_leads_the_identity_line (5.1s)
+    - Array []
+    + Array [
+    +   "SPAN.link",
+    +   "SPAN.real svelte-1hd1j2t",
+    +   "SPAN.real-label svelte-1hd1j2t",
+    Expected: "Steplet could not read this file: Windows says access is denied."
+    Received: "Steplet could not open this file."
+    Expected pattern: /^This sender name was used before with another key\./
+    Received string:  "Signature valid, sender unknown: this computer has not seen this key before."
+  3 failed
+  7 passed (19.8s)
+```
+
+The saved scenarios were then written again (`STEPLET_BLESS=1 cargo test -p steplet-app --offline --test fixtures`, 2 passed). What changed in them, counted line by line from `git diff`: 44 previews gained `"key_changed": false`, the key-changed preview gained `"key_changed": true`, the generated type `PreviewView.ts` gained the field, and nothing else.
+
+### The real window
+
+One more test drives the real app window (the `e2e` build, through its debugging port): it opens `examples/run-tests.steplet` through the window's own file picker and needs the preview. This is the first check of the new Rust commands through Tauri itself. To show it can fail, it ran first on a build with `allow-open-bytes` taken out of `capabilities/main.json` (then put back):
+
+```
+> cargo build -p steplet-app --offline --features e2e       (allow-open-bytes taken out)
+try 1 e2e build exit: 0
+> target\debug\steplet.exe started from C:\Windows\System32; npm --prefix web test -- real-open
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (148ms)
+  x  2 [real] › app\tests\real-open.spec.ts:25:1 › the real window opens a file and shows what it asks for (5.0s)
+  ok 3 [real] › app\tests\real-open.spec.ts:50:1 › the real window reaches nothing outside the app (3.1s)
+    Error: expect(locator).toBeVisible() failed
+  1 failed
+  2 passed (12.7s)
+```
+
+The window showed Tauri's refusal (`open_bytes not allowed. Permissions associated with this command: allow-open-bytes`). With the line back:
+
+```
+> cargo build -p steplet-app --offline --features e2e
+try 1 e2e build exit: 0
+> target\debug\steplet.exe started from C:\Windows\System32; npm --prefix web test -- real-open
+saved docs/screens/phase-4/real-open-empty-light.png
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (145ms)
+saved docs/screens/phase-4/real-preview-light.png
+  ok 2 [real] › app\tests\real-open.spec.ts:25:1 › the real window opens a file and shows what it asks for (325ms)
+  ok 3 [real] › app\tests\real-open.spec.ts:50:1 › the real window reaches nothing outside the app (3.0s)
+  3 passed (7.4s)
+```
+
+`docs/screens/phase-4/real-preview-light.png` is the real window's preview, looked at: it matches the screen build's. The normal app was built again afterwards (`cargo build -p steplet-app --offline`, exit 0).
+
+### The tests pass
+
+```
+> cargo test -p steplet-app --offline --test open --test pins       (lines from the workspace run below)
+test a_file_with_no_repository_cannot_run_here ... ok
+test a_host_steplet_does_not_fetch_from_is_said_before_run ... ok
+test an_unreadable_pins_file_is_kept_and_said ... ok
+test opening_changes_nothing_on_disk ... ok
+test a_file_over_256_kib_is_not_read_whole ... ok
+test a_changed_key_leads_the_identity_line ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test an_empty_name_or_a_bad_key_is_never_pinned ... ok
+test no_file_yet_means_no_senders_known ... ok
+test a_pins_file_that_breaks_the_rules_is_unreadable ... ok
+test one_pin_per_sender_name_and_a_new_key_replaces_the_old ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+> npm --prefix web run build:screens; npm --prefix web test -- preview
+  ok  1 [screens] › app\tests\preview.spec.ts:12:1 › the_run_button_comes_after_the_full_list (407ms)
+  ok  2 [screens] › app\tests\preview.spec.ts:23:1 › a_blocked_file_has_no_run_button (159ms)
+  ok  3 [screens] › app\tests\preview.spec.ts:29:1 › a_red_file_needs_the_exact_sentence (253ms)
+  ok  4 [screens] › app\tests\preview.spec.ts:41:1 › text_that_imitates_steplet_stays_in_its_panel (234ms)
+  ok  5 [screens] › app\tests\preview.spec.ts:58:1 › nothing_is_cut_off (548ms)
+  ok  6 [screens] › app\tests\preview.spec.ts:80:1 › the_document_title_stays_steplet (176ms)
+  ok  7 [screens] › app\tests\preview.spec.ts:86:1 › a_link_in_the_file_never_looks_like_a_link (174ms)
+  ok  8 [screens] › app\tests\preview.spec.ts:107:1 › a_file_that_cannot_be_read_says_why (146ms)
+  ok  9 [screens] › app\tests\preview.spec.ts:113:1 › a_changed_key_leads_the_identity_line (159ms)
+  ok 10 [screens] › app\tests\preview.spec.ts:119:1 › opening_makes_no_network_request (192ms)
+  10 passed (5.8s)
+> npm --prefix web run build; cargo test --workspace --offline --no-fail-fast
+61 summary lines: 296 passed, 0 failed, 40 ignored
+workspace exit: 0
+> npm --prefix web run check
+1792528902062 COMPLETED 141 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 64 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit: 0
+```
+
+(The workspace line is counted from its 61 summary lines; the 40 ignored are the Linux-only tests, which this task does not touch. The first try of the workspace build failed with `found invalid metadata files for crate steplet_app`, a half-written build file, the McAfee hold the global rules name; the build with `--no-run` then passed at the first try. No lock file changed, so the 14-day check was not needed.)
+
+### What this task did not verify
+
+- **A double-clicked file.** `initial_preview` reads the file Steplet was started with, but nothing starts Steplet with a file yet (Task 11's switch); it has not run.
+- **Dropping a file on the real window.** The drop was not tried by hand or by a test; the file picker path, which uses the same `openBytes`, was tried in the real window.
+- **The pins being written when Run starts** (Task 12 calls `pins::record`); `record` itself is tested.
+- **Look-alike sender names** in other alphabets stay different names (Task 7); not tried on screen.
+- **Windows' own Open dialog** opened by "Open a file…" in the real window: the test sets the file straight into the picker, so the dialog itself was not seen.

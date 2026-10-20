@@ -15,7 +15,7 @@ use steplet_core::display::{self, Segment};
 use steplet_core::header::{Scalar, Steplet};
 use steplet_core::identity::Identity;
 use steplet_core::report::Report as FileReport;
-use steplet_core::rules::{Finding, Outcome, Severity};
+use steplet_core::rules::{self, Finding, Outcome, Severity};
 use steplet_core::sig::SigStatus;
 use steplet_run::{
     Answer, Check, Event, Progress, Promise, Question, Refusal, Reply, Report, ReportCommand, Tripwire, Trust,
@@ -200,6 +200,9 @@ pub struct PreviewView {
     pub outcome: String,
     pub run_status: RunStatus,
     pub identity: IdentityView,
+    /// The sender name is pinned here to another key, or the file is unsigned under a pinned name (`id.key-changed`,
+    /// rows 16 and 22): the identity line starts with that warning, whose detail is in `here`.
+    pub key_changed: bool,
     /// The file's findings, worst first, as the core ordered them.
     pub findings: Vec<FindingView>,
     /// Findings about this computer ("On this computer"): a changed sender key, a damaged list of known senders.
@@ -228,7 +231,7 @@ pub const NO_REPOSITORY: &str = "This file names no repository, so Steplet has n
 /// host: that is file text, shown in the file's own panel.
 pub fn not_fetched_from_here() -> String {
     format!(
-        "Steplet fetches repositories only from {}, and this file's repository is somewhere else.",
+        "Steplet fetches repositories only from plain https:// addresses on {}, and this file's repository is not          one of those.",
         and_list(steplet_run::REPOSITORY_HOSTS)
     )
 }
@@ -269,6 +272,7 @@ pub fn preview(raw: &[u8], report: &FileReport, here: &Here) -> PreviewView {
         outcome: report.rating.outcome.name().into(),
         run_status,
         identity,
+        key_changed: here.findings.iter().any(|f| f.rule.id == rules::KEY_CHANGED.id),
         findings: report.rating.findings.iter().map(finding_view).collect(),
         here: here.findings.iter().map(finding_view).collect(),
         file: s.map(file_view),

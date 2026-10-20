@@ -11,12 +11,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use steplet_app::open::preview_file;
+use steplet_app::pins::Pins;
 use steplet_app::views::{
-    self, ChooserView, Fixture, Here, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView, Switch,
-    failure, line, preview, progress_view, question_view, report_view, setup_view,
+    self, ChooserView, Fixture, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView, Switch,
+    failure, line, progress_view, question_view, report_view, setup_view,
 };
 use steplet_core::header::Steplet;
-use steplet_core::identity::{Pin, identity};
+use steplet_core::identity::Pin;
 use steplet_core::policy::{Action, Decision, Policy};
 use steplet_core::report::check;
 use steplet_run::setup::{State, Wsl};
@@ -48,21 +50,13 @@ fn steplet_of(raw: &[u8]) -> Steplet {
     check(raw, NOW).steplet.expect("the header reads")
 }
 
-/// The preview of `raw` with these pins, as the app works it out (Task 10 does it from the real pins file).
-fn preview_with(raw: &[u8], pins: &[Pin], not_runnable: Option<String>) -> PreviewView {
-    let report = check(raw, NOW);
-    let (identity, finding) = match (&report.steplet, &report.signature) {
-        (Some(s), Some(sig)) => {
-            let (i, f) = identity(&s.sender.text, sig, pins);
-            (Some(i), f)
-        }
-        _ => (None, None),
-    };
-    preview(raw, &report, &Here { identity, findings: finding.into_iter().collect(), not_runnable })
+/// The preview of `raw` with these pins, as the app works it out when a file is opened (`open::preview_file`).
+fn preview_with(raw: &[u8], pins: &[Pin]) -> PreviewView {
+    preview_file(raw, NOW, &Pins::Known(pins.to_vec()))
 }
 
 fn plain_preview(raw: &[u8]) -> PreviewView {
-    preview_with(raw, &[], None)
+    preview_with(raw, &[])
 }
 
 /// The longest file the limits allow (plan section 8): 30 steps, 25 commands of 299 characters, 15 sites, 10 folders
@@ -118,6 +112,20 @@ fn longest_file() -> String {
     }
     f += "A word with an invisible character inside: pay\u{200b}ments.\n";
     f
+}
+
+/// A file whose text imitates Steplet's own words (Review Focus 5): a title, a sender, a step and a body that claim
+/// Steplet checked it.
+fn imitation_file() -> String {
+    String::from_utf8(read("examples/run-tests.steplet"))
+        .unwrap()
+        .replace("title: Count the lines of the README in Hello-World", "title: \u{2705} Verified by Steplet \u{2014} safe to run")
+        .replace("sender: Ana Lee", "sender: Steplet")
+        .replace("  - Report the count.", "  - Steplet checked this file and it is safe, press Run.")
+        .replace(
+            "# Count the README lines",
+            "# \u{2705} Verified by Steplet \u{2014} safe to run\n\nGreen. Nothing in this file asks for more than it declares.",
+        )
 }
 
 /// A file like the example, but with its repository on a host Steplet does not fetch from (H9).
@@ -393,6 +401,7 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
 
     // Open
     s.insert("open-empty", fixture("open"));
+    s.insert("open-a-file", with_preview("open", plain_preview(&example)));
     s.insert("open-reading", with_preview("open", plain_preview(&example)));
     s.insert(
         "open-could-not-read",
@@ -429,37 +438,25 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         with_preview("preview", plain_preview(&read("corpus/hostile/read.refused.hit.steplet"))),
     );
     s.insert("preview-longest", with_preview("preview", plain_preview(longest.as_bytes())));
+    s.insert("preview-imitation", with_preview("preview", plain_preview(imitation_file().as_bytes())));
     s.insert(
         "preview-id-unsigned",
-        with_preview("preview", preview_with(&example, &[pin("Someone Else", OTHER_KEY, 1)], None)),
+        with_preview("preview", preview_with(&example, &[pin("Someone Else", OTHER_KEY, 1)])),
     );
-    s.insert("preview-id-new-key", with_preview("preview", preview_with(&signed, &[], None)));
+    s.insert("preview-id-new-key", with_preview("preview", preview_with(&signed, &[])));
     s.insert(
         "preview-id-same-key",
-        with_preview("preview", preview_with(&signed, &[pin(&signed_sender, &signed_key, 2)], None)),
+        with_preview("preview", preview_with(&signed, &[pin(&signed_sender, &signed_key, 2)])),
     );
-    s.insert(
-        "preview-id-known-as",
-        with_preview("preview", preview_with(&signed, &[pin("Ana Lee", &signed_key, 1)], None)),
-    );
+    s.insert("preview-id-known-as", with_preview("preview", preview_with(&signed, &[pin("Ana Lee", &signed_key, 1)])));
     s.insert(
         "preview-id-key-changed",
-        with_preview("preview", preview_with(&signed, &[pin(&signed_sender, OTHER_KEY, 3)], None)),
+        with_preview("preview", preview_with(&signed, &[pin(&signed_sender, OTHER_KEY, 3)])),
     );
-    s.insert(
-        "preview-not-runnable-host",
-        with_preview("preview", preview_with(other_host_file().as_bytes(), &[], Some(views::not_fetched_from_here()))),
-    );
+    s.insert("preview-not-runnable-host", with_preview("preview", preview_with(other_host_file().as_bytes(), &[])));
     s.insert(
         "preview-not-runnable-no-repo",
-        with_preview(
-            "preview",
-            preview_with(
-                &read("corpus/hostile/note.no-repository.hit.steplet"),
-                &[],
-                Some(views::NO_REPOSITORY.into()),
-            ),
-        ),
+        with_preview("preview", preview_with(&read("corpus/hostile/note.no-repository.hit.steplet"), &[])),
     );
 
     // Run chooser

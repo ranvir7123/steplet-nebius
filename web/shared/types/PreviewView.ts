@@ -15,6 +15,11 @@ sha256: string,
  */
 outcome: string, run_status: RunStatus, identity: IdentityView, 
 /**
+ * The sender name is pinned here to another key, or the file is unsigned under a pinned name (`id.key-changed`,
+ * rows 16 and 22): the identity line starts with that warning, whose detail is in `here`.
+ */
+key_changed: boolean, 
+/**
  * The file's findings, worst first, as the core ordered them.
  */
 findings: Array<FindingView>, 

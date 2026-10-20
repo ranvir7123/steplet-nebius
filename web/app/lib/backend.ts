@@ -14,13 +14,16 @@ export type Shown = Seg[];
 /** Stops listening for events. */
 export type Unlisten = () => void;
 
+/** The most bytes of a file the page sends: one more than Steplet takes (crates/steplet-app/src/open.rs). */
+export const MAX_READ = 256 * 1024 + 1;
+
 export interface Backend {
   /** The file Steplet was opened with (a double-click), if any. */
   initialPreview(): Promise<PreviewView | null>;
   /** A note for the Open screen, in Steplet's words: a run left by a crash was cleared. */
   startNote(): Promise<string | null>;
-  openPath(path: string): Promise<PreviewView>;
-  /** A file dropped on the window. */
+  /** A file dropped on the window or chosen with "Open a file…": at most its first MAX_READ bytes. A page cannot
+   * learn a file's path, so it never asks Rust to read one. */
   openBytes(bytes: Uint8Array): Promise<PreviewView>;
   chooser(): Promise<ChooserView>;
   setupStatus(): Promise<SetupView>;

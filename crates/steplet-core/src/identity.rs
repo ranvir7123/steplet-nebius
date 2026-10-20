@@ -42,8 +42,7 @@ pub struct Pin {
 /// alphabet) is another name: the file then shows "sender unknown", never "the same key as before". An empty name
 /// matches no pin.
 pub fn identity(sender: &str, sig: &SigStatus, pins: &[Pin]) -> (Identity, Option<Finding>) {
-    let name = comparable(sender);
-    let known: Vec<&Pin> = pins.iter().filter(|p| !name.is_empty() && comparable(&p.sender) == name).collect();
+    let known: Vec<&Pin> = pins.iter().filter(|p| same_sender(&p.sender, sender)).collect();
     match sig {
         SigStatus::Invalid { .. } => (Identity::Invalid, None),
         SigStatus::Unsigned => (Identity::Unsigned, key_changed(sender, &known, None)),
@@ -89,6 +88,13 @@ fn key_changed(sender: &str, known: &[&Pin], key: Option<&String>) -> Option<Fin
         detail: Some(format!("Steplet knows this sender name with the key {}. {this}", keys.join(", "))),
         quote: Some(sender.into()),
     })
+}
+
+/// Whether two sender names count as the same name: compared ignoring capitals and runs of spaces only (see
+/// `identity`). An empty name is the same as no name, not even another empty one. The app keeps one pin per such name.
+pub fn same_sender(a: &str, b: &str) -> bool {
+    let a = comparable(a);
+    !a.is_empty() && a == comparable(b)
 }
 
 /// A sender name as it is compared: lower case, with each run of spaces as one space and none at either end.

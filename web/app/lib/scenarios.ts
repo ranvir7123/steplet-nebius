@@ -3,7 +3,7 @@
 // open (fetching, running, waiting on a question) until Stop.
 
 export interface Timing {
-  /** Milliseconds before openPath / openBytes answers; `null`: it never answers (the "reading" state). */
+  /** Milliseconds before openBytes answers; `null`: it never answers (the "reading" state). */
   open: number | null;
   /** Milliseconds between two progress items of a run, and before the first. */
   step: number;

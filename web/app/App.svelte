@@ -1,25 +1,84 @@
 <script lang="ts">
-  // The app's one window. Task 8: the empty Open screen; the screens behind it come with Tasks 10 to 13. The backend
-  // is in the context under "backend" (main.ts).
+  // The app's one window. It shows one screen at a time; a file can be dropped on it anywhere. The backend is in the
+  // context under "backend" (main.ts). The window's title stays "Steplet" whatever the file says: nothing here sets it.
+  import { getContext, onMount } from "svelte";
+  import { MAX_READ, type Backend } from "./lib/backend";
+  import Open from "./screens/Open.svelte";
+  import Preview from "./screens/Preview.svelte";
+  import type { PreviewView } from "../shared/types/PreviewView";
+
+  const backend = getContext<Backend>("backend");
+
+  type Screen = { kind: "open" } | { kind: "preview"; view: PreviewView };
+  let screen = $state<Screen>({ kind: "open" });
+  let reading = $state(false);
+  let error = $state<string | null>(null);
+  let note = $state<string | null>(null);
+
+  /** A refusal from Rust is Steplet's own sentence; anything else gets one. */
+  function words(e: unknown): string {
+    if (typeof e === "string") return e;
+    return "Steplet could not open this file.";
+  }
+
+  onMount(() => {
+    backend.startNote().then(
+      (n) => (note = n),
+      () => {},
+    );
+    backend.initialPreview().then(
+      (view) => {
+        if (view) screen = { kind: "preview", view };
+      },
+      (e) => (error = words(e)),
+    );
+  });
+
+  async function openFile(file: File) {
+    error = null;
+    reading = true;
+    try {
+      const bytes = new Uint8Array(await file.slice(0, MAX_READ).arrayBuffer());
+      screen = { kind: "preview", view: await backend.openBytes(bytes) };
+      window.scrollTo(0, 0);
+    } catch (e) {
+      error = words(e);
+      screen = { kind: "open" };
+    } finally {
+      reading = false;
+    }
+  }
+
+  function dragover(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  function drop(e: DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer?.files[0];
+    if (file) void openFile(file);
+  }
+
+  function run(typed: string | null) {
+    void typed; // The run chooser comes with Task 11.
+  }
 </script>
+
+<svelte:window ondragover={dragover} ondrop={drop} />
 
 <div class="window">
   <header class="bar">
-    <button class="link" type="button">Setup</button>
+    {#if screen.kind !== "open"}
+      <button class="link" type="button" onclick={() => (screen = { kind: "open" })}>Open another file</button>
+    {/if}
+    <button class="link setup" type="button">Setup</button>
   </header>
-  <main class="middle">
-    <section class="open" aria-labelledby="open-title">
-      <svg class="mark" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
-        <rect class="mark-square" width="48" height="48" rx="10.5" />
-        <path class="mark-steps" d="M10.9 36.4V27.6h8.7v-8.7h8.7v-8.8h8.8v26.3z" />
-      </svg>
-      <h1 id="open-title">Open a .steplet file to see what it asks for.</h1>
-      <p class="muted">Nothing in it runs until you press Run.</p>
-      <div class="actions">
-        <button class="button primary" type="button">Open a file…</button>
-        <span class="muted">or drop it on this window</span>
-      </div>
-    </section>
+  <main class="page">
+    {#if screen.kind === "open"}
+      <Open {reading} {error} {note} onfile={openFile} />
+    {:else}
+      <Preview view={screen.view} onrun={run} />
+    {/if}
   </main>
 </div>
 
@@ -32,64 +91,24 @@
 
   .bar {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
     width: 100%;
     max-width: calc(var(--column) + 2 * var(--space-6));
     margin: 0 auto;
     padding: var(--space-4) var(--space-6) 0;
   }
 
-  .middle {
+  .setup {
+    margin-left: auto;
+  }
+
+  .page {
     display: flex;
     flex: 1;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-6);
-  }
-
-  .open {
-    display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
     width: 100%;
-    max-width: var(--column);
-    padding: var(--space-12) var(--space-6);
-    border: 1px dashed var(--control-border);
-    border-radius: var(--radius-panel);
-    background: var(--surface);
-    text-align: center;
-  }
-
-  .mark {
-    margin-bottom: var(--space-2);
-  }
-
-  .mark-square {
-    fill: var(--accent);
-  }
-
-  .mark-steps {
-    fill: var(--on-accent);
-  }
-
-  h1 {
-    font-family: var(--font-display);
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 28px;
-  }
-
-  .muted {
-    color: var(--text-muted);
-  }
-
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
+    max-width: calc(var(--column) + 2 * var(--space-6));
+    margin: 0 auto;
+    padding: var(--space-6);
   }
 </style>

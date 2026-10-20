@@ -9,6 +9,7 @@
     "identity": {
       "kind": "unsigned"
     },
+    "key_changed": false,
     "findings": [
       {
         "rule": "hide.link-mismatch",

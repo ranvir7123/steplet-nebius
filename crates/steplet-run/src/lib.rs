@@ -29,7 +29,9 @@ pub use gate::{
 pub use launch::{LaunchError, RunHandle, launch};
 pub use live::{Live, Progress, StopSignal};
 pub use lock::RunLock;
-pub use prepare::{PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, prepare, removed_files, run_config};
+pub use prepare::{
+    PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, fetchable, prepare, removed_files, run_config,
+};
 pub use promises::{Promise, promises};
 pub use report::{
     Check, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line, read_trust,

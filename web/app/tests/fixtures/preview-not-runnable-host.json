@@ -5,11 +5,12 @@
     "outcome": "green",
     "run_status": {
       "kind": "not_runnable",
-      "reason": "Steplet fetches repositories only from github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is somewhere else."
+      "reason": "Steplet fetches repositories only from plain https:// addresses on github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is not          one of those."
     },
     "identity": {
       "kind": "unsigned"
     },
+    "key_changed": false,
     "findings": [],
     "here": [],
     "file": {

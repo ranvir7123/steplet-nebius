@@ -23,6 +23,12 @@ const DISCARD_LIMIT: Duration = Duration::from_secs(2 * 60);
 /// 2026). Any other name could be a home or company server that Steplet's own git would reach before any fence.
 pub const REPOSITORY_HOSTS: &[&str] = &["github.com", "gitlab.com", "codeberg.org", "bitbucket.org"];
 
+/// Whether Steplet would fetch the repository at `url`: a plain `https://` address on one of `REPOSITORY_HOSTS`, as
+/// `prepare` checks it. The app asks this before offering Run.
+pub fn fetchable(url: &str) -> bool {
+    is_plain_https(url) && hosts::https_host(url).is_some_and(|h| REPOSITORY_HOSTS.contains(&h.as_str()))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PrepareError {
     /// The request holds a value Steplet will not hand to its Linux.
@@ -52,7 +58,7 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Pr
     if !is_plain_https(&req.repo_url) {
         return Err(PrepareError::Refused(BadValue("repository address")));
     }
-    if !hosts::https_host(&req.repo_url).is_some_and(|h| REPOSITORY_HOSTS.contains(&h.as_str())) {
+    if !fetchable(&req.repo_url) {
         return Err(PrepareError::Refused(BadValue("repository host")));
     }
     if !is_commit(&req.commit) {

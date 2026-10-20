@@ -10,7 +10,6 @@ import type { Backend, Shown } from "./backend";
 export const backend: Backend = {
   initialPreview: () => invoke<PreviewView | null>("initial_preview"),
   startNote: () => invoke<string | null>("start_note"),
-  openPath: (path) => invoke<PreviewView>("open_path", { path }),
   openBytes: (bytes) => invoke<PreviewView>("open_bytes", { bytes: Array.from(bytes) }),
   chooser: () => invoke<ChooserView>("chooser"),
   setupStatus: () => invoke<SetupView>("setup_status"),

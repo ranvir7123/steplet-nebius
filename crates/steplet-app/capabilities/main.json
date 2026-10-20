@@ -2,5 +2,11 @@
   "identifier": "main",
   "description": "The one window: it may listen for Steplet's own events and call Steplet's own commands, nothing else.",
   "windows": ["main"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-initial-preview",
+    "allow-open-bytes",
+    "allow-start-note"
+  ]
 }

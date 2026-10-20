@@ -65,7 +65,8 @@ async function preview() {
   const f = await fixture();
   if (t.open === null) return never();
   await wait(t.open);
-  if (f.open_error) throw new Error(f.open_error);
+  // Tauri rejects a command that returns Err(String) with that string itself, so the stand-in does the same.
+  if (f.open_error) throw f.open_error;
   if (!f.preview) throw new Error(`${STAND_IN_MARK}: scenario ${name} has no preview`);
   return f.preview;
 }
@@ -78,7 +79,6 @@ export const backend: Backend = {
   async startNote() {
     return (await fixture()).note;
   },
-  openPath: () => preview(),
   openBytes: () => preview(),
   async chooser() {
     const f = await fixture();
@@ -121,7 +121,7 @@ export const backend: Backend = {
   },
   async saveReport() {
     const f = await fixture();
-    if (f.save_error) throw new Error(f.save_error);
+    if (f.save_error) throw f.save_error;
     return f.saved_to;
   },
   async openHelp() {},

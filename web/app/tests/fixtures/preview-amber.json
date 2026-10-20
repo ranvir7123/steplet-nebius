@@ -9,6 +9,7 @@
     "identity": {
       "kind": "unsigned"
     },
+    "key_changed": false,
     "findings": [
       {
         "rule": "cap.runs-code",

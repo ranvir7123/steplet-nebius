@@ -3,4 +3,4 @@
 // against capabilities/main.json, where each needs its `allow-<name>` line (with `-` for `_`). Tauri checks app
 // commands only once this list holds one, so every command the app registers must be listed here:
 // tests/shell.rs fails otherwise.
-pub const COMMANDS: &[&str] = &[];
+pub const COMMANDS: &[&str] = &["initial_preview", "open_bytes", "start_note"];

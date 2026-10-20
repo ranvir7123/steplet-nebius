@@ -10,6 +10,7 @@
     "identity": {
       "kind": "unsigned"
     },
+    "key_changed": false,
     "findings": [
       {
         "rule": "note.no-repository",

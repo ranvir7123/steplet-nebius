@@ -9,6 +9,8 @@ use tauri::{Url, WebviewWindowBuilder};
 
 include!("commands.rs");
 
+pub mod open;
+pub mod pins;
 pub mod views;
 
 /// WebView2's start arguments for every build.
@@ -43,9 +45,66 @@ pub fn is_own_page(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+/// What the app keeps while its window is open.
+pub struct AppState {
+    /// Where the pins live (`None` when Windows does not say where this user's app data goes).
+    pins: Option<std::path::PathBuf>,
+    /// The file Steplet was started with (a double-click), until the page asks for it.
+    initial: std::sync::Mutex<Option<std::path::PathBuf>>,
+    /// The file on screen: its bytes as read, so Run can check they are the ones previewed (row 30, Task 12).
+    opened: std::sync::Mutex<Option<Vec<u8>>>,
+}
+
+impl AppState {
+    fn pins(&self) -> pins::Pins {
+        match &self.pins {
+            Some(p) => pins::load(p),
+            None => pins::Pins::Unreadable("Windows did not say where this user's app data goes".into()),
+        }
+    }
+
+    fn show(&self, mut raw: Vec<u8>) -> views::PreviewView {
+        // The bytes kept for Run are exactly the bytes previewed, even if more were sent.
+        raw.truncate(open::MAX_READ as usize);
+        let view = open::preview_file(&raw, open::now_unix(), &self.pins());
+        *self.opened.lock().unwrap_or_else(|e| e.into_inner()) = Some(raw);
+        view
+    }
+}
+
+/// The file Steplet was started with, if any. A file that cannot be read gives Steplet's words, never its name.
+#[tauri::command]
+fn initial_preview(state: tauri::State<AppState>) -> Result<Option<views::PreviewView>, String> {
+    let path = state.initial.lock().unwrap_or_else(|e| e.into_inner()).take();
+    match path {
+        None => Ok(None),
+        Some(p) => Ok(Some(state.show(open::read_file(&p)?))),
+    }
+}
+
+/// A file dropped on the window or chosen with "Open a file…": the page sends at most its first `open::MAX_READ`
+/// bytes (a browser page cannot learn a file's path, so the page never asks Rust to read a path).
+#[tauri::command]
+fn open_bytes(state: tauri::State<AppState>, bytes: Vec<u8>) -> views::PreviewView {
+    state.show(bytes)
+}
+
+/// A note for the Open screen, in Steplet's words: a run left by a crash was cleared (Task 12 fills it in).
+#[tauri::command]
+fn start_note() -> Option<String> {
+    None
+}
+
 /// Starts the app and returns when its window closes.
 pub fn run() {
+    let state = AppState {
+        pins: pins::location(),
+        initial: std::sync::Mutex::new(std::env::args_os().nth(1).map(std::path::PathBuf::from)),
+        opened: std::sync::Mutex::new(None),
+    };
     tauri::Builder::default()
+        .manage(state)
+        .invoke_handler(tauri::generate_handler![initial_preview, open_bytes, start_note])
         .setup(|app| {
             let config = app
                 .config()

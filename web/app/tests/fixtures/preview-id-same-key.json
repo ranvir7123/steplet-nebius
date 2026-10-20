@@ -11,6 +11,7 @@
       "key": "SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk",
       "runs": 2
     },
+    "key_changed": false,
     "findings": [],
     "here": [],
     "file": {

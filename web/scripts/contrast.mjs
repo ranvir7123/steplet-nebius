@@ -23,6 +23,7 @@ const PAIRS = [
   ["on-accent", "accent-hover", 4.5],
   ...["green", "amber", "red", "blocked"].map((o) => [`${o}-fg`, `${o}-bg`, 4.5]),
   ["badge-fg", "badge-bg", 4.5],
+  ["red-fg", "bg", 4.5], // the preview's changed-key warning, on the page itself
   ...SURFACES.map((bg) => ["focus", bg, 3]),
   ...SURFACES.map((bg) => ["control-border", bg, 3]),
 ];
