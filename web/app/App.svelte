@@ -3,13 +3,21 @@
   // context under "backend" (main.ts). The window's title stays "Steplet" whatever the file says: nothing here sets it.
   import { getContext, onMount } from "svelte";
   import { MAX_READ, type Backend } from "./lib/backend";
+  import Chooser from "./screens/Chooser.svelte";
   import Open from "./screens/Open.svelte";
   import Preview from "./screens/Preview.svelte";
+  import Setup from "./screens/Setup.svelte";
   import type { PreviewView } from "../shared/types/PreviewView";
 
   const backend = getContext<Backend>("backend");
 
-  type Screen = { kind: "open" } | { kind: "preview"; view: PreviewView };
+  type Screen =
+    | { kind: "open" }
+    | { kind: "preview"; view: PreviewView }
+    // `typed`: the red file's sentence, for Rust to check again when the run starts.
+    | { kind: "chooser"; view: PreviewView; typed: string | null }
+    // `back`: the screen Setup was opened from.
+    | { kind: "setup"; back: Screen };
   let screen = $state<Screen>({ kind: "open" });
   let reading = $state(false);
   let error = $state<string | null>(null);
@@ -59,8 +67,23 @@
     if (file) void openFile(file);
   }
 
-  function run(typed: string | null) {
-    void typed; // The run chooser comes with Task 11.
+  function choose(view: PreviewView, typed: string | null) {
+    screen = { kind: "chooser", view, typed };
+    window.scrollTo(0, 0);
+  }
+
+  function setup() {
+    if (screen.kind !== "setup") screen = { kind: "setup", back: screen };
+    window.scrollTo(0, 0);
+  }
+
+  function back(to: Screen) {
+    screen = to;
+    window.scrollTo(0, 0);
+  }
+
+  function start() {
+    // The run itself comes with Task 12 (prepare, the live log and the ask screen).
   }
 </script>
 
@@ -68,16 +91,25 @@
 
 <div class="window">
   <header class="bar">
-    {#if screen.kind !== "open"}
-      <button class="link" type="button" onclick={() => (screen = { kind: "open" })}>Open another file</button>
+    {#if screen.kind === "preview" || screen.kind === "chooser"}
+      <button class="link" type="button" onclick={() => back({ kind: "open" })}>Open another file</button>
     {/if}
-    <button class="link setup" type="button">Setup</button>
+    {#if screen.kind !== "setup"}
+      <button class="link setup" type="button" onclick={setup}>Setup</button>
+    {/if}
   </header>
   <main class="page">
     {#if screen.kind === "open"}
       <Open {reading} {error} {note} onfile={openFile} />
+    {:else if screen.kind === "preview"}
+      {@const view = screen.view}
+      <Preview {view} onrun={(typed) => choose(view, typed)} />
+    {:else if screen.kind === "chooser"}
+      {@const view = screen.view}
+      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={start} />
     {:else}
-      <Preview view={screen.view} onrun={run} />
+      {@const to = screen.back}
+      <Setup onback={() => back(to)} />
     {/if}
   </main>
 </div>

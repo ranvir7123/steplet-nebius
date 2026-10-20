@@ -47,6 +47,29 @@ test("the real window opens a file and shows what it asks for", async () => {
   }
 });
 
+test("the real window's Setup looks at this computer", async () => {
+  const browser = await chromium.connectOverCDP("http://127.0.0.1:9333");
+  try {
+    const page = browser.contexts()[0].pages()[0];
+    await page.getByRole("button", { name: "Setup" }).click();
+    await expect(page.getByRole("heading", { name: "Set up Steplet" })).toBeVisible();
+    // What Rust's look saw on this laptop (WSL 2.6.3.0, measured in Task 6): it may start Steplet's Linux to look.
+    await expect(page.getByText(/^Windows' Linux feature \(WSL \d+\.\d+\.\d+/)).toBeVisible({ timeout: 90_000 });
+    const dark = await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches);
+    const name = `real-setup-${dark ? "dark" : "light"}.png`;
+    await page.screenshot({
+      path: fileURLToPath(new URL(`../../../docs/screens/phase-4/${name}`, import.meta.url)),
+      fullPage: true,
+    });
+    console.log(`saved docs/screens/phase-4/${name}`);
+    for (const line of await page.locator(".checklist li").allInnerTexts()) console.log(`setup line: ${line.replace(/\n/g, " | ")}`);
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Open a .steplet file to see what it asks for.");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("the real window reaches nothing outside the app", async () => {
   const browser = await chromium.connectOverCDP("http://127.0.0.1:9333");
   try {

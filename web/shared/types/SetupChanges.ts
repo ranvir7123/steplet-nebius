@@ -4,4 +4,8 @@ import type { SetupView } from "./SetupView";
 /**
  * The setup screen after each change the receiver can make on it, for the stand-in backend (it decides nothing).
  */
-export type SetupChanges = { key_saved: SetupView, key_forgotten: SetupView, switch_on: SetupView, switch_off: SetupView, };
+export type SetupChanges = { key_saved: SetupView, key_forgotten: SetupView, switch_on: SetupView, switch_off: SetupView, 
+/**
+ * After "Start over": Steplet's Linux removed.
+ */
+removed: SetupView, };

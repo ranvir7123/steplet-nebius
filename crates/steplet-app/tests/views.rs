@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 use steplet_app::views::{
     Here, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
-    setup_view,
+    setup_failure, setup_line, setup_view,
 };
 use steplet_core::report::check;
+use steplet_run::setup::SetupError;
 use steplet_run::setup::{State, Wsl};
 use steplet_run::{Answer, Event, Question, Reply, RunOutcome, Trust, build_report};
 
@@ -211,8 +212,12 @@ fn setup_says_why_it_cannot_look_yet() {
         "Steplet can look at the tools in its Linux once Windows' Linux feature is there."
     );
     assert_eq!(
+        setup_view(&trouble_state(Some("x"), ready(), true), false, Switch::Off).linux.text,
+        "Steplet could not look at its own Linux. What went wrong:"
+    );
+    assert_eq!(
         text(&trouble_state(Some("x"), ready(), true)),
-        "Steplet could not look at the tools in its Linux. What went wrong:"
+        "Steplet could not look at the tools in its Linux either."
     );
 }
 
@@ -259,4 +264,139 @@ fn live_and_report_views_keep_outside_text_in_pieces() {
     let changed = vec![format!("?? {q}")];
     let report = build_report(&o, Some(&changed), Trust::NotRecorded, &[]);
     assert_eq!(stray_text(&report_view(&report), q), Vec::<String>::new());
+}
+
+#[test]
+fn setup_lines_lose_terminal_codes_but_keep_other_hidden_characters() {
+    let text = |s: &[Seg]| -> String {
+        s.iter()
+            .map(|p| match p {
+                Seg::Text { text } => text.clone(),
+                Seg::Invisible { codepoint } => format!("<U+{codepoint:04X}>"),
+                Seg::Link { .. } => "<link>".into(),
+            })
+            .collect()
+    };
+    // Colour codes, as systemd printed them in Task 6's real install log.
+    assert_eq!(
+        text(&setup_line("\u{1b}[0;1;31mFailed to connect to system scope bus\u{1b}[0m")),
+        "Failed to connect to system scope bus"
+    );
+    // A progress bar redrawn in place shows its last drawing.
+    assert_eq!(text(&setup_line("\u{1b}[2K[===    ] 41.0%\r\u{1b}[2K[=======] 100.0%")), "[=======] 100.0%");
+    // Anything else that shows nothing is still a badge, a lone escape character too.
+    assert_eq!(text(&setup_line("pay\u{200b}ments \u{1b}done")), "pay<U+200B>ments <U+001B>done");
+}
+
+#[test]
+fn a_setup_failure_says_where_it_stopped_in_words() {
+    let f = setup_failure(&SetupError::Step {
+        step: "set up Steplet's Linux",
+        detail: "\u{1b}[0;1;31mE: Failed to fetch\u{1b}[0m".into(),
+    });
+    assert_eq!(
+        f.reason,
+        "Setup stopped while trying to set up Steplet's Linux. Trying again is safe: Steplet picks up where it \
+         stopped. What it printed last:"
+    );
+    assert_eq!(f.detail, Some(vec![Seg::Text { text: "E: Failed to fetch".into() }]), "file text, codes left out");
+    let refused = setup_failure(&SetupError::Refused("Linux name"));
+    assert_eq!(refused.reason, "Steplet will not hand this Linux name to WSL.");
+    assert_eq!(refused.detail, None);
+}
+
+#[test]
+fn every_setup_check_has_plain_words() {
+    let named: Vec<&str> = steplet_app::views::CHECK_WORDS.iter().map(|(check, _)| *check).collect();
+    assert_eq!(named, steplet_run::setup::CHECKS, "one entry for each check look.sh makes, in its order");
+    let state = State {
+        wsl: Wsl::Ready { version: "2.6.3.0".into() },
+        linux: Some("{made-up-id}".into()),
+        missing: vec!["claude-code".into(), "wsl.conf".into()],
+        gate: true,
+        trouble: None,
+    };
+    let view = setup_view(&state, true, Switch::Off);
+    assert_eq!(view.tools.status, LineStatus::Missing);
+    assert_eq!(
+        view.tools.text,
+        "Missing in Steplet's Linux: Claude Code 2.1.220 and WSL's settings for Steplet's Linux."
+    );
+}
+
+#[test]
+fn setup_says_what_to_do_next() {
+    use steplet_app::views::Offer;
+    let st = |wsl: Wsl, linux: bool, missing: &[&str], gate: bool, trouble: Option<&str>| State {
+        wsl,
+        linux: linux.then(|| "{made-up-id}".to_string()),
+        missing: missing.iter().map(|m| m.to_string()).collect(),
+        gate,
+        trouble: trouble.map(str::to_string),
+    };
+    let ready = || Wsl::Ready { version: "2.6.3.0".into() };
+    let next = |s: State| {
+        let v = setup_view(&s, true, Switch::Off);
+        (v.wsl_fix, v.install)
+    };
+    // Windows' own feature: Steplet shows the command to type, and offers no install of its own Linux yet.
+    assert_eq!(
+        next(st(Wsl::Missing, false, &[], false, None)),
+        (Some("wsl --install --no-distribution".into()), Offer::None)
+    );
+    assert_eq!(
+        next(st(Wsl::TooOld { version: "2.0.9.0".into() }, false, &[], false, None)),
+        (Some("wsl --update".into()), Offer::None)
+    );
+    assert_eq!(next(st(ready(), false, &[], false, None)), (None, Offer::Install));
+    assert_eq!(next(st(ready(), true, &["srt"], true, None)), (None, Offer::Finish));
+    assert_eq!(next(st(ready(), true, &[], false, None)), (None, Offer::Finish));
+    assert_eq!(next(st(ready(), true, &[], true, None)), (None, Offer::None));
+    // Steplet could not look: it does not guess, and offers Check again only.
+    assert_eq!(next(st(ready(), false, &[], false, Some("WSL did not answer"))), (None, Offer::None));
+}
+
+#[test]
+fn setup_says_what_went_wrong_once() {
+    let view =
+        setup_view(&trouble_state(Some("WSL did not answer within 60 seconds"), ready(), true), true, Switch::Off);
+    assert!(view.linux.detail.is_some(), "the first line it could not look at says what went wrong");
+    assert_eq!((view.tools.detail.clone(), view.gate.detail.clone()), (None, None), "and only that line");
+    assert_eq!(view.tools.text, "Steplet could not look at the tools in its Linux either.");
+    assert_eq!(view.gate.text, "Steplet could not look at its gate program either.");
+}
+
+#[test]
+fn steplets_own_words_carry_no_decision_codes() {
+    // "(D1)", "(R16)" and the like are the decision log's names, not words for a receiver.
+    let coded = |text: &str| -> Vec<String> {
+        text.split('(')
+            .skip(1)
+            .filter_map(|rest| rest.split(')').next())
+            .filter(|inner| {
+                let letters = inner.chars().take_while(|c| c.is_ascii_uppercase()).count();
+                (1..=2).contains(&letters)
+                    && inner.len() > letters
+                    && inner[letters..].chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase())
+                    && inner[letters..].starts_with(|c: char| c.is_ascii_digit())
+            })
+            .map(str::to_string)
+            .collect()
+    };
+    let example = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/run-tests.steplet")).unwrap();
+    let file = check(&example, NOW).steplet.unwrap();
+    let chooser = serde_json::to_string(&steplet_app::views::chooser(&steplet_run::promises(&file), true)).unwrap();
+    let mut setups = String::new();
+    for (wsl, linux, trouble) in [
+        (Wsl::Missing, false, None),
+        (Wsl::TooOld { version: "2.0.9.0".into() }, false, None),
+        (ready(), false, None),
+        (ready(), true, Some("WSL did not answer")),
+        (ready(), true, None),
+    ] {
+        setups += &serde_json::to_string(&setup_view(&trouble_state(trouble, wsl, linux), false, Switch::Off)).unwrap();
+    }
+    assert_eq!(coded(&chooser), Vec::<String>::new(), "the chooser");
+    assert_eq!(coded(&setups), Vec::<String>::new(), "the setup screen");
+    assert_eq!(coded("as decided (D1) and (R16)"), ["D1", "R16"], "the check itself finds them");
 }

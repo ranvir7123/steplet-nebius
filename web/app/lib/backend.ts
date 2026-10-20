@@ -29,6 +29,8 @@ export interface Backend {
   setupStatus(): Promise<SetupView>;
   /** Installs Steplet's Linux; each line it prints comes through `onSetupLine`. A failure rejects with a FailureView. */
   setupInstall(): Promise<void>;
+  /** "Start over": removes Steplet's own Linux and everything in it. A failure rejects with a FailureView. */
+  setupRemove(): Promise<SetupView>;
   saveKey(key: string): Promise<SetupView>;
   forgetKey(): Promise<SetupView>;
   setOpensStepletFiles(on: boolean): Promise<SetupView>;

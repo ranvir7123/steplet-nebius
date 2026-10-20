@@ -2770,3 +2770,200 @@ clippy exit: 0
 - The "Setup" link in the top bar does nothing yet (Task 11).
 - A red file that also cannot run here still shows red's line "you will type a sentence first" in its banner (Task 14 looks at every state's words).
 - `opening_makes_no_network_request` checks the page only; the cut in `AppState::show` and the pins file's 1 MiB limit have no tests of their own.
+
+## Task 11: the run chooser, setup, the key, and opening `.steplet` files
+
+After Run on the preview, the receiver now sees the **run chooser**: Claude Code, in Steplet's own Linux, with the lines Steplet may promise for this file (each with the tests that back it, behind "The tests that show this"), what leaves the computer, and "Run with Claude Code", or "Set up first" when something is missing; Codex is listed as not available, with its reason. The **Setup** screen (from the "Setup" link at the top of every screen) has a checklist of what a run needs, each line with its state as a word and an icon; the command to type when Windows' Linux feature is missing or too old (Steplet never runs it); one button that installs Steplet's Linux, or finishes setting it up, with what setup prints; "Try again" and "Start over" (which asks first) when it fails; the key box; and the switch "Open .steplet files with Steplet". The Rust side: `src/key.rs` keeps the key in Windows' Credential Manager (entry `Steplet/anthropic-api-key`, generic, this computer only); `src/register.rs` is the switch, under `HKEY_CURRENT_USER\Software\Classes` only; `src/help.rs` opens Steplet's two help pages; `src/setup.rs` joins them to the runner's `setup::{look, install, remove}`. The real double-click was measured with your yes (Z4).
+
+### Changes from the plan, recorded here
+
+- **One more command, `setup_remove`,** for "Start over" (the plan's list had no command for it). It removes only Steplet's own Linux (`wsl --unregister steplet`), after the screen asks; the saved scenarios gained the screen after it (`SetupChanges.removed`).
+- **The screens decide nothing on Setup either:** Rust says which command to type (`wsl_fix`: `wsl --install --no-distribution`, or `wsl --update` when too old) and whether the button offers Install, Finish or nothing (`install`). Test: `setup_says_what_to_do_next`.
+- **What setup prints is cleaned of the terminal's colour codes** (`ESC [` … a letter, as systemd printed in Task 6's real install log) and a line drawn again in place shows its last drawing; every other character that shows nothing is still a badge. Test: `setup_lines_lose_terminal_codes_but_keep_other_hidden_characters`.
+- **A failed setup says where it stopped in plain words** ("Setup stopped while trying to set up Steplet's Linux. Trying again is safe: Steplet picks up where it stopped. What it printed last:"), with the end of what it printed as file text. Test: `a_setup_failure_says_where_it_stopped_in_words`.
+- **The missing items are named in plain words** (for example "Claude Code 2.1.220 and WSL's settings for Steplet's Linux", not `claude-code, wsl.conf`): one entry for each of the runner's checks, which became public (`steplet_run::setup::CHECKS`) so a test can hold the two lists together. Test: `every_setup_check_has_plain_words`.
+- **When Steplet could not look, what went wrong is said once,** on the first line, not three times. Test: `setup_says_what_went_wrong_once` (and `setup_says_why_it_cannot_look_yet` now expects that).
+- **Steplet's own sentences carry no decision codes:** Codex's reason ended in "(D1)". Test: `steplets_own_words_carry_no_decision_codes`.
+- **The key:** a paste is trimmed of spaces and line breaks around it; an empty key, one with spaces or hidden characters inside, or one over 512 characters is refused in Steplet's words, which never repeat what was typed. `load` says when Windows could not read the entry, rather than calling that "no key". The runner's key type gained `is(text)`, so a test can compare a key without the key being handed out. Test: `what_is_not_a_key_is_refused_and_nothing_is_saved`.
+- **The gate program sits next to Steplet's own program** (`steplet-gate.exe`), and Steplet's Linux keeps its disk in `%LOCALAPPDATA%\Steplet\wsl`.
+- **The commands that wait on WSL run off the window's own thread** (Tauri's `async` commands), so the window never freezes while Steplet looks or installs. Only one install or removal runs at a time.
+- **Help pages: a fixed list of two,** Microsoft's WSL page and Anthropic's key page, opened by Windows in the browser. One more feature of the `windows-sys` library is switched on for this (`Win32_UI_WindowsAndMessaging`); no download, the lock file did not change. Test: `only_steplets_own_help_pages_open`.
+- **Steplet takes the first start argument that is not a flag** as the file to open (a double-click gives the file's path).
+- **Six screen tests, not the plan's five:** `a_runner_that_is_not_set_up_sends_you_to_setup` was added. And one more real-window test: the real Setup screen looks at this laptop.
+
+### The tests first
+
+```
+> cargo test -p steplet-app --offline --test key --test register
+error[E0432]: unresolved import `steplet_app::register`
+ --> crates\steplet-app\tests\register.rs:5:5
+error[E0432]: unresolved import `steplet_app::key`
+ --> crates\steplet-app\tests\key.rs:5:5
+error[E0432]: unresolved import `steplet_app::setup`
+ --> crates\steplet-app\tests\key.rs:6:5
+error: could not compile `steplet-app` (test "key") due to 2 previous errors
+error: could not compile `steplet-app` (test "register") due to 1 previous error
+> npm --prefix web run build:screens; npm --prefix web test -- chooser setup
+  x  1 [screens] › app\tests\chooser.spec.ts:20:1 › codex_is_shown_unavailable_with_its_reason (5.8s)
+  x  2 [screens] › app\tests\setup.spec.ts:17:1 › wsl_missing_shows_the_command_to_type (5.8s)
+  x  4 [screens] › app\tests\setup.spec.ts:25:1 › install_progress_then_failure_offers_try_again_and_start_over (5.5s)
+  x  3 [screens] › app\tests\chooser.spec.ts:28:1 › only_the_lines_promises_returns_are_shown (5.7s)
+  x  5 [screens] › app\tests\setup.spec.ts:42:1 › the_key_box_never_shows_a_saved_key (5.4s)
+  x  6 [screens] › app\tests\chooser.spec.ts:46:1 › a_runner_that_is_not_set_up_sends_you_to_setup (5.3s)
+    Error: expect(locator).toBeVisible() failed
+  6 failed
+```
+
+The words tests, each before its change:
+
+```
+> cargo test -p steplet-app --offline --test views
+error[E0432]: unresolved imports `steplet_app::views::setup_failure`, `steplet_app::views::setup_line`
+error[E0425]: cannot find value `CHECK_WORDS` in module `steplet_app::views`
+> cargo test -p steplet-app --offline --test views        (setup_says_what_to_do_next added)
+error[E0432]: unresolved import `steplet_app::views::Offer`
+error[E0609]: no field `wsl_fix` on type `SetupView`
+error[E0609]: no field `install` on type `SetupView`
+> cargo test -p steplet-app --offline --test views        (the last two added, after looking at the screens)
+test setup_says_what_went_wrong_once ... FAILED
+test steplets_own_words_carry_no_decision_codes ... FAILED
+  left: (Some([Text { text: "WSL did not answer within 60 seconds" }]), Some([Text { text: "WSL did not answer within 60 seconds" }]))
+ right: (None, None)
+  left: ["D1"]
+ right: []
+test result: FAILED. 12 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+```
+
+### Looking at the screens, and what that found
+
+Every Chooser state (ready with no sites, ready with 15 sites, needs setup, WSL missing) and every Setup state (nothing done, WSL missing, WSL too old, installing, install failed, all ready, key saved, switch broken, could not look) was screenshotted in light and dark, at 1100 and 560 wide (52 pictures, by a temporary test, then deleted; Task 14 makes the lasting set), and looked at. What was wrong, and what changed:
+
+1. **Each checklist line said its subject twice** (a title "Steplet's own Linux" above "Steplet's own Linux is not installed yet."). The titles are gone; Rust's sentence says it all.
+2. **The install log squeezed runs of spaces,** so a progress bar lost its shape. Each line is now drawn as a block that keeps its spaces.
+3. **"Check again" sat on a second row of buttons** under "Try again" and "Start over". It is now beside the panel's heading.
+4. **When Steplet could not look, the same error was printed three times,** and **Codex's reason ended in "(D1)"** (both fixed in Rust, tests above).
+5. **"Finish setting up" carried Install's note** ("downloads Ubuntu 26.04 … about 1 to 2 GB"), which is untrue once Steplet's Linux is there. It now says it adds what is missing and is safe to repeat.
+
+Right as it was: the chooser's lines, ticks and the 15 sites as file-text chips; "Set up first"; the Codex panel; the WSL-missing box with the command and Microsoft's page; the installing state; the failure box with git's own words as file text; the key box ("Saved", empty password box, "Forget key"); the broken-switch warning; the narrow layout (each state chip above its sentence).
+
+### The tests pass
+
+```
+> cargo test -p steplet-app --offline --no-fail-fast -- --skip file_type_switch_round_trip
+     Running tests\fixtures.rs (target\debug\deps\fixtures-69f45a4a78dd73f9.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+     Running tests\help.rs (target\debug\deps\help-8c6bdabcdb2c6b36.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\key.rs (target\debug\deps\key-7998c8650d45633c.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\open.rs (target\debug\deps\open-1ff61e9983282f36.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests\pins.rs (target\debug\deps\pins-ba69d7f5516c4ba8.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\register.rs (target\debug\deps\register-b7fd4615a3017ff0.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+     Running tests\shell.rs (target\debug\deps\shell-52d52ba15b88d342.exe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\views.rs (target\debug\deps\views-5ef4c53d6ec120ac.exe)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+app exit: 0
+> cmdkey /list        (after the key tests: no made-up entry left)
+entries listed: 9
+no Steplet entries
+> npm --prefix web run build:screens; npm --prefix web test -- chooser setup preview
+  18 passed (6.7s)
+> cargo test -p steplet-run --offline
+19 summary lines: 114 passed, 0 failed, 40 ignored
+run exit: 0
+> npm --prefix web run check
+1792531284958 COMPLETED 146 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 66 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -j 4 -- -D warnings
+clippy exit: 0
+```
+
+(The app's empty test lines are left out. The first build of this task failed with "The paging file is too small for this operation to complete" and a failed memory allocation: this laptop had about 55 of its 63 GB of memory spoken for (WSL, the browser, other windows), and cargo builds many test programs at once. Every build since uses four jobs at a time, `-j 4`, and passed.)
+
+**The registry test, with your yes (Z4, 21 Oct 2026):**
+
+```
+> cargo test -p steplet-app --offline --test register
+test file_type_switch_round_trip ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+> reg query HKCU\Software\Classes\.steplet-test ; reg query HKCU\Software\Classes\Steplet.TestFile ; reg query HKCU\Software\Classes\Steplet.OtherTestFile
+ERROR: The system was unable to find the specified registry key or value.
+ERROR: The system was unable to find the specified registry key or value.
+ERROR: The system was unable to find the specified registry key or value.
+```
+
+### The real window
+
+The real Setup screen, in the `e2e` build, looked at this laptop for real (it changes nothing; it may start Steplet's Linux to look inside):
+
+```
+> target\debug\steplet.exe started from C:\Windows\System32; npm --prefix web test -- real-open
+saved docs/screens/phase-4/real-open-empty-light.png
+  ok 1 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (163ms)
+saved docs/screens/phase-4/real-preview-light.png
+  ok 2 [real] › app\tests\real-open.spec.ts:25:1 › the real window opens a file and shows what it asks for (256ms)
+saved docs/screens/phase-4/real-setup-light.png
+setup line: Ready |  | Windows' Linux feature (WSL 2.6.3.0).
+setup line: Ready |  | Steplet's own Linux is installed.
+setup line: Ready |  | Its tools are there: git, Python, Claude Code and the rest.
+setup line: Missing |  | The gate program for this Steplet is not in its Linux yet.
+  ok 3 [real] › app\tests\real-open.spec.ts:50:1 › the real window's Setup looks at this computer (2.6s)
+  ok 4 [real] › app\tests\real-open.spec.ts:73:1 › the real window reaches nothing outside the app (3.1s)
+  4 passed (10.2s)
+```
+
+The gate line is right: this build's gate program (`target\debug\steplet-gate.exe`) has never been put on Steplet's Linux disk (the runner's tests use their own release build), so the screen offers "Finish setting up Steplet's Linux". Task 15 does that.
+
+### Step 5: the real double-click, measured
+
+Before the switch, nothing in Windows knew `.steplet` files:
+
+```
+HKCU .steplet:
+  not there
+HKCU Steplet.File:
+  not there
+Explorer's own choice for .steplet:
+  nothing recorded
+HKLM .steplet:
+  not there
+```
+
+With the normal build running, you pressed Setup and ticked "Open .steplet files with Steplet". Then Windows' own "open" path, the one a double-click takes:
+
+```
+HKCU .steplet (default): Steplet.File
+HKCU Steplet.File (default): Steplet task file
+open command: "C:\dev\runFile\.claude\worktrees\steplet-phase4-build-88af2b\target\debug\steplet.exe" "%1"
+Steplet processes before: 1
+> Invoke-Item examples\run-tests.steplet
+Steplet processes after Invoke-Item: 2
+  pid 36168, started 03:12:19, window: ''
+  pid 50932, started 03:14:38, window: 'Steplet'
+OpenWith dialogs open: 0
+```
+
+**Steplet opened the file straight away, in a window of its own titled "Steplet", and Windows did not ask which app to use.** The new window showed the file's preview (`docs/screens/phase-4/real-double-click-dark.png`, captured from the screen and cropped to Steplet's window; Windows was in dark mode by then). In that capture the page was scrolled down by about a hundred pixels, so the colour banner was half hidden. It did not happen again: started with the file as Windows starts it, and again through `Invoke-Item` (the e2e build, read through its debugging port), the page stood at the top each time:
+
+```
+0 {"scrollY":0,"innerH":780,"docH":1625,"active":"BODY.","anchor":"auto"}
+500 {"scrollY":0,"innerH":780,"docH":1625,"active":"BODY.","anchor":"auto"}
+2000 {"scrollY":0,"innerH":780,"docH":1625,"active":"BODY.","anchor":"auto"}
+```
+
+(the same three lines both times). The cause of the one scrolled window is not known; a scroll of the mouse over the new window would explain it. Task 14 looks again. The switch is still on, pointing at this work folder's build; turn it off in Setup when you no longer want it.
+
+### What this task did not verify
+
+- **A real install from the Setup screen.** The install and "Start over" buttons were tried only against the stand-in backend; the runner's `install` itself was measured in Task 6 (Z3).
+- **The real key box.** Saving a key through the real window was not tried (no key is saved now); `key.rs` was tested on made-up entries.
+- **The help links in the real window:** `ShellExecuteW` was not called in a test (it would open your browser).
+- **The scrolled window seen once after the double-click** (above).
+- **A second Windows user, and a Windows where another app already owns `.steplet` files** (Explorer's own choice would win over Steplet's entry).

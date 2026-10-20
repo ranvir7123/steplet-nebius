@@ -15,7 +15,7 @@ use steplet_app::open::preview_file;
 use steplet_app::pins::Pins;
 use steplet_app::views::{
     self, ChooserView, Fixture, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView, Switch,
-    failure, line, progress_view, question_view, report_view, setup_view,
+    failure, progress_view, question_view, report_view, setup_view,
 };
 use steplet_core::header::Steplet;
 use steplet_core::identity::Pin;
@@ -156,7 +156,7 @@ fn setup_all_ready(switch: Switch) -> SetupView {
     setup_view(&state(ready_wsl(), true, &[], true, None), true, switch)
 }
 
-/// Lines as Linux programs print them during setup, escape characters and all (file text).
+/// Lines as Linux programs print them during setup, escape codes and all, as the Setup log shows them (file text).
 fn setup_lines() -> Vec<views::Shown> {
     [
         "Installing: Ubuntu 26.04 LTS",
@@ -169,7 +169,7 @@ fn setup_lines() -> Vec<views::Shown> {
         "added 1 package in 9s",
     ]
     .iter()
-    .map(|l| line(l))
+    .map(|l| views::setup_line(l))
     .collect()
 }
 
@@ -505,14 +505,13 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         "setup-install-failed",
         Fixture {
             setup_lines: setup_lines()[..4].to_vec(),
-            setup_error: Some(failure(
-                "Setting up Steplet's Linux stopped at \"install the tools\". Try again: setup is safe to repeat. What \
-                 it printed last:",
-                Some(
+            setup_error: Some(views::setup_failure(&steplet_run::setup::SetupError::Step {
+                step: "set up Steplet's Linux",
+                detail:
                     "E: Failed to fetch http://archive.ubuntu.com/ubuntu/pool/main/g/git/git_2.51.0-1ubuntu1_amd64.deb \
-                     Temporary failure resolving 'archive.ubuntu.com'",
-                ),
-            )),
+                         Temporary failure resolving 'archive.ubuntu.com'"
+                        .into(),
+            })),
             ..setup(nothing(), false, Switch::Off)
         },
     );

@@ -95,6 +95,10 @@ export const backend: Backend = {
     if (!t.installEnds) return never();
     if (f.setup_error) throw f.setup_error;
   },
+  async setupRemove() {
+    setup = (await changes()).removed;
+    return setup;
+  },
   async saveKey() {
     setup = (await changes()).key_saved;
     return setup;

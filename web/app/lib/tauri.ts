@@ -14,6 +14,7 @@ export const backend: Backend = {
   chooser: () => invoke<ChooserView>("chooser"),
   setupStatus: () => invoke<SetupView>("setup_status"),
   setupInstall: () => invoke<void>("setup_install"),
+  setupRemove: () => invoke<SetupView>("setup_remove"),
   saveKey: (key) => invoke<SetupView>("save_key", { key }),
   forgetKey: () => invoke<SetupView>("forget_key"),
   setOpensStepletFiles: (on) => invoke<SetupView>("set_opens_steplet_files", { on }),

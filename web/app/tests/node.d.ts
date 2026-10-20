@@ -3,3 +3,6 @@
 declare module "node:url" {
   export function fileURLToPath(url: string | URL): string;
 }
+declare module "node:fs" {
+  export function readFileSync(path: string | URL, encoding: "utf8"): string;
+}

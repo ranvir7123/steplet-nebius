@@ -382,7 +382,7 @@ pub struct ChooserView {
 const DATA_LEAVES: &str =
     "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key.";
 const CODEX_REASON: &str = "Not available for files that run code on this computer: Steplet has not shown that Codex \
-                            keeps a task's programs away from the other programs on this computer (D1).";
+                            keeps a task's programs away from the other programs on this computer.";
 
 /// The chooser for a file, with the runner's own lines for it (`steplet_run::promises`).
 pub fn chooser(promises: &[Promise], ready: bool) -> ChooserView {
@@ -445,6 +445,47 @@ pub struct SetupView {
     pub opens_steplet_files: Switch,
     /// Everything a run needs is there (the switch is not needed to run).
     pub ready: bool,
+    /// When Windows' Linux feature is missing or too old: the command the receiver types in a terminal opened as
+    /// administrator. Steplet never runs it.
+    pub wsl_fix: Option<String>,
+    /// Whether Setup offers to install Steplet's Linux, or to finish setting it up.
+    pub install: Offer,
+}
+
+/// What the Setup screen's one button offers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Offer {
+    /// Nothing to install, or Steplet cannot tell yet (Windows' feature first, or it could not look).
+    None,
+    /// Steplet's Linux is not there.
+    Install,
+    /// Steplet's Linux is there but lacks something; setup is safe to repeat.
+    Finish,
+}
+
+/// Plain words for each check `look.sh` makes (`steplet_run::setup::CHECKS`, in its order), for the line that says
+/// what is missing.
+pub const CHECK_WORDS: &[(&str, &str)] = &[
+    ("git", "git"),
+    ("python3", "Python"),
+    ("python3-venv", "Python's venv module"),
+    ("build-essential", "the tools that build programs from source"),
+    ("ca-certificates", "the certificates that check web sites"),
+    ("bubblewrap", "bubblewrap, part of the fence"),
+    ("socat", "socat, part of the fence"),
+    ("ripgrep", "ripgrep, which the fence needs"),
+    ("nodejs", "Node.js"),
+    ("npm", "npm"),
+    ("claude-code", "Claude Code 2.1.220"),
+    ("srt", "the fence program srt 0.0.77"),
+    ("wsl.conf", "WSL's settings for Steplet's Linux"),
+    ("steplet-account", "the steplet account the agent runs as"),
+    ("folders", "Steplet's own folders"),
+];
+
+fn check_words(check: &str) -> &str {
+    CHECK_WORDS.iter().find(|(c, _)| *c == check).map_or(check, |(_, words)| words)
 }
 
 /// The setup checklist from what `steplet_run::setup::look` saw, whether a key is saved, and the switch.
@@ -461,44 +502,61 @@ pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Sw
     };
     let linux_there = state.linux.is_some();
     // A line Steplet cannot look at, and why, from the first cause in order: the feature, the trouble, its Linux.
-    let not_seen = |what: &str| match (&state.wsl, state.trouble.as_deref()) {
+    // What went wrong is said once, on the first line Steplet could not look at.
+    let not_seen = |what: &str, first: bool| match (&state.wsl, state.trouble.as_deref()) {
         (Wsl::Missing, _) => {
             said(LineStatus::Unknown, format!("Steplet can look at {what} once Windows' Linux feature is there."))
         }
         (Wsl::TooOld { .. }, _) => {
             said(LineStatus::Unknown, format!("Steplet can look at {what} once Windows' Linux feature is updated."))
         }
-        (_, Some(trouble)) => LineView {
+        (_, Some(trouble)) if first => LineView {
             status: LineStatus::Unknown,
             text: format!("Steplet could not look at {what}. What went wrong:"),
             detail: Some(shown(trouble)),
         },
+        (_, Some(_)) => said(LineStatus::Unknown, format!("Steplet could not look at {what} either.")),
         (_, None) => said(LineStatus::Unknown, format!("Steplet can look at {what} once its Linux is installed.")),
     };
     let seen = matches!(state.wsl, Wsl::Ready { .. }) && state.trouble.is_none();
     let linux = if !seen {
-        not_seen("its own Linux")
+        not_seen("its own Linux", true)
     } else if linux_there {
         said(LineStatus::Ready, "Steplet's own Linux is installed.".into())
     } else {
         said(LineStatus::Missing, "Steplet's own Linux is not installed yet.".into())
     };
     let tools = if !seen || !linux_there {
-        not_seen("the tools in its Linux")
+        not_seen("the tools in its Linux", false)
     } else if state.missing.is_empty() {
         said(LineStatus::Ready, "Its tools are there: git, Python, Claude Code and the rest.".into())
     } else {
-        said(LineStatus::Missing, format!("Missing in Steplet's Linux: {}.", state.missing.join(", ")))
+        let words: Vec<&str> = state.missing.iter().map(|m| check_words(m)).collect();
+        said(LineStatus::Missing, format!("Missing in Steplet's Linux: {}.", and_list(&words)))
     };
     let gate = if !seen || !linux_there {
-        not_seen("its gate program")
+        not_seen("its gate program", false)
     } else if state.gate {
         said(LineStatus::Ready, "The gate program for this Steplet is in its Linux.".into())
     } else {
         said(LineStatus::Missing, "The gate program for this Steplet is not in its Linux yet.".into())
     };
     let ready = [&wsl, &linux, &tools, &gate].iter().all(|l| l.status == LineStatus::Ready) && key_saved;
-    SetupView { wsl, linux, tools, gate, key_saved, opens_steplet_files: switch, ready }
+    let wsl_fix = match state.wsl {
+        Wsl::Missing => Some("wsl --install --no-distribution".to_string()),
+        Wsl::TooOld { .. } => Some("wsl --update".to_string()),
+        Wsl::Ready { .. } => None,
+    };
+    let install = if !seen {
+        Offer::None
+    } else if !linux_there {
+        Offer::Install
+    } else if !state.missing.is_empty() || !state.gate {
+        Offer::Finish
+    } else {
+        Offer::None
+    };
+    SetupView { wsl, linux, tools, gate, key_saved, opens_steplet_files: switch, ready, wsl_fix, install }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -650,6 +708,8 @@ pub struct SetupChanges {
     pub key_forgotten: SetupView,
     pub switch_on: SetupView,
     pub switch_off: SetupView,
+    /// After "Start over": Steplet's Linux removed.
+    pub removed: SetupView,
 }
 
 impl SetupChanges {
@@ -659,6 +719,17 @@ impl SetupChanges {
             key_forgotten: setup_view(state, false, switch),
             switch_on: setup_view(state, key_saved, Switch::On),
             switch_off: setup_view(state, key_saved, Switch::Off),
+            removed: setup_view(
+                &steplet_run::setup::State {
+                    linux: None,
+                    missing: Vec::new(),
+                    gate: false,
+                    trouble: None,
+                    ..state.clone()
+                },
+                key_saved,
+                switch,
+            ),
         }
     }
 }
@@ -719,6 +790,50 @@ pub struct FailureView {
 
 pub fn failure(reason: &str, detail: Option<&str>) -> FailureView {
     FailureView { reason: reason.into(), detail: detail.map(shown) }
+}
+
+/// Why setup stopped, in Steplet's words, with the end of what the failed step printed as file text.
+pub fn setup_failure(e: &steplet_run::setup::SetupError) -> FailureView {
+    use steplet_run::setup::SetupError;
+    match e {
+        SetupError::Refused(what) => failure(&format!("Steplet will not hand this {what} to WSL."), None),
+        SetupError::Step { step, detail } => {
+            let detail = without_terminal_codes(detail);
+            let said = if detail.trim().is_empty() { "" } else { " What it printed last:" };
+            FailureView {
+                reason: format!(
+                    "Setup stopped while trying to {step}. Trying again is safe: Steplet picks up where it stopped.{said}"
+                ),
+                detail: (!said.is_empty()).then(|| shown(&detail)),
+            }
+        }
+    }
+}
+
+/// One line a setup program printed, as the Setup log shows it (file text): a line drawn again in place (`\r`)
+/// shows its last drawing, and the terminal's colour and cursor codes (`ESC [`, numbers, a letter) are left out.
+/// Anything else that shows nothing is a badge, as in all file text.
+pub fn setup_line(raw: &str) -> Shown {
+    line(&without_terminal_codes(raw.rsplit('\r').next().unwrap_or(raw)))
+}
+
+/// `text` without the terminal's control sequences: `ESC [`, then its numbers and signs, then one letter or sign.
+fn without_terminal_codes(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            for n in chars.by_ref() {
+                if ('@'..='~').contains(&n) {
+                    break;
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The screen's view of one piece of live progress. `call` is the tool name and request of the call a result belongs

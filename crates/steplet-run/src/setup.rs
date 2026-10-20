@@ -43,7 +43,7 @@ const RESTART_LIMIT: Duration = Duration::from_secs(2 * 60);
 const REMOVE_LIMIT: Duration = Duration::from_secs(10 * 60);
 /// What `look.sh` checks, in its order, each of which must say `ok`: the packages `setup.sh` installs, then Claude
 /// Code, srt, WSL's settings for the Linux, the `steplet` account and Steplet's folders. The gate is looked at apart.
-const CHECKS: [&str; 15] = [
+pub const CHECKS: [&str; 15] = [
     "git",
     "python3",
     "python3-venv",

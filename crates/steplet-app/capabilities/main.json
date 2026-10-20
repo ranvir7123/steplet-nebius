@@ -7,6 +7,14 @@
     "core:event:allow-unlisten",
     "allow-initial-preview",
     "allow-open-bytes",
-    "allow-start-note"
+    "allow-start-note",
+    "allow-chooser",
+    "allow-setup-status",
+    "allow-setup-install",
+    "allow-setup-remove",
+    "allow-save-key",
+    "allow-forget-key",
+    "allow-set-opens-steplet-files",
+    "allow-open-help"
   ]
 }

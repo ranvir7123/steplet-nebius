@@ -3276,7 +3276,7 @@
       ],
       "data_leaves": "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
     },
-    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer (D1)."
+    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer."
   },
   "setup": {
     "wsl": {
@@ -3301,7 +3301,9 @@
     },
     "key_saved": true,
     "opens_steplet_files": "off",
-    "ready": true
+    "ready": true,
+    "wsl_fix": null,
+    "install": "none"
   },
   "setup_lines": [],
   "setup_error": null,

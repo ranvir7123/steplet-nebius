@@ -27,7 +27,9 @@
     },
     "key_saved": false,
     "opens_steplet_files": "off",
-    "ready": false
+    "ready": false,
+    "wsl_fix": "wsl --update",
+    "install": "none"
   },
   "setup_lines": [],
   "setup_error": null,
@@ -55,7 +57,9 @@
       },
       "key_saved": true,
       "opens_steplet_files": "off",
-      "ready": false
+      "ready": false,
+      "wsl_fix": "wsl --update",
+      "install": "none"
     },
     "key_forgotten": {
       "wsl": {
@@ -80,7 +84,9 @@
       },
       "key_saved": false,
       "opens_steplet_files": "off",
-      "ready": false
+      "ready": false,
+      "wsl_fix": "wsl --update",
+      "install": "none"
     },
     "switch_on": {
       "wsl": {
@@ -105,7 +111,9 @@
       },
       "key_saved": false,
       "opens_steplet_files": "on",
-      "ready": false
+      "ready": false,
+      "wsl_fix": "wsl --update",
+      "install": "none"
     },
     "switch_off": {
       "wsl": {
@@ -130,7 +138,36 @@
       },
       "key_saved": false,
       "opens_steplet_files": "off",
-      "ready": false
+      "ready": false,
+      "wsl_fix": "wsl --update",
+      "install": "none"
+    },
+    "removed": {
+      "wsl": {
+        "status": "missing",
+        "text": "Windows' Linux feature is version 2.0.9.0; Steplet needs 2.6.3 or newer.",
+        "detail": null
+      },
+      "linux": {
+        "status": "unknown",
+        "text": "Steplet can look at its own Linux once Windows' Linux feature is updated.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once Windows' Linux feature is updated.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once Windows' Linux feature is updated.",
+        "detail": null
+      },
+      "key_saved": false,
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": "wsl --update",
+      "install": "none"
     }
   },
   "progress": [],

@@ -24,6 +24,7 @@ const PAIRS = [
   ...["green", "amber", "red", "blocked"].map((o) => [`${o}-fg`, `${o}-bg`, 4.5]),
   ["badge-fg", "badge-bg", 4.5],
   ["red-fg", "bg", 4.5], // the preview's changed-key warning, on the page itself
+  ["green-fg", "surface", 4.5], // "Saved", "Setup finished" and the chooser's ticks, in a panel
   ...SURFACES.map((bg) => ["focus", bg, 3]),
   ...SURFACES.map((bg) => ["control-border", bg, 3]),
 ];

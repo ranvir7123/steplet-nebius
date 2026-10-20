@@ -52,6 +52,11 @@ impl ApiKey {
     pub(crate) fn text(&self) -> &str {
         &self.0
     }
+
+    /// Whether this is the key `text`, without handing the key out.
+    pub fn is(&self, text: &str) -> bool {
+        self.0 == text
+    }
 }
 
 impl fmt::Debug for ApiKey {

@@ -9,8 +9,12 @@ use tauri::{Url, WebviewWindowBuilder};
 
 include!("commands.rs");
 
+pub mod help;
+pub mod key;
 pub mod open;
 pub mod pins;
+pub mod register;
+pub mod setup;
 pub mod views;
 
 /// WebView2's start arguments for every build.
@@ -53,6 +57,10 @@ pub struct AppState {
     initial: std::sync::Mutex<Option<std::path::PathBuf>>,
     /// The file on screen: its bytes as read, so Run can check they are the ones previewed (row 30, Task 12).
     opened: std::sync::Mutex<Option<Vec<u8>>>,
+    /// What the last look at this computer's setup saw, so saving the key or turning the switch does not look again.
+    looked: std::sync::Mutex<Option<steplet_run::setup::State>>,
+    /// An install or a removal of Steplet's Linux is going on.
+    busy: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -69,6 +77,30 @@ impl AppState {
         let view = open::preview_file(&raw, open::now_unix(), &self.pins());
         *self.opened.lock().unwrap_or_else(|e| e.into_inner()) = Some(raw);
         view
+    }
+
+    /// Looks at this computer's setup again and keeps what it saw.
+    fn look(&self) -> steplet_run::setup::State {
+        let state = setup::look();
+        *self.looked.lock().unwrap_or_else(|e| e.into_inner()) = Some(state.clone());
+        state
+    }
+
+    /// The Setup screen, from the last look (or a new one if there was none).
+    fn setup_view(&self) -> views::SetupView {
+        let last = self.looked.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        setup::view(&last.unwrap_or_else(|| self.look()), key::TARGET, setup::switch())
+    }
+
+    /// Runs `work` unless an install or a removal is already going on.
+    fn alone<T>(&self, work: impl FnOnce() -> Result<T, views::FailureView>) -> Result<T, views::FailureView> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if self.busy.swap(true, SeqCst) {
+            return Err(views::failure("Steplet is already changing its Linux. Wait for that to finish.", None));
+        }
+        let done = work();
+        self.busy.store(false, SeqCst);
+        done
     }
 }
 
@@ -95,16 +127,102 @@ fn start_note() -> Option<String> {
     None
 }
 
+/// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now.
+/// Commands that may wait on WSL run off the window's own thread (`async`), so the window never freezes.
+#[tauri::command(async)]
+fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> {
+    let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
+    let file = steplet_core::report::check(&raw, open::now_unix())
+        .steplet
+        .ok_or("Steplet could not read this file, so it cannot run.")?;
+    let ready = setup::view(&state.look(), key::TARGET, setup::switch()).ready;
+    Ok(views::chooser(&steplet_run::promises(&file), ready))
+}
+
+/// The Setup screen, from a new look at this computer ("Check again" too).
+#[tauri::command(async)]
+fn setup_status(state: tauri::State<AppState>) -> views::SetupView {
+    setup::view(&state.look(), key::TARGET, setup::switch())
+}
+
+/// Installs Steplet's Linux, or finishes an install that stopped; each line it prints is a `setup-line` event.
+#[tauri::command(async)]
+fn setup_install(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<(), views::FailureView> {
+    use tauri::Emitter;
+    state.alone(|| {
+        setup::install(&|line| {
+            let _ = app.emit("setup-line", line);
+        })
+    })
+}
+
+/// "Start over": removes Steplet's Linux and everything in it (nothing of the receiver's is in it).
+#[tauri::command(async)]
+fn setup_remove(state: tauri::State<AppState>) -> Result<views::SetupView, views::FailureView> {
+    state.alone(setup::remove)?;
+    Ok(setup::view(&state.look(), key::TARGET, setup::switch()))
+}
+
+/// Saves the receiver's key in Credential Manager. The answer says only that a key is saved.
+#[tauri::command(async)]
+fn save_key(state: tauri::State<AppState>, key: String) -> Result<views::SetupView, String> {
+    key::save(key::TARGET, &key)?;
+    Ok(state.setup_view())
+}
+
+#[tauri::command(async)]
+fn forget_key(state: tauri::State<AppState>) -> Result<views::SetupView, String> {
+    key::forget(key::TARGET)
+        .map_err(|e| format!("Steplet could not remove the key from Windows' Credential Manager. Windows says: {e}"))?;
+    Ok(state.setup_view())
+}
+
+/// Turns "Open .steplet files with Steplet" on or off, for this Windows user only (J4 A).
+#[tauri::command(async)]
+fn set_opens_steplet_files(state: tauri::State<AppState>, on: bool) -> Result<views::SetupView, String> {
+    let exe = setup::this_program().ok_or("Windows did not say where Steplet's own program is.")?;
+    let changed = if on {
+        register::turn_on(register::EXT, register::PROG_ID, &exe)
+    } else {
+        register::turn_off(register::EXT, register::PROG_ID)
+    };
+    changed.map_err(|e| format!("Steplet could not change what opens .steplet files. Windows says: {e}"))?;
+    Ok(state.setup_view())
+}
+
+/// Opens one of Steplet's own help pages in the browser, from a fixed list (S11).
+#[tauri::command]
+fn open_help(topic: String) -> Result<(), String> {
+    help::open(&topic)
+}
+
 /// Starts the app and returns when its window closes.
 pub fn run() {
     let state = AppState {
         pins: pins::location(),
-        initial: std::sync::Mutex::new(std::env::args_os().nth(1).map(std::path::PathBuf::from)),
+        // Windows starts Steplet with the file to open (a double-click); anything else is not a file.
+        initial: std::sync::Mutex::new(
+            std::env::args_os().skip(1).find(|a| !a.to_string_lossy().starts_with('-')).map(std::path::PathBuf::from),
+        ),
         opened: std::sync::Mutex::new(None),
+        looked: std::sync::Mutex::new(None),
+        busy: std::sync::atomic::AtomicBool::new(false),
     };
     tauri::Builder::default()
         .manage(state)
-        .invoke_handler(tauri::generate_handler![initial_preview, open_bytes, start_note])
+        .invoke_handler(tauri::generate_handler![
+            initial_preview,
+            open_bytes,
+            start_note,
+            chooser,
+            setup_status,
+            setup_install,
+            setup_remove,
+            save_key,
+            forget_key,
+            set_opens_steplet_files,
+            open_help
+        ])
         .setup(|app| {
             let config = app
                 .config()
