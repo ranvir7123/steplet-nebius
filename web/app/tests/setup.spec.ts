@@ -51,3 +51,26 @@ test("the_key_box_never_shows_a_saved_key", async ({ page }) => {
   await expect(box).toHaveValue("");
   expect(await page.content()).not.toContain("STEPLET-TEST");
 });
+
+test("a_switch_that_could_not_change_shows_how_it_stands", async ({ page }) => {
+  // Windows refused the change: the box must not show it as done.
+  await setupOf(page, "setup-switch-fails");
+  const box = page.getByLabel("Open .steplet files with Steplet");
+  await expect(box).not.toBeChecked();
+  await box.click();
+  await expect(page.getByRole("alert")).toContainText(saved("setup-switch-fails").switch_error!);
+  await expect(box).not.toBeChecked();
+});
+
+test("leaving_setup_during_an_install_keeps_it_going", async ({ page }) => {
+  await setupOf(page, "setup-installing");
+  await page.getByRole("button", { name: "Install Steplet's Linux" }).click();
+  const lines = saved("setup-installing").setup_lines.length;
+  await expect(page.getByRole("log").locator("[data-from-file]")).toHaveCount(lines);
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("button", { name: "Setup" }).click();
+  // Coming back shows the same install, still going, with what it printed; nothing offers to start another.
+  await expect(page.getByText("Steplet is changing its Linux. This can take several minutes…")).toBeVisible();
+  await expect(page.getByRole("log").locator("[data-from-file]")).toHaveCount(lines);
+  await expect(page.getByRole("button", { name: /Install Steplet/ })).toHaveCount(0);
+});

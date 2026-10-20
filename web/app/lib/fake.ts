@@ -108,6 +108,8 @@ export const backend: Backend = {
     return setup;
   },
   async setOpensStepletFiles(on) {
+    const f = await fixture();
+    if (f.switch_error) throw f.switch_error;
     const c = await changes();
     setup = on ? c.switch_on : c.switch_off;
     return setup;

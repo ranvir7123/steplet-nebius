@@ -2967,3 +2967,72 @@ OpenWith dialogs open: 0
 - **The help links in the real window:** `ShellExecuteW` was not called in a test (it would open your browser).
 - **The scrolled window seen once after the double-click** (above).
 - **A second Windows user, and a Windows where another app already owns `.steplet` files** (Explorer's own choice would win over Steplet's entry).
+
+### The code review, and what changed
+
+A read-only reviewer read the task's commit (e9829e4). It found nothing critical: the key never reaches the screens or an error, the unsafe Windows calls free and close what they open, and the registry test touches only its made-up type. Its points, and what was done with each:
+
+1. **The "Open .steplet files with Steplet" box could show the wrong state.** The browser ticks the box on a click; if Windows then refused the change, the box stayed ticked while the switch was off. The box is now put back to how the switch really stands. Test: `a_switch_that_could_not_change_shows_how_it_stands` (a new saved scenario, `setup-switch-fails`, where Windows refuses).
+2. **A crash inside an install would have blocked every later install** until Steplet was restarted ("already changing its Linux"), because the mark was cleared only after the work returned. The mark is now cleared however the work ends (`setup::OneAtATime`). Tests: `a_crashed_install_does_not_block_the_next_one`, `a_second_install_while_one_runs_is_refused`.
+3. **Leaving Setup during an install lost it:** coming back showed "Install" again, without the log, and pressing it was refused. An install's progress now lives as long as the window (`web/app/lib/install.svelte.ts`), so coming back shows the same install, still going, with what it printed. Test: `leaving_setup_during_an_install_keeps_it_going`.
+4. **Turning the switch on took the file type from another program without noting it, and turning it off then deleted that program's entry.** Steplet now notes which entry had the file type and gives it back when the switch goes off; with no such entry it removes only its own value, and the file type's key only once nothing else is in it (the reviewer's minor point 5, a part of the same fix). Test: `turning_off_gives_the_file_type_back_to_the_program_that_had_it`, on the made-up type `.steplet-test` like the round-trip test (the registry test you said yes to, now with this one more step; everything is removed at the end).
+
+To show the new tests catch the real faults, the two Rust ones were also run against the old code (then the new code was put back):
+
+```
+> cargo test -p steplet-app --offline --test register        (the old switch code, its helper made public)
+test file_type_switch_round_trip ... ok
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... FAILED
+  left: None
+ right: Some("SomeOther.TestFile")
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+> cargo test -p steplet-app --offline --test setup           (the mark cleared only after the work returns)
+test a_crashed_install_does_not_block_the_next_one ... FAILED
+test a_second_install_while_one_runs_is_refused ... ok
+  left: Err(FailureView { reason: "Steplet is already changing its Linux. Wait for that to finish.", detail: None })
+ right: Ok(7)
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> npm --prefix web test -- setup -g a_switch_that              (before the box fix)
+  x  1 [screens] › app\tests\setup.spec.ts:55:1 › a_switch_that_could_not_change_shows_how_it_stands (5.4s)
+    Error: expect(locator).not.toBeChecked() failed
+    Expected: not checked
+    Received: checked
+  1 failed
+> npm --prefix web test -- setup                                (before the install store)
+  x  5 [screens] › app\tests\setup.spec.ts:65:1 › leaving_setup_during_an_install_keeps_it_going (5.3s)
+    Error: expect(locator).toBeVisible() failed
+```
+
+The tests pass:
+
+```
+> npm --prefix web run build:screens; npm --prefix web test -- chooser setup preview
+  20 passed (6.2s)
+> npm --prefix web run build; cargo test -p steplet-app --offline --no-fail-fast
+     Running tests\fixtures.rs 	test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+     Running tests\help.rs 	test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\key.rs 	test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\open.rs 	test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests\pins.rs 	test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\register.rs 	test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+     Running tests\setup.rs 	test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\shell.rs 	test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\views.rs 	test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+app exit: 0
+> reg query HKCU\Software\Classes\.steplet-test
+ERROR: The system was unable to find the specified registry key or value.
+> npm --prefix web run check
+1792533568555 COMPLETED 147 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 66 pairs
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -j 4 -- -D warnings
+clippy exit: 0
+```
+
+(The app's empty test lines are left out.) Minor points left for later:
+- When Steplet's Linux is there but cannot be looked at, Setup offers only "Check again"; "Start over" shows only after a failed install (Task 14 looks at that state again).
+- The key's text is wiped from one copy in memory, not from every copy (the one the page sent, and the one read back); a Credential Manager read that fails for another reason than "no entry" shows as "no key saved".
+- The words for Claude Code and srt name their versions as fixed text instead of the runner's version constants, so they could drift.
+- An unfinished terminal code (`ESC [` with no letter after) drops the rest of its line.

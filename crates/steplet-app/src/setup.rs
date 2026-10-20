@@ -3,6 +3,7 @@
 //! (`register`). Steplet's Linux is `steplet_run::setup::LINUX`, its disk in `%LOCALAPPDATA%\Steplet\wsl`.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use steplet_run::setup::{self as run_setup, LINUX, State};
 
@@ -71,6 +72,28 @@ pub fn install(line: &dyn Fn(Shown)) -> Result<(), FailureView> {
     run_setup::install(LINUX, &folder, &gate, &|l| line(views::setup_line(l)))
         .map(|_| ())
         .map_err(|e| views::setup_failure(&e))
+}
+
+/// One install or removal of Steplet's Linux at a time. The mark that one is going on is cleared however the work
+/// ends, a crash of the work included, so a crash never blocks the next try.
+#[derive(Debug, Default)]
+pub struct OneAtATime(AtomicBool);
+
+impl OneAtATime {
+    /// Runs `work`, or refuses at once while another one runs.
+    pub fn run<T>(&self, work: impl FnOnce() -> Result<T, FailureView>) -> Result<T, FailureView> {
+        if self.0.swap(true, Ordering::SeqCst) {
+            return Err(views::failure("Steplet is already changing its Linux. Wait for that to finish.", None));
+        }
+        struct Clear<'a>(&'a AtomicBool);
+        impl Drop for Clear<'_> {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::SeqCst);
+            }
+        }
+        let _clear = Clear(&self.0);
+        work()
+    }
 }
 
 /// Removes Steplet's Linux and everything in it ("Start over"). Nothing of the receiver's is in it.

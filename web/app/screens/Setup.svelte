@@ -4,13 +4,13 @@
   // it printed; the receiver's key; and the switch for opening .steplet files. Steplet never runs Windows' own
   // install for the receiver: it shows the command to type. Every line's words come from Rust; what setup's programs
   // print is file text.
-  import { getContext, onDestroy, onMount } from "svelte";
+  import { getContext, onMount } from "svelte";
   import FileText from "../../shared/FileText.svelte";
   import Icon from "../../shared/Icon.svelte";
-  import type { FailureView } from "../../shared/types/FailureView";
   import type { LineView } from "../../shared/types/LineView";
   import type { SetupView } from "../../shared/types/SetupView";
-  import type { Backend, Shown, Unlisten } from "../lib/backend";
+  import type { Backend } from "../lib/backend";
+  import { install as installLinux, remove as removeLinux, work } from "../lib/install.svelte";
 
   let { onback }: { onback: () => void } = $props();
 
@@ -18,21 +18,12 @@
   let view = $state<SetupView | null>(null);
   let looking = $state(true);
   let lookError = $state<string | null>(null);
-  let lines = $state<Shown[]>([]);
-  let installing = $state(false);
-  let installed = $state(false);
-  let failure = $state<FailureView | null>(null);
   let askRemove = $state(false);
   let key = $state("");
   let keyError = $state<string | null>(null);
   let switchError = $state<string | null>(null);
-  let unlisten: Unlisten | null = null;
 
-  /** A refusal from Rust is Steplet's own words: a sentence, or a sentence with what a program printed. */
-  const failed = (e: unknown): FailureView =>
-    typeof e === "object" && e !== null && "reason" in e
-      ? (e as FailureView)
-      : { reason: typeof e === "string" ? e : "Steplet could not finish this.", detail: null };
+  /** A refusal from Rust is Steplet's own sentence. */
   const sentence = (e: unknown) => (typeof e === "string" ? e : "Steplet could not do that.");
 
   async function check() {
@@ -47,41 +38,19 @@
     }
   }
 
-  onMount(() => {
-    backend.onSetupLine((l) => (lines = [...lines, l])).then((u) => (unlisten = u));
-    void check();
-  });
-  onDestroy(() => unlisten?.());
+  onMount(() => void check());
 
+  // An install or a removal keeps going if the receiver leaves this screen (lib/install.svelte.ts).
   async function install() {
-    failure = null;
     askRemove = false;
-    installed = false;
-    lines = [];
-    installing = true;
-    try {
-      await backend.setupInstall();
-      installed = true;
-    } catch (e) {
-      failure = failed(e);
-    } finally {
-      installing = false;
-    }
+    await installLinux(backend);
     await check();
   }
 
   async function remove() {
     askRemove = false;
-    failure = null;
-    lines = [];
-    installing = true;
-    try {
-      view = await backend.setupRemove();
-    } catch (e) {
-      failure = failed(e);
-    } finally {
-      installing = false;
-    }
+    const after = await removeLinux(backend);
+    if (after) view = after;
   }
 
   async function saveKey() {
@@ -104,12 +73,14 @@
     }
   }
 
-  async function turn(on: boolean) {
+  /** `box`: the checkbox, which the browser has already flipped; put back if Windows refused the change. */
+  async function turn(on: boolean, box?: HTMLInputElement) {
     switchError = null;
     try {
       view = await backend.setOpensStepletFiles(on);
     } catch (e) {
       switchError = sentence(e);
+      if (box && view) box.checked = view.opens_steplet_files !== "off";
     }
   }
 
@@ -155,7 +126,7 @@
     <section class="panel" aria-labelledby="linux-title">
       <div class="panel-head">
         <h2 id="linux-title">Steplet's own Linux</h2>
-        <button class="button" type="button" disabled={looking || installing} onclick={check}>
+        <button class="button" type="button" disabled={looking || work.running} onclick={check}>
           {looking ? "Looking…" : "Check again"}
         </button>
       </div>
@@ -178,9 +149,9 @@
         </div>
       {/if}
 
-      {#if offered || installing || failure || installed}
+      {#if offered || work.running || work.failure || work.finished}
         <div class="install">
-          {#if offered && !installing && !failure}
+          {#if offered && !work.running && !work.failure}
             {#if view.install === "finish"}
               <p class="muted">
                 This adds what is missing above to Steplet's own Linux. It is safe to repeat, can download a little, and
@@ -199,21 +170,21 @@
               </button>
             </div>
           {/if}
-          {#if installing}
+          {#if work.running}
             <p class="muted" role="status">Steplet is changing its Linux. This can take several minutes…</p>
           {/if}
-          {#if lines.length > 0}
+          {#if work.lines.length > 0}
             <div class="log" role="log" aria-label="What setup printed">
-              {#each lines as l, i (i)}<FileText text={l} block />{/each}
+              {#each work.lines as l, i (i)}<FileText text={l} block />{/each}
             </div>
           {/if}
-          {#if installed && !failure}
+          {#if work.finished && !work.failure}
             <p class="done"><Icon kind="green" />Setup finished.</p>
           {/if}
-          {#if failure}
+          {#if work.failure}
             <div class="message error" role="alert">
-              <p>{failure.reason}</p>
-              {#if failure.detail}<div class="printed"><FileText text={failure.detail} block /></div>{/if}
+              <p>{work.failure.reason}</p>
+              {#if work.failure.detail}<div class="printed"><FileText text={work.failure.detail} block /></div>{/if}
             </div>
             <div class="actions">
               <button class="button primary" type="button" onclick={install}>Try again</button>
@@ -271,7 +242,7 @@
         <input
           type="checkbox"
           checked={view.opens_steplet_files !== "off"}
-          onchange={(e) => turn(e.currentTarget.checked)}
+          onchange={(e) => turn(e.currentTarget.checked, e.currentTarget)}
         />
         Open .steplet files with Steplet
       </label>

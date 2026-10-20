@@ -374,6 +374,7 @@ fn fixture(screen: &str) -> Fixture {
         replies: Replies::default(),
         saved_to: None,
         save_error: None,
+        switch_error: None,
     }
 }
 
@@ -521,6 +522,16 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         setup(state(ready_wsl(), true, &["claude-code", "srt"], true, None), true, Switch::Off),
     );
     s.insert("setup-switch-broken", setup(all_ready(), true, Switch::Broken));
+    s.insert(
+        "setup-switch-fails",
+        Fixture {
+            switch_error: Some(
+                "Steplet could not change what opens .steplet files. Windows says: Access is denied. (os error 5)"
+                    .into(),
+            ),
+            ..setup(all_ready(), true, Switch::Off)
+        },
+    );
     s.insert(
         "setup-could-not-look",
         setup(state(ready_wsl(), false, &[], false, Some("WSL did not answer within 60 seconds")), true, Switch::Off),

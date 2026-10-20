@@ -56,4 +56,8 @@ replies: Replies,
 /**
  * Where `save_report` saved the report, or why it could not.
  */
-saved_to: string | null, save_error: string | null, };
+saved_to: string | null, save_error: string | null, 
+/**
+ * `set_opens_steplet_files`'s refusal instead, in Steplet's words (Windows would not change the entry).
+ */
+switch_error: string | null, };

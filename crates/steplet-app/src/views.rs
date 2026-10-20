@@ -1039,4 +1039,6 @@ pub struct Fixture {
     /// Where `save_report` saved the report, or why it could not.
     pub saved_to: Option<String>,
     pub save_error: Option<String>,
+    /// `set_opens_steplet_files`'s refusal instead, in Steplet's words (Windows would not change the entry).
+    pub switch_error: Option<String>,
 }

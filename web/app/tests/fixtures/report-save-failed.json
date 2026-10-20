@@ -216,5 +216,6 @@
     "no": "You said no."
   },
   "saved_to": null,
-  "save_error": "Steplet could not save the report: Windows says the disk is full."
+  "save_error": "Steplet could not save the report: Windows says the disk is full.",
+  "switch_error": null
 }

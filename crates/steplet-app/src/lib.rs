@@ -60,7 +60,7 @@ pub struct AppState {
     /// What the last look at this computer's setup saw, so saving the key or turning the switch does not look again.
     looked: std::sync::Mutex<Option<steplet_run::setup::State>>,
     /// An install or a removal of Steplet's Linux is going on.
-    busy: std::sync::atomic::AtomicBool,
+    busy: setup::OneAtATime,
 }
 
 impl AppState {
@@ -90,17 +90,6 @@ impl AppState {
     fn setup_view(&self) -> views::SetupView {
         let last = self.looked.lock().unwrap_or_else(|e| e.into_inner()).clone();
         setup::view(&last.unwrap_or_else(|| self.look()), key::TARGET, setup::switch())
-    }
-
-    /// Runs `work` unless an install or a removal is already going on.
-    fn alone<T>(&self, work: impl FnOnce() -> Result<T, views::FailureView>) -> Result<T, views::FailureView> {
-        use std::sync::atomic::Ordering::SeqCst;
-        if self.busy.swap(true, SeqCst) {
-            return Err(views::failure("Steplet is already changing its Linux. Wait for that to finish.", None));
-        }
-        let done = work();
-        self.busy.store(false, SeqCst);
-        done
     }
 }
 
@@ -149,7 +138,7 @@ fn setup_status(state: tauri::State<AppState>) -> views::SetupView {
 #[tauri::command(async)]
 fn setup_install(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<(), views::FailureView> {
     use tauri::Emitter;
-    state.alone(|| {
+    state.busy.run(|| {
         setup::install(&|line| {
             let _ = app.emit("setup-line", line);
         })
@@ -159,7 +148,7 @@ fn setup_install(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result
 /// "Start over": removes Steplet's Linux and everything in it (nothing of the receiver's is in it).
 #[tauri::command(async)]
 fn setup_remove(state: tauri::State<AppState>) -> Result<views::SetupView, views::FailureView> {
-    state.alone(setup::remove)?;
+    state.busy.run(setup::remove)?;
     Ok(setup::view(&state.look(), key::TARGET, setup::switch()))
 }
 
@@ -206,7 +195,7 @@ pub fn run() {
         ),
         opened: std::sync::Mutex::new(None),
         looked: std::sync::Mutex::new(None),
-        busy: std::sync::atomic::AtomicBool::new(false),
+        busy: setup::OneAtATime::default(),
     };
     tauri::Builder::default()
         .manage(state)
