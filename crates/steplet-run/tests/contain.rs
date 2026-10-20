@@ -378,10 +378,10 @@ rm -f {STAMP} {FIND_CONTROL}",
     for path in written.lines().filter(|p| *p != FIND_CONTROL) {
         // The run's temporary folder is `/tmp/steplet-run-<id>` (the owner's choice A, 18 Oct 2026); the list names it
         // `tmp`, as when it was inside the run's own folder.
-        let in_run = path
-            .strip_prefix("/var/lib/steplet/runs/t11b/")
-            .map(str::to_owned)
-            .or_else(|| path.strip_prefix("/tmp/steplet-run-t11b").map(|rest| format!("tmp{rest}")));
+        let in_run = path.strip_prefix("/var/lib/steplet/runs/t11b/").map(str::to_owned).or_else(|| match path {
+            "/tmp/steplet-run-t11b" => Some("tmp".into()),
+            _ => path.strip_prefix("/tmp/steplet-run-t11b/").map(|rest| format!("tmp/{rest}")),
+        });
         let own = in_run.as_deref().is_some_and(|p| {
             CLAUDE_CODE_S_OWN.contains(&p) || CLAUDE_CODE_S_OWN_BEGINNINGS.iter().any(|b| p.starts_with(b))
         });
@@ -561,8 +561,11 @@ fn a_stop_while_preparing_ends_the_preparing() {
     let start = Instant::now();
     let r = run_live(&req, &paths, &policy, &setup(&distro, 47954), live).unwrap();
     let took = start.elapsed();
-    let left =
-        root_sh(&distro, "ls -A /work /var/lib/steplet/runs; pgrep -u steplet > /dev/null && echo running || true");
+    let left = root_sh(
+        &distro,
+        "ls -A /work /var/lib/steplet/runs; ls -d /tmp/steplet-run-* 2> /dev/null; pgrep -u steplet > /dev/null && \
+         echo running || true",
+    );
     println!(
         "--- {:.1} s; sent to the screen: {:?}\n--- the report:\n{r:#?}\n--- left: {left:?}",
         took.as_secs_f64(),
@@ -683,12 +686,16 @@ fn the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after() {
     };
     let (key, token) = (count(MADE_UP_KEY), count(link.token()));
     let outcome = watching.join().unwrap();
+    // Again once the agent has ended, before the run is removed: anything written late is counted too.
+    let (key_at_end, token_at_end) = (count(MADE_UP_KEY), count(link.token()));
     discard(&paths).unwrap();
     let after = root_sh(&distro, &format!("test -e {tmp} && echo present || echo absent"));
     println!("--- during the run, {tmp} held (type and name):\n{listing}");
-    println!("--- the made-up key in it:\n{key}\n--- the run's token in it:\n{token}\n--- after the run: {after}");
+    println!("--- the made-up key in it:\n{key}\n--- the run's token in it:\n{token}");
+    println!("--- once the agent had ended, the key:\n{key_at_end}\n--- and the token:\n{token_at_end}");
+    println!("--- after the run: {after}");
     assert!(listing.lines().any(|l| l.starts_with("s srt-mux-")), "the fence's network bridge is in it: {listing}");
-    for counted in [&key, &token] {
+    for counted in [&key, &token, &key_at_end, &token_at_end] {
         let lines: Vec<&str> = counted.lines().collect();
         assert_eq!(lines.len(), 2, "{counted}");
         assert!(lines[0].starts_with("key: 0 ") && lines[1].starts_with("key, last 20 characters: 0 "), "{counted}");

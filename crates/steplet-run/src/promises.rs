@@ -14,13 +14,15 @@ pub struct Promise {
 
 const CHECKS: Promise = Promise {
     text: "Steplet checks the agent's commands that change something, its file writes and its web fetches before they \
-           happen. If Steplet's checker fails, the action is refused.",
+           happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.",
     items: Vec::new(),
     tests: &[
         "a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not",
         "a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next",
         "a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run",
         "a_writing_command_made_to_skip_the_gate_stops_the_run",
+        "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+        "a_web_fetch_is_allowed_only_to_a_site_the_file_declares",
     ],
 };
 
@@ -29,11 +31,13 @@ const FETCH_TESTS: &[&str] =
     &["a_web_fetch_is_allowed_only_to_a_site_the_file_declares", "a_yes_allows_exactly_the_request_shown"];
 
 const WRITES: Promise = Promise {
-    text: "The agent and the programs this task runs can change files only inside the working copy.",
+    text: "The agent and the programs this task runs can change files only inside the working copy (the programs also \
+           in the run's own temporary folder, which Steplet deletes after the run).",
     items: Vec::new(),
     tests: &[
         "every_try_of_the_hostile_fixture_is_contained",
         "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+        "the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after",
     ],
 };
 

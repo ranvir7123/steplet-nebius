@@ -1034,3 +1034,97 @@ clippy exit 0
 - Sites with more than one name behind them (a site that sends the program on to another site): the probe reaches one page of each.
 - A program listening on the Windows side (3.7 point 3): still not tried, so no line says "on this computer".
 - The lines on screen: the run chooser screen is Task 11.
+
+### The code review, and what changed
+
+A code-reviewer agent read Task 5's diff (read-only). Its own text was not kept when the last session stopped at its usage limit, so the points below are read back from the fixes it led to (written then, built and tested now, on 20 Oct 2026). It found nothing unsafe; it found two lines worded wider than their tests, and three tests weaker than they looked:
+
+1. **Line 1 said more than its tests show.** "If Steplet's checker fails, the action is refused" covers any failure; the tests show two: no decision in time, and a gate program that stops working. Now: "If Steplet's checker does not decide in time, or its gate stops working, the action is refused." The line also speaks of file writes and web fetches, so it now names their tests too (`a_write_into_steplets_own_folder_is_refused_before_the_gate`, `a_web_fetch_is_allowed_only_to_a_site_the_file_declares`).
+2. **Line 3 left out the run's temporary folder.** Programs a task runs can also write in `/tmp/steplet-run-<id>` (your decision A). Now: "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run)." It names `the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after`.
+3. **The check that each named test exists also took helpers and commented-out code.** `every_promise_names_tests_that_exist` looked for the text `fn <name>(` anywhere. Now a name counts only for a line starting `fn <name>(` with `#[test]` on one of the three lines above it; the test also checks itself on a helper that is not a test.
+4. **The hostile-fixture test's list of Claude Code's own writes matched by the start of a name,** so `/tmp/steplet-run-t11b` would also have taken a folder such as `/tmp/steplet-run-t11bX`. Now the folder itself or a path inside it, exactly.
+5. **The temporary-folder test counted the key and the token only while the agent ran.** It now counts again once the agent has ended, before the run is removed, so anything written late is counted too. And the stop-while-preparing test now also checks that no `/tmp/steplet-run-*` folder is left.
+6. **The folder's name is written in four places** (`RunPaths` and three scripts). A new test, `the_scripts_and_the_paths_name_the_same_temporary_folder`, fails when any of them names another folder.
+
+Each changed test, seen failing first. The tests were written with their fixes, so each was run against the old code or a planted mistake, one at a time, and the file restored after (the script is in the scratchpad: `t5r-red.sh`):
+
+```
+=== 1. the old promises.rs (the lines before the review), the new tests
+test no_line_says_on_this_computer ... ok
+test the_lines_follow_the_files_sites ... FAILED
+test every_promise_names_tests_that_exist ... ok
+thread 'the_lines_follow_the_files_sites' (40472) panicked at crates\steplet-run\tests\promises.rs:49:5:
+  left: ["Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker fails, the action is refused.", "The agent cannot fetch any web address, unless you say yes to that exact address.", "The agent and the programs this task runs can change files only inside the working copy.", "Your own files are not inside Steplet's Linux, where this task runs.", "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.", "Programs this task runs cannot start Windows programs."]
+ right: ["Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.", "The agent cannot fetch any web address, unless you say yes to that exact address.", "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run).", "Your own files are not inside Steplet's Linux, where this task runs.", "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.", "Programs this task runs cannot start Windows programs."]
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+=== 2. a line that names a helper, not a test (fn steplet in tests/promises.rs)
+1
+test every_promise_names_tests_that_exist ... FAILED
+thread 'every_promise_names_tests_that_exist' (55128) panicked at crates\steplet-run\tests\promises.rs:39:17:
+"Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused." names steplet, which is not a test here
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.01s
+=== 3. prepare.sh names another temporary folder
+33:    local W=/work/$ID R=/var/lib/steplet/runs/$ID T=/tmp/steplet-tmp-$ID
+test the_scripts_and_the_paths_name_the_same_temporary_folder ... FAILED
+thread 'the_scripts_and_the_paths_name_the_same_temporary_folder' (43556) panicked at crates\steplet-run\tests\settings.rs:208:9:
+prepare.sh names the run's temporary folder as /tmp/steplet-run-<id>
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+=== restored:
+promises.rs as written
+```
+
+(With the old `every_promise_names_tests_that_exist`, case 2 would have passed: `fn steplet(` is in `tests/promises.rs`, as a helper.)
+
+With the fixes:
+
+```
+> cargo test -p steplet-run --offline --test promises --test settings
+     Running tests\promises.rs (target\debug\deps\promises-5d855bf6aff586d8.exe)
+test the_lines_follow_the_files_sites ... ok
+test no_line_says_on_this_computer ... ok
+test every_promise_names_tests_that_exist ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\settings.rs (target\debug\deps\settings-8f98eebba7e02420.exe)
+test the_gate_link_keeps_its_values ... ok
+test a_gate_deadline_outside_a_tenth_of_a_second_to_an_hour_is_refused ... ok
+test a_distribution_id_must_be_a_windows_guid ... ok
+test a_gate_value_that_a_shell_could_misread_is_refused ... ok
+test the_run_paths_follow_the_layout ... ok
+test the_scripts_and_the_paths_name_the_same_temporary_folder ... ok
+test a_run_id_that_could_reach_another_place_is_refused ... ok
+test the_mcp_config_names_the_gate_as_its_only_server ... ok
+test the_settings_are_exactly_the_planned_shape ... ok
+test the_settings_match_the_file_the_task_2_runs_used ... ok
+test no_allow_rules_and_no_read_rule_on_the_work_folder ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+plain exit 0
+```
+
+The containment battery again (lines picked from its output, unchanged except the proxy password, replaced by `(token)`):
+
+```
+> cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1
+--- inside the fence, the probe's own record: {"proxy": "http://srt:(token)@localhost:3128", "https://example.org/": "reached", "https://example.net/": "failed: URLError: <urlopen error Tunnel connection failed: 403 Forbidden>"}
+--- 1.8 s; sent to the screen: []
+--- left: "/var/lib/steplet/runs:\n\n/work:"
+--- the listener's log: "2026-10-20T11:06:05.771973 from=('127.0.0.1', 40886) bytes=0"
+--- the write outside the copy: absent
+--- the Windows marker from inside the fence: absent
+--- the made-up key in it:
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- the run's token in it:
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- once the agent had ended, the key:
+key: 0  (files read: 0)
+key, last 20 characters: 0  (files read: 0)
+--- and the token:
+key: 0  (files read: 0)
+key, last 20 characters: 0  (files read: 0)
+--- after the run: absent
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 80.20s
+battery exit 0
+```
+
+(The second count read no files: once the agent had ended, Claude Code had already removed its one file from the folder, and sockets hold no text.)

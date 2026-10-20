@@ -14,30 +14,33 @@ fn texts(ps: &[Promise]) -> Vec<&str> {
     ps.iter().map(|p| p.text).collect()
 }
 
-/// Every test a line names is a test function in this crate's tests: renaming or deleting one breaks this test, so a
-/// line cannot outlive the evidence for it.
+/// Every test a line names is a test function in this crate's tests, marked `#[test]` (a helper or a commented-out
+/// function does not count): renaming or deleting one breaks this test, so a line cannot outlive the evidence for it.
+/// Most of them need Steplet's Linux and run with `-- --ignored`.
 #[test]
 fn every_promise_names_tests_that_exist() {
     let folder = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
-    let mut sources = String::new();
+    let mut lines: Vec<String> = Vec::new();
     for entry in std::fs::read_dir(folder).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|e| e == "rs") {
-            sources.push_str(&std::fs::read_to_string(&path).unwrap());
+            lines.extend(std::fs::read_to_string(&path).unwrap().lines().map(str::to_owned));
         }
     }
+    let is_test = |name: &str| {
+        lines.iter().enumerate().any(|(n, line)| {
+            line.starts_with(&format!("fn {name}(")) && lines[n.saturating_sub(3)..n].iter().any(|l| l == "#[test]")
+        })
+    };
     for s in [steplet(""), steplet("allow:\n  domains:\n    - example.org\n")] {
         for p in promises(&s) {
             assert!(!p.tests.is_empty(), "{:?} names no test", p.text);
             for test in p.tests {
-                assert!(
-                    sources.contains(&format!("fn {test}(")),
-                    "{:?} names {test}, which is not a test here",
-                    p.text
-                );
+                assert!(is_test(test), "{:?} names {test}, which is not a test here", p.text);
             }
         }
     }
+    assert!(!is_test("promises"), "the check itself: a function that is not a test does not count");
 }
 
 #[test]
@@ -47,9 +50,11 @@ fn the_lines_follow_the_files_sites() {
         texts(&none),
         [
             "Steplet checks the agent's commands that change something, its file writes and its web fetches before \
-             they happen. If Steplet's checker fails, the action is refused.",
+             they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is \
+             refused.",
             "The agent cannot fetch any web address, unless you say yes to that exact address.",
-            "The agent and the programs this task runs can change files only inside the working copy.",
+            "The agent and the programs this task runs can change files only inside the working copy (the programs \
+             also in the run's own temporary folder, which Steplet deletes after the run).",
             "Your own files are not inside Steplet's Linux, where this task runs.",
             "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.",
             "Programs this task runs cannot start Windows programs.",
@@ -74,6 +79,9 @@ fn the_lines_follow_the_files_sites() {
         )
     );
     assert!(one[4].tests.contains(&"a_declared_site_is_the_only_one_a_program_can_reach"));
+    assert!(none[0].tests.contains(&"a_write_into_steplets_own_folder_is_refused_before_the_gate"), "file writes");
+    assert!(none[0].tests.contains(&"a_web_fetch_is_allowed_only_to_a_site_the_file_declares"), "web fetches");
+    assert!(none[2].tests.contains(&"the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after"));
     assert!(!none[4].tests.contains(&"a_declared_site_is_the_only_one_a_program_can_reach"));
 }
 

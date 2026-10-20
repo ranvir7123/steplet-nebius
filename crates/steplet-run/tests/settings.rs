@@ -192,3 +192,19 @@ fn a_gate_deadline_outside_a_tenth_of_a_second_to_an_hour_is_refused() {
         assert!(GateLink::new(exe, "p", "t", LOG, bad).is_err(), "{bad:?}");
     }
 }
+
+/// Task 5's review: the run's temporary folder is named in three of Steplet's scripts as well as in `RunPaths`; all
+/// four must agree.
+#[test]
+fn the_scripts_and_the_paths_name_the_same_temporary_folder() {
+    let tmp = paths("r1").run_tmp().to_owned();
+    let prefix = tmp.strip_suffix("r1").unwrap();
+    assert_eq!(prefix, "/tmp/steplet-run-");
+    for (name, script) in [
+        ("prepare.sh", include_str!("../src/prepare.sh")),
+        ("start-run.sh", include_str!("../src/start-run.sh")),
+        ("discard.sh", include_str!("../src/discard.sh")),
+    ] {
+        assert!(script.contains(&format!("{prefix}$")), "{name} names the run's temporary folder as {prefix}<id>");
+    }
+}
