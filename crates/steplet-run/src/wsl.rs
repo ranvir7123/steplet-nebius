@@ -104,7 +104,8 @@ pub fn find_distribution(name: &str) -> io::Result<Option<String>> {
     Ok(None)
 }
 
-fn windows_program(name: &str) -> io::Result<Command> {
+/// A Windows program from the Windows folder itself, with `SystemRoot` as its only variable (C8).
+pub(crate) fn windows_program(name: &str) -> io::Result<Command> {
     let root = std::env::var_os("SystemRoot")
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Windows did not say where its own folder is"))?;
     let mut command = Command::new(PathBuf::from(&root).join("System32").join(name));

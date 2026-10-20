@@ -1,14 +1,15 @@
 #!/bin/bash
-# Steplet's own Linux (decision E3, option D): first-time setup. Runs as root inside the `steplet` distribution,
-# once, right after `wsl --install`. Test support for phase 3; phase 4's setup code does the same steps.
-# Usage: setup_steplet.sh
+# Steplet's own Linux (decision E3, option D): first-time setup. Runs as root inside Steplet's Linux, right after
+# `wsl --install`, sent on standard input by setup.rs (phase 4 Task 6; phase 3 ran it as a test script). Safe to run
+# again: every step can be repeated. Arguments: the Claude Code version and the srt version to install.
 # Nothing here asks for a password: WSL starts it as root inside Steplet's own Linux only.
-# The gate program is copied in afterwards from Windows, on standard input (`dd of=/opt/steplet/gate/...`), because
-# WSL 2.6.3 cannot mount a single Windows folder (only whole drives), and mounting a drive would undo option D.
+# The gate program is copied in afterwards from Windows, on standard input, because WSL 2.6.3 cannot mount a single
+# Windows folder (only whole drives), and mounting a drive would undo option D.
 set -eu
-CLAUDE_VERSION=2.1.220
-SRT_VERSION=0.0.77
 
+main() {
+CLAUDE_VERSION=$1
+SRT_VERSION=$2
 echo "--- /etc/wsl.conf: Windows drives not mounted, Windows PATH not added, default user steplet"
 cat > /etc/wsl.conf <<'EOF'
 [boot]
@@ -75,3 +76,8 @@ echo "claude version: $(env -i HOME=/tmp PATH=/usr/bin:/bin DISABLE_AUTOUPDATER=
 echo "srt package: $(node -p "require('/opt/steplet/srt/node_modules/@anthropic-ai/sandbox-runtime/package.json').version")"
 ls -ld /opt/steplet /opt/steplet/* /var/lib/steplet /var/lib/steplet/runs /work
 echo "--- setup finished"
+}
+
+# The script comes on standard input, and bash reads it as it goes. All the work is in one function, which bash reads
+# whole before it runs it, and every program it starts gets /dev/null as its input, so none can read the script.
+main "$@" < /dev/null

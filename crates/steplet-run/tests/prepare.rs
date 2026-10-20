@@ -1,5 +1,5 @@
 //! The working copy, prepared inside Steplet's own Linux (plan Task 6). The tests marked `#[ignore]` need that Linux
-//! (set up by `tests/support/setup_steplet.sh`) and the network, and run only when asked:
+//! (set up by `src/setup.sh`, phase 4 Task 6) and the network, and run only when asked:
 //! `cargo test -p steplet-run --offline --test prepare -- --ignored`. They share `/work`, so they run one at a time.
 
 use std::sync::Mutex;

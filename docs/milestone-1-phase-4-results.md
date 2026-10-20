@@ -1128,3 +1128,276 @@ battery exit 0
 ```
 
 (The second count read no files: once the agent had ended, Claude Code had already removed its one file from the folder, and sockets hold no text.)
+
+## Task 6: setup as product code
+
+`steplet_run::setup` now holds what was phase 3's test script: `look` (reads what is set up, changes nothing), `install` (makes Steplet's Linux from nothing) and `remove`. `src/setup.sh` is the old `tests/support/setup_steplet.sh`, which is deleted; `src/look.sh` is new. Words used: **WSL** is Windows' Linux feature; a **distribution** is one Linux installed in it.
+
+### Changes from the plan, recorded here
+
+- **`wsl.exe --install` needs more of Windows' variables than `SystemRoot`.** Steplet starts Windows programs with `SystemRoot` as their only variable (C8). The first install try (18 Oct 2026, by the last session) stopped with `Wsl/InstallDistro/E_ACCESSDENIED` ("Access is denied"), until `wsl --install` was also given this Windows user's `TEMP`, `TMP`, `USERPROFILE` and `LOCALAPPDATA`. That session's notes keep the error code; its output of the failure was not kept.
+- **Found this session, and fixed: the install also left a new folder named `%SystemDrive%`** (four Windows cache files, 1 MB) inside the folder the test was started from, `crates/steplet-run`. With no `SystemDrive` variable, a part of Windows could not turn `%SystemDrive%\ProgramData` into `C:\ProgramData`, and wrote to a folder with that literal name, wherever `wsl.exe` was started. In the app, that could be any folder of the receiver's, for example the Downloads folder a `.steplet` file was double-clicked in. Now every call setup makes to `wsl.exe` gets Windows' folder variables (`SystemDrive`, `ProgramData`, `ALLUSERSPROFILE`, `APPDATA`, `LOCALAPPDATA`, `USERPROFILE`, `TEMP`, `TMP`; none is a secret, and these calls start nothing inside Linux), and starts in Windows' System32 folder, which a normal user cannot write. A place for the install that is not a full path is refused, since `wsl.exe` would read it from the folder it starts in. Two new tests, inside `src/setup.rs`.
+- **Found this session, for the Setup screen (Task 11): WSL changes the receiver's Windows when it installs a Linux.** It adds a profile named after the Linux to Windows Terminal, and a Start-menu folder (empty here). Both are on this laptop for `steplet` since 13 Oct (phase 3's install). Removing a Linux takes its Terminal profile away (measured on `steplet-setup-test`) but leaves the empty Start-menu folder. Ruled: Setup says so before the install; whether Steplet can stop both is not tried (it would need Steplet's own pinned image, H3's launch item).
+- `look.sh` also checks `python3-venv`: `setup.sh` installs it, so a Linux without it is not ready. A new test, `look_checks_every_package_setup_installs`, keeps the two lists the same.
+- The plan's Step 4 expected `1 passed; 2 ignored`; there are 3 plain tests (`the_versions_are_the_tested_ones` and the list test besides the version reader).
+- `tests/support/mod.rs` needed no change: it never named the old script, which phase 3 ran by hand.
+
+### Measured: which call left the `%SystemDrive%` folder
+
+The four files were all written at the same moment, during Task 6's first runs:
+
+```
+2026-10-18 15:54:05.1316121000 16384 crates/steplet-run/%SystemDrive%/ProgramData/Microsoft/Windows/Caches/cversions.2.db
+2026-10-18 15:54:05.1430941000 309072 crates/steplet-run/%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{6AF0698E-D558-4F6E-9B3C-3716689AF493}.2.ver0x0000000000000001.db
+2026-10-18 15:54:05.1375366000 1240 crates/steplet-run/%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{AF1F47E6-3FA6-41DD-A56A-2358AA2A366C}.2.ver0x0000000000000001.db
+2026-10-18 15:54:05.1326080000 662488 crates/steplet-run/%SystemDrive%/ProgramData/Microsoft/Windows/Caches/{DDF571F2-BE98-426D-8288-1A9A39C3FDA2}.2.ver0x0000000000000001.db
+```
+
+Every other call setup makes, each started with only `SystemRoot` in its own empty folder, left nothing (the `--terminate` and `--unregister` tries name a Linux that does not exist, so they only fail; `--list --online` is the same download path the install uses, for a small list):
+
+```
+> wsl.exe --version  (only SystemRoot, in an empty folder)
+WSL version: 2.6.3.0
+Kernel version: 6.6.87.2-1
+WSLg version: 1.0.71
+MSRDC version: 1.2.6353
+exit 0; left in the folder: 
+> wsl.exe --list --verbose  (only SystemRoot, in an empty folder)
+  NAME            STATE           VERSION
+* Ubuntu          Stopped         2
+  steplet         Running         2
+  steplet-test    Stopped         2
+exit 0; left in the folder: 
+> wsl.exe --status  (only SystemRoot, in an empty folder)
+Default Distribution: Ubuntu
+Default Version: 2
+exit 0; left in the folder: 
+> env -i SystemRoot=C:\Windows WSL_UTF8=1 /c/Windows/System32/wsl.exe --terminate steplet-no-such-linux
+There is no distribution with the supplied name.
+Error code: Wsl/Service/WSL_E_DISTRO_NOT_FOUND
+exit 127; left in the folder: 
+> env -i SystemRoot=C:\Windows WSL_UTF8=1 /c/Windows/System32/wsl.exe --unregister steplet-no-such-linux
+There is no distribution with the supplied name.
+Error code: Wsl/Service/WSL_E_DISTRO_NOT_FOUND
+exit 127; left in the folder: 
+> env -i SystemRoot=C:\Windows WSL_UTF8=1 /c/Windows/System32/wsl.exe --list --online
+The following is a list of valid distributions that can be installed.
+Install using 'wsl.exe --install <Distro>'.
+
+exit 0; left in the folder: 
+```
+
+(Shown through `head`; "exit 127" is how Git Bash's `env` passes on `wsl.exe`'s failure.) So the folder came from `wsl.exe --install` itself. Running another install to watch it happen again would be a second 1 to 2 GB download, so the fix is checked with a Windows program that prints what it sees, started exactly as setup starts `wsl.exe` (below).
+
+What else the install left on this Windows, looked at on 20 Oct 2026:
+
+```
+== steplet  (made 2026-10-13 17:56:22)
+== steplet-setup-test  (made 2026-10-18 15:56:08)
+== steplet-test  (made 2026-10-08 16:37:26)
+   Alacritty (steplet-test).lnk  2026-10-15 00:43:39
+== Ubuntu  (made 2026-08-01 21:25:43)
+== fragment {44a496b7-005e-53fd-8552-019f88be0dc0}.json  2026-08-01 21:25:39
+   "name": "Ubuntu",
+   "name": "Ubuntu",
+== fragment {4cdf5ea7-63fc-5d26-9eab-04d9fe1af47a}.json  2026-10-08 16:37:23
+   "name": "steplet-test",
+   "name": "Ubuntu",
+   "name": "Ubuntu Light",
+== fragment {ce802844-b61e-5612-a894-8012ec41a7d5}.json  2026-10-13 17:56:10
+   "name": "steplet",
+   "name": "Ubuntu",
+   "name": "Ubuntu Light",
+```
+
+(The first five lines are the folders in the Start menu's Programs folder; the "fragment" lines are Windows Terminal's profiles that WSL wrote.) Both leftovers of the 18 Oct test were then removed: the `%SystemDrive%` folder in this worktree, and the empty `steplet-setup-test` Start-menu folder (`rmdir`, which removes only an empty folder):
+
+```
+worktree cache folder removed
+empty Start-menu folder removed
+```
+
+### The tests first
+
+`tests/setup.rs` before the `setup` module existed, and the list test against `look.sh` as it was (each change undone after its run; the script is in the scratchpad: `t6-red.sh`):
+
+```
+=== 1. tests/setup.rs before the setup module exists
+0
+error[E0432]: unresolved import `steplet_run::setup`
+  --> crates\steplet-run\tests\setup.rs:12:18
+error: could not compile `steplet-run` (test "setup") due to 1 previous error
+=== 2. look.sh without python3-venv (as it was), the new list test
+20:    for p in git python3 build-essential ca-certificates bubblewrap socat ripgrep nodejs npm; do
+test look_checks_every_package_setup_installs ... FAILED
+thread 'look_checks_every_package_setup_installs' (12736) panicked at crates\steplet-run\tests\setup.rs:52:5:
+  left: ["git", "python3", "build-essential", "ca-certificates", "bubblewrap", "socat", "ripgrep", "nodejs", "npm"]
+ right: ["git", "python3", "python3-venv", "build-essential", "ca-certificates", "bubblewrap", "socat", "ripgrep", "nodejs", "npm"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+=== restored:
+lib.rs as written
+look.sh as written
+```
+
+The two new tests in `src/setup.rs`, run first against helpers that did exactly what the code did then (the four variables, no fixed start folder, no check of the place):
+
+```
+> cargo test -p steplet-run --offline --lib setup::
+test setup::tests::the_install_command_is_exact_and_refuses_what_wsl_could_misread ... FAILED
+test setup::tests::setup_s_windows_programs_know_windows_folders_and_start_in_system32 ... FAILED
+thread 'setup::tests::the_install_command_is_exact_and_refuses_what_wsl_could_misread' (5296) panicked at crates\steplet-run\src\setup.rs:296:13:
+thread 'setup::tests::setup_s_windows_programs_know_windows_folders_and_start_in_system32' (32396) panicked at crates\steplet-run\src\setup.rs:272:9:
+  left: "[%SystemDrive%] [%ProgramData%] [C:\\Users\\RANVIR\\AppData\\Local] [C:\\Users\\RANVIR\\AppData\\Local\\Temp] [C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase4-build-88af2b\\crates\\steplet-run] [%USERNAME%]"
+ right: "[C:] [C:\\ProgramData] [C:\\Users\\RANVIR\\AppData\\Local] [C:\\Users\\RANVIR\\AppData\\Local\\Temp] [C:\\WINDOWS\\System32] [%USERNAME%]"
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.05s
+```
+
+(The program, `cmd.exe`, printed `%SystemDrive%` and `%ProgramData%` unexpanded, and it started in the crate's own folder. The first test failed on a relative place for the install, which nothing refused.) After the fix, the folder test failed once more, on its own expectation: Windows names its folder `C:\Windows`, while `SystemRoot` says `C:\WINDOWS`; Windows' folder names ignore case, so the test now compares without case:
+
+```
+  left: "[C:] [C:\\ProgramData] [C:\\Users\\RANVIR\\AppData\\Local] [C:\\Users\\RANVIR\\AppData\\Local\\Temp] [C:\\Windows\\System32] [%USERNAME%]"
+ right: "[C:] [C:\\ProgramData] [C:\\Users\\RANVIR\\AppData\\Local] [C:\\Users\\RANVIR\\AppData\\Local\\Temp] [C:\\WINDOWS\\System32] [%USERNAME%]"
+```
+
+### The tests pass
+
+```
+> cargo test -p steplet-run --offline --lib setup::
+test setup::tests::the_install_command_is_exact_and_refuses_what_wsl_could_misread ... ok
+test setup::tests::setup_s_windows_programs_know_windows_folders_and_start_in_system32 ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.05s
+> cargo test -p steplet-run --offline --test setup
+running 5 tests
+test install_makes_a_ready_linux_from_nothing ... ignored, installs a second Linux from the internet: run only with the owner's yes (Z3)
+test look_finds_steplets_linux_ready ... ignored, needs Steplet's Linux
+test the_versions_are_the_tested_ones ... ok
+test look_checks_every_package_setup_installs ... ok
+test reads_wsl_version_output ... ok
+test result: ok. 3 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-run --offline --test setup look_finds_steplets_linux_ready -- --ignored --nocapture
+running 1 test
+--- State {
+    wsl: Ready {
+        version: "2.6.3.0",
+    },
+    linux: Some(
+        "{44f36236-99b1-42c0-84bd-7ff8392d51ba}",
+    ),
+    missing: [],
+    gate: true,
+}
+test look_finds_steplets_linux_ready ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.76s
+```
+
+**Z3, the install from nothing** (your yes of 18 Oct 2026). It ran on 18 Oct, after the first try's fix and **before this session's fix**: it installed `steplet-setup-test` from the internet in 172 s, found it ready, and removed it. Its log as it came, except two terminal escape characters, written here as `\e`:
+
+```
+> cargo test -p steplet-run --offline --test setup install_makes_a_ready_linux_from_nothing -- --ignored --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests\setup.rs (target\debug\deps\setup-e14c5120c2aa1fe9.exe)
+
+running 1 test
+setup: Downloading: Ubuntu 26.04 LTS
+setup: Installing: Ubuntu 26.04 LTS
+setup: Distribution successfully installed. It can be launched via 'wsl.exe -d steplet-setup-test'
+setup: --- /etc/wsl.conf: Windows drives not mounted, Windows PATH not added, default user steplet
+setup: [boot]
+setup: systemd=true
+setup: 
+setup: [automount]
+setup: enabled=false
+setup: mountFsTab=true
+setup: 
+setup: [interop]
+setup: enabled=true
+setup: appendWindowsPath=false
+setup: 
+setup: [user]
+setup: default=steplet
+setup: --- /opt/steplet/gate: the gate program's folder on the Linux disk, owned by root
+setup: --- the steplet account: no password, no sudo, no login shell
+setup: passwd: password changed.
+setup: uid=999(steplet) gid=986(steplet) groups=986(steplet)
+setup: --- base tools (choice H4-A; ripgrep because srt needs it, approved 14 Oct 2026)
+test install_makes_a_ready_linux_from_nothing has been running for over 60 seconds
+setup: \e[0;1;31mFailed to connect to system scope bus via local transport: Connection refused\e[0m
+setup: Processing triggers for man-db (2.13.1-1build1) ...
+setup: git: 1:2.53.0-1ubuntu1
+setup: python3: 3.14.3-0ubuntu2
+setup: build-essential: 12.12ubuntu2.26.04.2
+setup: bubblewrap: 0.11.1-1ubuntu0.3
+setup: socat: 1.8.1.1-1ubuntu0.1
+setup: ripgrep: 15.1.0-1ubuntu1
+setup: nodejs: 22.22.1+dfsg+~cs22.19.15-1ubuntu1
+setup: npm: 9.2.0~ds3-1
+setup: --- Claude Code 2.1.220 into /opt/steplet/claude-cli
+setup: 
+setup: added 3 packages in 8s
+setup: --- srt 0.0.77 into /opt/steplet/srt
+setup: 
+setup: added 5 packages in 3s
+setup: --- Steplet's folders, owned by root; nothing under /opt/steplet writable by steplet
+setup: --- what was installed
+setup: claude runs: /opt/steplet/claude-cli/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe
+setup: claude sha256: 674f61f20ff306f3100cf9200e4c36c4b70278b5bef2884549819b942a89c863
+setup: claude version: 2.1.220 (Claude Code)
+setup: srt package: 0.0.77
+setup: drwxr-xr-x 5 root root 4096 Oct 18 10:28 /opt/steplet
+setup: drwxr-xr-x 4 root root 4096 Oct 18 10:28 /opt/steplet/claude-cli
+setup: drwxr-xr-x 2 root root 4096 Oct 18 10:26 /opt/steplet/gate
+setup: drwxr-xr-x 3 root root 4096 Oct 18 10:28 /opt/steplet/srt
+setup: drwxr-xr-x 3 root root 4096 Oct 18 10:28 /var/lib/steplet
+setup: drwxr-xr-x 2 root root 4096 Oct 18 10:28 /var/lib/steplet/runs
+setup: drwxr-xr-x 2 root root 4096 Oct 18 10:28 /work
+setup: --- setup finished
+setup: The operation completed successfully. 
+setup: --- the gate program of this build
+setup: gate: /opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe
+--- install took 172 s: Ok("{10bac215-f631-4157-9704-aa2d7e523890}")
+--- State {
+    wsl: Ready {
+        version: "2.6.3.0",
+    },
+    linux: Some(
+        "{10bac215-f631-4157-9704-aa2d7e523890}",
+    ),
+    missing: [],
+    gate: true,
+}
+--- removed: Ok(())
+test install_makes_a_ready_linux_from_nothing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 183.34s
+
+install test exit 0
+```
+
+(The red line is `systemd`'s, while the packages install; the install went on and finished.) The install test now also checks that nothing appears in the folder it was started from; that check has not run yet, since it needs another install.
+
+The whole runner, and the checks:
+
+```
+> cargo test -p steplet-run --offline
+(19 summary lines, every one ok: 108 passed, 0 failed, 37 ignored; counted from the summary lines)
+plain exit 0
+> cargo test -p steplet-run --offline -- --ignored --test-threads=1 --skip install_makes_a_ready_linux_from_nothing
+(19 summary lines, every one ok: 36 passed, 0 failed; counted from the summary lines)
+ignored exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+```
+
+(The Linux-only run was made before `look.sh` gained `python3-venv`; `look` was run again after, above. Plain: 102 before this task, plus Task 5's review test and Task 6's five new plain tests. Linux-only: 35 before, plus `look`. For `fmt` and `clippy`, Task 7's first test file, already written, was set aside, since the code it tests did not exist yet.)
+
+### What this task did not verify
+
+- **The fix with a real install.** Z3's run was before it; the folder test shows what a program started the new way sees, not what `wsl.exe --install` then writes. A second install (1 to 2 GB) would show it.
+- **Install failures:** no network, a full disk, a setup that stops half way and then "Try again". Every step of `setup.sh` is written to be repeated; a repeat was not run.
+- **`remove` on the real `steplet`:** run only on the test Linux.
+- **A Windows without WSL, or with an older WSL:** only through the version reader's test, on text.
+- **A setup that hangs** (for example a package download that never ends): `install` has no time limit and would wait.
+- **The setup log's lines come from Linux programs** as they print them, escape characters included (one line of the log above has two). The Setup screen must show them as file text, cleaned (Task 11).
+- **What setup downloads** (Ubuntu's packages, Claude Code and `srt` from npm) is fixed by version, not by content; pinning by content is H3's launch item.

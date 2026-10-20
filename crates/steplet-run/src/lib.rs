@@ -13,6 +13,7 @@ mod promises;
 mod report;
 mod run;
 mod settings;
+pub mod setup;
 mod stream;
 mod task;
 mod types;
