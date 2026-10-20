@@ -338,6 +338,21 @@ pub const RULES: &[&Rule] = &[
     NOTE_NO_REPOSITORY,
 ];
 
+/// A known sender name with another key, or with none (rows 16 and 22, S6). Red: "same sender, different key" is one
+/// of the two things that force red (row 22). It is about this computer, not the file alone: only the app applies it,
+/// through `identity::identity`, since it needs this computer's pins (R10).
+pub const KEY_CHANGED: &Rule = &rule(
+    "id.key-changed",
+    R,
+    "This sender name was used before with another key",
+    "Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type \
+     the sentence to run it; Steplet then remembers the new key.",
+);
+
+/// The rules about this computer. Not in `RULES`: no file alone can hit them, so they have no corpus pair, and
+/// docs/rules.md lists them in a section of their own.
+pub const MACHINE_RULES: &[&Rule] = &[KEY_CHANGED];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Finding {
     pub rule: &'static Rule,

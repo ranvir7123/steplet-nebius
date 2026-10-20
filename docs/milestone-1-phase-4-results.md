@@ -1401,3 +1401,104 @@ clippy exit 0
 - **A setup that hangs** (for example a package download that never ends): `install` has no time limit and would wait.
 - **The setup log's lines come from Linux programs** as they print them, escape characters included (one line of the log above has two). The Setup screen must show them as file text, cleaned (Task 11).
 - **What setup downloads** (Ubuntu's packages, Claude Code and `srt` from npm) is fixed by version, not by content; pinning by content is H3's launch item.
+
+## Task 7: sender pins in the core: the identity line and the key-changed rule
+
+`steplet_core::identity` says who signed a file, as far as this computer knows: not signed; signature does not match; "signature valid, sender unknown" (a new key); the same key as the files from this sender run here before; or a key known here under another name. A **pin** is Steplet's note of a sender name and the key it came with. The new red rule `id.key-changed` ("This sender name was used before with another key") is found when a known sender name comes with another key, or with no signature at all (S6). It lives with the other rules, but in a list of its own, `MACHINE_RULES`, since no file alone can hit it: only the app applies it, with this computer's pins (R10).
+
+### Changes from the plan, recorded here
+
+- **Sender names are compared ignoring capitals and spaces** ("ana  lee" is "Ana Lee"). The plan does not say how names are compared; compared letter for letter, writing a known name in other capitals would dodge the red finding and show only "sender unknown". The cost: two different senders whose names differ only in capitals or spacing get the red warning. Names that only look alike (another alphabet's letters) still count as different names; see below.
+- The rule is written `pub const KEY_CHANGED: &Rule`, like every rule in `rules.rs` (the plan's section 6 said `pub static`).
+- The finding is about the whole file (no line number). Its detail names both keys in Steplet's words ("Steplet knows this sender name with the key …. This file is signed with …." or "This file is not signed."); the sender name is file text, so it travels as the finding's quote.
+- `docs/rules.md` is written by its test from the code; the new section comes from that generator (`tests/rules_doc.rs` now writes `MACHINE_RULES` too).
+
+### The tests first
+
+```
+> cargo test -p steplet-core --offline --test identity
+error[E0432]: unresolved import `steplet_core::identity`
+ --> crates\steplet-core\tests\identity.rs:4:19
+error[E0432]: unresolved import `steplet_core::rules::MACHINE_RULES`
+ --> crates\steplet-core\tests\identity.rs:5:42
+error[E0425]: cannot find value `KEY_CHANGED` in module `rules`
+  --> crates\steplet-core\tests\identity.rs:92:20
+error[E0425]: cannot find value `KEY_CHANGED` in module `rules`
+   --> crates\steplet-core\tests\identity.rs:100:39
+```
+
+(The first eight lines of the errors.) With the code written, the doc test failed until `docs/rules.md` was written again from the code:
+
+```
+> cargo test -p steplet-core --offline --test identity --test rules_doc
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test docs_rules_md_lists_every_rule ... FAILED
+thread 'docs_rules_md_lists_every_rule' (53712) panicked at crates\steplet-core\tests\rules_doc.rs:42:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> STEPLET_BLESS=1 cargo test -p steplet-core --offline --test rules_doc     (in Git Bash)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> git diff docs/rules.md
++
++## Rules about this computer, applied by the app only
++
++These rules need what this computer knows, such as the senders it remembers, so only the desktop app applies them; the public check page does not (decision R10). No file alone can hit them.
++
++| Rule | Severity | What it means | What to do |
++|---|---|---|---|
++| `id.key-changed` | red | This sender name was used before with another key | Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type the sentence to run it; Steplet then remembers the new key. |
+```
+
+The ruling on names, checked: with names compared letter for letter (planted, then undone), two tests fail:
+
+```
+test a_known_sender_with_another_key_is_red ... FAILED
+test the_same_key_gives_the_same_key_line_and_no_finding ... FAILED
+thread 'a_known_sender_with_another_key_is_red' (36592) panicked at crates\steplet-core\tests\identity.rs:20:15:
+thread 'the_same_key_gives_the_same_key_line_and_no_finding' (7988) panicked at crates\steplet-core\tests\identity.rs:63:5:
+  left: (KeyKnownAs { key: "SHA256:made-up-key-of-ana-lee", names: ["Ana Lee"] }, None)
+ right: (SameKey { key: "SHA256:made-up-key-of-ana-lee", runs: 2 }, None)
+test result: FAILED. 5 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+### The tests pass
+
+```
+> cargo test -p steplet-core --offline
+     Running tests\identity.rs (target\debug\deps\identity-c0037e436ec81595.exe)
+test a_known_key_under_another_name_is_said_but_not_a_finding ... ok
+test a_known_sender_unsigned_is_red ... ok
+test a_known_sender_with_another_key_is_red ... ok
+test a_new_sender_is_new_key ... ok
+test an_invalid_signature_gives_no_second_finding ... ok
+test the_machine_rule_is_not_in_rules ... ok
+test the_same_key_gives_the_same_key_line_and_no_finding ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\rules_doc.rs (target\debug\deps\rules_doc-658b2949100a0f98.exe)
+test docs_rules_md_lists_every_rule ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\corpus.rs (target\debug\deps\corpus-8220497a53785d57.exe)
+test every_hostile_file_belongs_to_a_rule ... ok
+test counts_of_the_ordinary_files ... ok
+test every_rule_has_a_hit_and_a_near_miss ... ok
+test list_every_file_with_its_findings ... ok
+test every_file_gives_its_expected_json ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+(26 summary lines, every one ok: 128 passed, 0 failed, 0 ignored; counted from the summary lines)
+core exit 0
+> cargo build -p steplet-wasm --target wasm32-unknown-unknown --release --offline
+   Compiling steplet-wasm v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase4-build-88af2b\crates\steplet-wasm)
+    Finished `release` profile [optimized] target(s) in 18.47s
+wasm exit 0
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit 0
+```
+
+(Three test files' lines picked from the core's 26; the corpus is unchanged, so "every rule has a hit" still holds.)
+
+### What this task did not verify
+
+- **Names that only look alike,** such as "Ana Lee" written with a Cyrillic "а": a different name to Steplet, so the file shows "signature valid, sender unknown" and no red finding. Trust on first use cannot tell such names apart; the identity line is the honest status.
+- **The pins themselves:** where they are kept, when they are written (only when Run is pressed, S5), and a damaged pins file are Task 10.
+- **The colour on screen:** the key-changed finding is about this computer ("On this computer" on the preview), and it must still make the preview red (row 22). That is the app's job, Task 10.

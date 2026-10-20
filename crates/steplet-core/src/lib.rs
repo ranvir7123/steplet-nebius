@@ -10,6 +10,7 @@ pub mod date;
 pub mod display;
 pub mod header;
 pub mod hosts;
+pub mod identity;
 pub mod limits;
 pub mod paths;
 pub mod policy;

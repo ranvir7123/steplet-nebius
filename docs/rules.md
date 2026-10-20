@@ -44,3 +44,11 @@ The phrase rules follow ideas from Cisco's skill-scanner (Apache-2.0, https://gi
 | `consist.undeclared-command` | amber | The instructions mention a command the file does not ask for | The agent will have to ask you before running it. Senders: add it to allow: commands. |
 | `consist.undeclared-host` | amber | A step mentions a web site the file does not ask for | The agent will have to ask you before opening it. Senders: add it to allow: domains. |
 | `note.no-repository` | note | The file names no repository | Steplet 1 runs only tasks on a public repository, so this file can be read but not run. |
+
+## Rules about this computer, applied by the app only
+
+These rules need what this computer knows, such as the senders it remembers, so only the desktop app applies them; the public check page does not (decision R10). No file alone can hit them.
+
+| Rule | Severity | What it means | What to do |
+|---|---|---|---|
+| `id.key-changed` | red | This sender name was used before with another key | Someone may be using this name. Ask the sender, another way, whether they changed their key. If they did, type the sentence to run it; Steplet then remembers the new key. |

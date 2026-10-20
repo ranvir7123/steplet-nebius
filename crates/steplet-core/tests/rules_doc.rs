@@ -1,6 +1,7 @@
-//! docs/rules.md is written from `rules::RULES`, so it cannot go stale. Write it again with STEPLET_BLESS=1.
+//! docs/rules.md is written from `rules::RULES` and `rules::MACHINE_RULES`, so it cannot go stale. Write it again
+//! with STEPLET_BLESS=1.
 
-use steplet_core::rules::RULES;
+use steplet_core::rules::{MACHINE_RULES, RULES, Rule};
 
 const HEAD: &str = "# Steplet's rating rules
 
@@ -14,11 +15,25 @@ The phrase rules follow ideas from Cisco's skill-scanner (Apache-2.0, https://gi
 |---|---|---|---|
 ";
 
+const MACHINE_HEAD: &str = "
+## Rules about this computer, applied by the app only
+
+These rules need what this computer knows, such as the senders it remembers, so only the desktop app applies them; the public check page does not (decision R10). No file alone can hit them.
+
+| Rule | Severity | What it means | What to do |
+|---|---|---|---|
+";
+
 #[test]
 fn docs_rules_md_lists_every_rule() {
+    let row = |r: &Rule| format!("| `{}` | {} | {} | {} |\n", r.id, r.severity.name(), r.title, r.advice);
     let mut want = String::from(HEAD);
     for r in RULES {
-        want.push_str(&format!("| `{}` | {} | {} | {} |\n", r.id, r.severity.name(), r.title, r.advice));
+        want.push_str(&row(r));
+    }
+    want.push_str(MACHINE_HEAD);
+    for r in MACHINE_RULES {
+        want.push_str(&row(r));
     }
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/rules.md");
     if std::env::var_os("STEPLET_BLESS").is_some() {
