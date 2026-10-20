@@ -2153,3 +2153,187 @@ Minor points left for later, each noted for the task it belongs to:
 - `npm_ages.py` takes a package's name from its folder, which would be wrong for a renamed (aliased) package; there is none in this lock file.
 - "Open a file…" and "Setup" do nothing yet (Task 10 and Task 11 wire them).
 - Nothing stops a release build with the `e2e` feature on; it is off unless asked for.
+
+## Task 9: what the screens get: view types, the one backend interface, and fixtures from real Rust output
+
+The screens now have their data. `crates/steplet-app/src/views.rs` turns the core's report on a file, the runner's live progress and the runner's report into plain data for the screens, in which every piece of text from the file, the repository, the agent or a command is already cut into **display pieces** (plain text, a badge for each character that cannot be seen, and links with their real address). The screens decide no colour and judge nothing: the outcome, each check and each answer arrive already decided. The TypeScript types the screens use (`web/shared/types/`, 28 files) are written from these Rust types by ts-rs, and a test fails when they fall behind. The screens talk to Rust through one interface, `web/app/lib/backend.ts`, with two versions: `tauri.ts` (the app's own commands) and `fake.ts`, a stand-in that replays one of 57 saved scenarios (`web/app/tests/fixtures/`), each made from real corpus files, the real checker and the runner's own report builder. Only the screen-test build holds the stand-in; a test checks that the app's build does not.
+
+### Changes from the plan, recorded here
+
+- **A link's two parts are display pieces too,** not plain strings as the plan's section 6 sketched: the core's link pieces can hold invisible characters, which plain strings would hide.
+- **A finding's `detail` stays plain text** (it is always Steplet's own words: the core's rule, and its details are dates, fixed place names and famous site names), while its `quote` (the file's words) is display pieces.
+- **Two ways of cutting text:** one entry of a list (a step, a command the file allows, a changed file) shows a line break inside it as a badge (`U+000A`), so one entry never looks like two; a block (the body, a command's output, what the agent says, a whole command) keeps its line breaks.
+- **Each header entry keeps its line number,** since findings name lines; the repository is a small record (address and commit), not a pair.
+- **"Cannot run here" never repeats the file's host:** that is file text, and the reason is Steplet's own sentence ("Steplet fetches repositories only from github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is somewhere else."). The file's address is in its own panel.
+- **The preview's colour for the Run button is the worst of the file's findings and the findings about this computer** (row 22: a changed sender key makes it red); its `outcome` stays the core's own, which the test compares.
+- **The screen types are compared, not written on every test run:** `the_screen_types_are_current` fails when they are out of date and writes them with `STEPLET_BLESS=1`, like the fixtures. That is stricter than the plan's "write, then `git diff`", and works before the files are in git.
+- **Two small public functions in the runner,** `exit_code_of` and `call_what`: the report already read exit codes this way (H13); the live log now reads them in the same one place. Nothing else in the runner changed (its plain tests: 114 passed, as before).
+- **The live log's rows do not carry Steplet's check yet** ("Allowed…", "Refused…"): the gate's decisions are not part of the live progress today. Task 12, which builds the run screen, adds them.
+- The saved scenarios hold a few things beyond the plan's list, each needed by a state of section 8: an open error, the Open screen's note, the install's error, what Stop sends, Steplet's words for a yes and a no, and where a report was saved (or why it could not be). The interface also has `startNote` (the note after a crash, Task 12's command `start_note`).
+
+### The tests first
+
+```
+> cargo test -p steplet-app --offline --test views
+error[E0432]: unresolved import `steplet_app::views`
+ --> crates\steplet-app\tests\views.rs:7:18
+  |
+7 | use steplet_app::views::{Here, Seg, line, preview, report_view};
+error[E0433]: cannot find `views` in `steplet_app`
+   --> crates\steplet-app\tests\views.rs:117:29
+error: could not compile `steplet-app` (test "views") due to 2 previous errors
+exit: 101
+> cargo test -p steplet-app --offline --test fixtures          (nothing saved yet)
+test fixtures_are_current ... FAILED
+test the_screen_types_are_current ... FAILED
+28 in C:\dev\runFile\.claude\worktrees\steplet-phase4-build-88af2b\crates\steplet-app/../..\web/shared/types: ["AnswerView.ts is missing", "CheckView.ts is missing", "ChooserView.ts is missing", "CommandView.ts is missing", "Counts.ts is missing", "EndView.ts is missing", "EntryView.ts is missing",
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+```
+
+(The second run's first failure was in the test data itself: one of the made-up files did not read, because a step held a colon and a space, which this format allows only in quotes; the step was reworded.) `file_text_reaches_the_screen_only_as_segments` gives every part of a made-up file the word "Qzx" and then looks through the whole preview for that word outside a display piece. It passed at once; to show it can fail, a finding's file quote was planted into its plain `detail` field (then undone):
+
+```
+> cargo test -p steplet-app --offline --test views file_text      (detail planted with the quote)
+test file_text_reaches_the_screen_only_as_segments ... FAILED
+assertion `left == right` failed: file text outside display pieces
+  left: ["preview.findings[0].detail", "preview.findings[1].detail"]
+ right: []
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+```
+
+`the_app_build_holds_no_stand_in_backend` (in `tests/shell.rs`) reads every file of `web/dist`. With the screens build planted there (then the app build put back):
+
+```
+test the_app_build_holds_no_stand_in_backend ... FAILED
+thread 'the_app_build_holds_no_stand_in_backend' (51364) panicked at crates\steplet-app\tests\shell.rs:185:13:
+C:\dev\runFile\.claude\worktrees\steplet-phase4-build-88af2b\crates\steplet-app/../../web/dist\assets\index-NZc1u4Ct.js holds the stand-in backend
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.01s
+```
+
+### Writing the saved data, and looking at it
+
+```
+> STEPLET_BLESS=1 cargo test -p steplet-app --offline --test fixtures      (in Git Bash)
+test the_screen_types_are_current ... ok
+test fixtures_are_current ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+> ls web/app/tests/fixtures | wc -l; du -sh web/app/tests/fixtures
+57
+1.8M	web/app/tests/fixtures
+```
+
+The largest is `run-long-output.json` (1.3 MB: a command output of 50,000 lines, for the plan's responsiveness test). Each scenario was read back with a small script (`fixture_summary.py`, in the session's scratch folder) that prints what a person would check; its output, one line per scenario (cut at 400 characters):
+
+```
+ask-10-seconds-left            run  prepared > started > agent_says > question(Run this command: touch asked.txt | the file does not ask for this command | waited 290s)
+ask-2-more-waiting             run  prepared > started > agent_says > question(Run this command: touch asked.txt | the file does not ask for this command | waited 4s) > question(Run this command: touch second.txt | the file does not ask for this command | waited 2s) > question(Open this web address: [link https://example.org/thir | the file does not ask for this site | waited 0s)
+ask-command                    run  prepared > started > agent_says > question(Run this command: touch asked.txt | the file does not ask for this command | waited 0s)
+ask-file-write                 run  prepared > started > agent_says > question(Change this file: /work/r1/repo/NOTES.md | the file does not ask to change files here | waited 0s)
+ask-web-address                run  prepared > started > agent_says > question(Open this web address: [link https://example.org/read | the file does not ask for this site | waited 0s)
+ask-withdrawn                  run  prepared > started > agent_says > question(Run this command: touch asked.txt | the file does not ask for this command | waited 0s) > question_closed
+chooser-needs-setup            chooser  ready=False lines=6 items=0
+chooser-ready-15-sites         chooser  ready=True lines=6 items=30
+chooser-ready-no-sites         chooser  ready=True lines=6 items=0
+chooser-wsl-missing            chooser  ready=False lines=6 items=0
+open-could-not-read            open  open_error=Steplet could not read this file: Windows says access is den
+open-crash-cleared             open  note=Steplet was closed while a file was running. It stopped what
+open-empty                     open
+open-reading                   open  outcome=green run=green id=unsigned  findings=0 here=[]  title=Count the lines of the README in Hello-World
+prepare-commit-missing         run  failed
+prepare-fetch-failed           run  failed
+prepare-fetching               run
+prepare-ready-removed          run  prepared
+preview-amber                  preview  outcome=amber run=amber id=unsigned  findings=1 here=[]  title=Run the tests of tiny-py-lib
+preview-blocked                preview  outcome=blocked run=blocked id=unsigned  findings=1 here=[]  title=Count the README lines
+preview-green                  preview  outcome=green run=green id=unsigned  findings=0 here=[]  title=Count the lines of the README in Hello-World
+preview-header-unreadable      preview  outcome=blocked run=blocked id=unsigned  findings=1 here=[]
+preview-id-key-changed         preview  outcome=green run=red id=new_key  findings=0 here=['id.key-changed']  title=Count the lines of the README in Hello-World
+preview-id-known-as            preview  outcome=green run=green id=key_known_as  findings=0 here=[]  title=Count the lines of the README in Hello-World
+preview-id-new-key             preview  outcome=green run=green id=new_key  findings=0 here=[]  title=Count the lines of the README in Hello-World
+preview-id-same-key            preview  outcome=green run=green id=same_key  findings=0 here=[]  title=Count the lines of the README in Hello-World
+preview-id-unsigned            preview  outcome=green run=green id=unsigned  findings=0 here=[]  title=Count the lines of the README in Hello-World
+preview-longest                preview  outcome=red run=red id=unsigned  findings=41 here=[]  title=Run the whole test suite of the payments service a
+preview-not-runnable-host      preview  outcome=green run=not_runnable id=unsigned  findings=0 here=[]  reason=Steplet fetches repositories only from github.com, gitlab.com, codeberg.org and bitbucket.org, and this file's repository is somewhere else.  title=Count the lines of the README in Hello-World
+preview-not-runnable-no-repo   preview  outcome=green run=not_runnable id=unsigned  findings=1 here=[]  reason=This file names no repository, so Steplet has nothing to fetch and run.  title=Count the README lines
+preview-red                    preview  outcome=red run=red id=unsigned  findings=1 here=[]  title=Count the README lines
+report-40-commands             report  finished(end=finished completed=True cmds=[('allowed', 0), ('allowed', 0), ('allowed', 0), ('allowed', 0)] answers=[] faults=0 changed=[])
+report-faults                  report  finished(end=did_not_finish completed=False cmds=[('allowed', 0)] answers=[] faults=2 changed=[])
+report-finished                report  finished(end=finished completed=True cmds=[('allowed', 0)] answers=[] faults=0 changed=[])
+report-forged-result           report  finished(end=finished completed=True cmds=[('allowed', 1)] answers=[] faults=0 changed=['?? README.bak'])
+report-interrupted             report  finished(end=stopped_by_you completed=False cmds=[('allowed', 0), ('allowed', 0), ('refused', None), ('allowed', 0)] answers=['You said no.'] faults=0 changed=['?? build/'])
+report-save-failed             report  save_error=Steplet could not save the report: Windows says the disk is   finished(end=finished completed=True cmds=[('allowed', 0)] answers=[] faults=0 changed=[])
+report-saved                   report  saved_to=C:\Users\Ana\Documents\steplet-report-2026-10-11-1405.txt  finished(end=finished completed=True cmds=[('allowed', 0)] answers=[] faults=0 changed=[])
+report-test-failed             report  finished(end=finished completed=True cmds=[('allowed', 1)] answers=[] faults=0 changed=[])
+report-tripwire                report  finished(end=stopped_by_steplet completed=False cmds=[('allowed', 0), ('not_asked', 0)] answers=[] faults=0 changed=[])
+run-busy                       run  prepared > started > agent_says > call(wc -l README) > result(exit=0,lines=1) > call(cat README) > result(exit=0,lines=1) > agent_says > call(rm -rf build) > result(exit=None,lines=1) > call(wc -l README) > result(exit=0,lines=1)
+run-long-command               run  prepared > started > call(wc -l README docs/very/long/pa) > result(exit=0,lines=0)
+run-long-output                run  prepared > started > call(wc -l README) > result(exit=0,lines=50000)
+run-model-refusal              run  prepared > started > model_refused > ended > finished(end=model_refused completed=False cmds=[] answers=[] faults=0 changed=[])
+run-started                    run  prepared > started
+run-stopping                   run  prepared > started > agent_says > call(wc -l README) > result(exit=0,lines=1) > call(cat README) > result(exit=0,lines=1) > agent_says > call(rm -rf build) > result(exit=None,lines=1) > call(wc -l README) > result(exit=0,lines=1)
+run-tripwire                   run  prepared > started > call(wc -l README) > result(exit=0,lines=1) > call(curl [link https://example.net) > result(exit=0,lines=0) > skipped > finished(end=stopped_by_steplet completed=False cmds=[('allowed', 0), ('not_asked', 0)] answers=[] faults=0 changed=[])
+run-wrong-key                  run  prepared > started > ended > finished(end=did_not_finish completed=False cmds=[] answers=[] faults=1 changed=[])
+setup-all-ready                setup  wsl:ready | linux:ready | tools:ready | gate:ready  key=True switch=on ready=True
+setup-could-not-look           setup  wsl:ready | linux:unknown | tools:unknown | gate:unknown  key=True switch=off ready=False
+setup-install-failed           setup  wsl:ready | linux:missing | tools:unknown | gate:unknown  key=False switch=off ready=False  setup_lines=4  setup_error=Setting up Steplet's Linux stopped at "install the tools": t
+setup-installing               setup  wsl:ready | linux:missing | tools:unknown | gate:unknown  key=False switch=off ready=False  setup_lines=8
+setup-key-saved                setup  wsl:ready | linux:ready | tools:missing | gate:ready  key=True switch=off ready=False
+setup-nothing-done             setup  wsl:ready | linux:missing | tools:unknown | gate:unknown  key=False switch=off ready=False
+setup-switch-broken            setup  wsl:ready | linux:ready | tools:ready | gate:ready  key=True switch=broken ready=True
+setup-wsl-missing              setup  wsl:missing | linux:unknown | tools:unknown | gate:unknown  key=False switch=off ready=False
+setup-wsl-too-old              setup  wsl:missing | linux:unknown | tools:unknown | gate:unknown  key=False switch=off ready=False
+```
+
+(This listing was taken before Stop's saved data and the reply words were added; those changed no line of it.) What was checked in it: the key-changed file is red only through its "On this computer" finding, as row 22 asks, while its own outcome stays green; the forged output ("exit 0", "Steplet: every test passed") still shows exit code 1; a refused command has no exit code; each question carries the checker's real reason; "could not look" is told apart from "missing". The preview's identity line for a changed key is "signature valid, sender unknown" plus the red finding, which is what the core gives (Task 7). The run fixtures carry no per-call check yet (see above).
+
+### The tests pass
+
+```
+> cargo test -p steplet-app --offline
+     Running tests\fixtures.rs (target\debug\deps\fixtures-69f45a4a78dd73f9.exe)
+test the_screen_types_are_current ... ok
+test fixtures_are_current ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+     Running tests\shell.rs (target\debug\deps\shell-52d52ba15b88d342.exe)
+test no_debug_port_without_the_e2e_feature ... ok
+test the_browser_keeps_wrys_default_arguments ... ok
+test the_web_view_sends_nothing_to_the_network ... ok
+test the_page_is_titled_steplet ... ok
+test the_window_goes_nowhere_but_the_apps_own_page ... ok
+test the_window_and_security_settings_are_fixed ... ok
+test the_app_build_holds_no_stand_in_backend ... ok
+test every_command_the_app_registers_is_listed_for_tauri_to_check ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\views.rs (target\debug\deps\views-5ef4c53d6ec120ac.exe)
+test a_newline_inside_one_entry_shows_as_a_badge ... ok
+test file_text_reaches_the_screen_only_as_segments ... ok
+test no_view_holds_the_key ... ok
+test the_preview_agrees_with_the_core ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+app exit: 0
+> cargo test -p steplet-run --offline
+19 summary lines: 114 passed, 0 failed, 39 ignored
+run exit: 0
+> npm --prefix web run check
+1792525139448 COMPLETED 132 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 62 pairs
+> npm --prefix web run build ; npm --prefix web run build:screens
+dist/assets/index-CT59eRkx.js   24.85 kB │ gzip: 10.21 kB
+dist-screens/assets/index-NZc1u4Ct.js                            33.17 kB │ gzip:  12.05 kB
+> grep -l "steplet-stand-in-backend" -r web/dist web/dist-screens
+web/dist-screens/assets/index-NZc1u4Ct.js
+> cargo fmt --all -- --check
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+clippy exit: 0
+```
+
+(The app's empty test lines are left out; the runner's line is counted from its 19 summary lines. `npm run check` type-checks both backends against the one interface.)
+
+### What this task did not verify
+
+- **The runner's Linux-only report tests,** which also read exit codes: they could not run. Both failed before any exit code was read, because Steplet's gate program did not start inside Steplet's Linux (`/opt/steplet/gate/steplet-gate-ba1474290a83aa52.exe: Invalid argument`), so Claude Code ran with no gate and every tool call failed closed. The cause is on Windows' side and not in this task's change; it is measured, and fixed, in "Found while running Task 9's Linux checks" below. The runner's plain tests, which cover the exit-code rule on made-up events, pass (114).
+- **The stand-in backend in a browser:** no screen uses it yet; Task 10's screen tests are its first users. Only the type checker has seen it against the interface.
+- **The real backend:** none of its commands exists in Rust yet (Tasks 10 to 13).
+- **Look-alike sender names and unusual text in a fixture's live rows** beyond what the core's display pieces already cover (phase 1's display tests).

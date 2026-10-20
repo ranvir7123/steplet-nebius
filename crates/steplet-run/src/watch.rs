@@ -135,6 +135,11 @@ pub(crate) fn what(tool: &str, input: &Value) -> String {
     }
 }
 
+/// What a tool call is about, for a screen: its command, path, address or search (as the report shows it).
+pub fn call_what(tool: &str, input: &Value) -> String {
+    what(tool, input)
+}
+
 /// A call in a few words: the tool, then what it was.
 pub(crate) fn described(tool: &str, what: &str) -> String {
     format!("{tool} {what}").trim_end().into()

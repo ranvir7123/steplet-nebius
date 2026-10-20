@@ -9,6 +9,8 @@ use tauri::{Url, WebviewWindowBuilder};
 
 include!("commands.rs");
 
+pub mod views;
+
 /// WebView2's start arguments for every build.
 /// - wry's own defaults, which any arguments of ours replace, so they are repeated: they turn off a few Edge
 ///   features, SmartScreen among them, which would send addresses to Microsoft.

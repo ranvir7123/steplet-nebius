@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 
@@ -12,7 +13,10 @@ const SCREENS_CSP =
 export default defineConfig(({ command, mode }) => {
   // A build names its mode; other tools (the type checker) load this file without one.
   if (command === "build" && mode !== "app" && mode !== "screens") throw new Error(`unknown build mode: ${mode}`);
+  // The screens import their backend from "$backend": the real one in the app, the stand-in only in the screens build.
+  const backend = mode === "screens" ? "./app/lib/fake.ts" : "./app/lib/tauri.ts";
   return {
+    resolve: { alias: { $backend: fileURLToPath(new URL(backend, import.meta.url)) } },
     plugins: [
       svelte(),
       {

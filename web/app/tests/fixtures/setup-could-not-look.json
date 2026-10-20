@@ -1,0 +1,38 @@
+{
+  "screen": "setup",
+  "preview": null,
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+    },
+    "linux": {
+      "status": "unknown",
+      "text": "Steplet could not look at its own Linux: WSL did not answer within 60 seconds"
+    },
+    "tools": {
+      "status": "unknown",
+      "text": "Steplet could not look at the tools in its Linux: WSL did not answer within 60 seconds"
+    },
+    "gate": {
+      "status": "unknown",
+      "text": "Steplet could not look at its gate program: WSL did not answer within 60 seconds"
+    },
+    "key_saved": true,
+    "opens_steplet_files": "off",
+    "ready": false
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

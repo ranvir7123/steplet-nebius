@@ -1,0 +1,160 @@
+{
+  "screen": "preview",
+  "preview": {
+    "sha256": "994947474aa807e2ef69a19b39350e6855b00047103a8159ec0098a0c8567109",
+    "outcome": "amber",
+    "run_status": {
+      "kind": "amber"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "findings": [
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 14,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python -m pytest"
+          }
+        ]
+      }
+    ],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Run the tests of tiny-py-lib"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Steplet corpus"
+          }
+        ]
+      },
+      "expires": "2026-12-31",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/steplet-corpus/tiny-py-lib.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "a250d6ceebeac2feb30cd5134696be2763a3ba16"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Run the tests."
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report how many passed and failed."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 14,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python -m pytest"
+            }
+          ]
+        }
+      ],
+      "domains": [
+        {
+          "line": 16,
+          "text": [
+            {
+              "kind": "text",
+              "text": "pypi.org"
+            }
+          ]
+        },
+        {
+          "line": 17,
+          "text": [
+            {
+              "kind": "text",
+              "text": "files.pythonhosted.org"
+            }
+          ]
+        }
+      ],
+      "read": [],
+      "write": [],
+      "never": [],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Run the tests\n\nRun `python -m pytest` in the repository and report the summary line.\n"
+        }
+      ],
+      "body_line": 19
+    },
+    "counts": {
+      "steps": 2,
+      "commands": 1,
+      "domains": 2,
+      "read": 0,
+      "write": 0,
+      "never": 0
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

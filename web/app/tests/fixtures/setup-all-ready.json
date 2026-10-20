@@ -1,0 +1,38 @@
+{
+  "screen": "setup",
+  "preview": null,
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+    },
+    "linux": {
+      "status": "ready",
+      "text": "Steplet's own Linux is installed."
+    },
+    "tools": {
+      "status": "ready",
+      "text": "Its tools are there: git, Python, Claude Code and the rest."
+    },
+    "gate": {
+      "status": "ready",
+      "text": "The gate program for this Steplet is in its Linux."
+    },
+    "key_saved": true,
+    "opens_steplet_files": "on",
+    "ready": true
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

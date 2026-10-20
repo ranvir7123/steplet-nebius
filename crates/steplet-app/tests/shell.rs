@@ -167,6 +167,29 @@ fn the_window_goes_nowhere_but_the_apps_own_page() {
 }
 
 #[test]
+fn the_app_build_holds_no_stand_in_backend() {
+    // The stand-in backend and its saved scenarios are for screen tests only (Task 9); the app embeds web/dist.
+    let dist = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../web/dist"));
+    let mut scripts = 0;
+    let mut stack = vec![dist.clone()];
+    while let Some(dir) = stack.pop() {
+        for e in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("{}: {e} (build the page first)", dir.display())) {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            assert!(!p.to_string_lossy().contains("fixtures"), "{} is a saved scenario", p.display());
+            let text = String::from_utf8_lossy(&std::fs::read(&p).unwrap()).into_owned();
+            scripts += p.extension().is_some_and(|x| x == "js") as u32;
+            assert!(!text.contains("steplet-stand-in-backend"), "{} holds the stand-in backend", p.display());
+            assert!(!text.contains("open-crash-cleared"), "{} holds the saved scenarios", p.display());
+        }
+    }
+    assert!(scripts > 0, "web/dist holds the app's script");
+}
+
+#[test]
 fn the_page_is_titled_steplet() {
     let path = format!("{}/../../web/index.html", env!("CARGO_MANIFEST_DIR"));
     let page = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));

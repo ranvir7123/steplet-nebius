@@ -1,0 +1,128 @@
+{
+  "screen": "preview",
+  "preview": {
+    "sha256": "26324be6a6e860c029867b4e3716956fa8ffa0fc0892c2d24de05df26490e5ad",
+    "outcome": "green",
+    "run_status": {
+      "kind": "green"
+    },
+    "identity": {
+      "kind": "same_key",
+      "key": "SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk",
+      "runs": 2
+    },
+    "findings": [],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Count the lines of the README in Hello-World"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Steplet test vectors"
+          }
+        ]
+      },
+      "expires": "2026-12-31",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/octocat/Hello-World.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Count the lines in the README file."
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report the count."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 14,
+          "text": [
+            {
+              "kind": "text",
+              "text": "wc -l README"
+            }
+          ]
+        }
+      ],
+      "domains": [],
+      "read": [],
+      "write": [],
+      "never": [],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Count the README lines\n\nRun `wc -l README` and report the number.\n"
+        }
+      ],
+      "body_line": 23
+    },
+    "counts": {
+      "steps": 2,
+      "commands": 1,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 0
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

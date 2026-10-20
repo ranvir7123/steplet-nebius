@@ -6,7 +6,8 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "types": ["svelte", "vite/client"]
+    "types": ["svelte", "vite/client"],
+    "paths": { "$backend": ["./app/lib/tauri.ts"] }
   },
   "include": ["app/**/*.ts", "app/**/*.svelte", "shared/**/*.ts", "shared/**/*.svelte"]
 }

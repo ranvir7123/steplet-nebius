@@ -355,10 +355,7 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                 (None, Some(&harmless)) => Check::NotAsked { harmless },
                 (None, None) => Check::NotJudged,
             };
-            let exit_code = match result {
-                Some(r) if name == "Bash" && input["run_in_background"] != Value::Bool(true) => exit_code(r),
-                _ => None,
-            };
+            let exit_code = result.and_then(|r| exit_code_of(name, input, r.is_error, r.plain_end, r.text));
             // A call that ran although Steplet refused it, or ran without asking and was no harmless read, is a breach
             // of its own, stop or not.
             let ran = result.is_some_and(|r| !r.is_error);
@@ -400,14 +397,18 @@ fn results(events: &[Event]) -> HashMap<&str, CallResult<'_>> {
     results
 }
 
-/// A command's exit code from Claude Code's own marks, never from what the program printed: no error with a plain end
-/// in Claude Code's record means 0; with an error, Claude Code's first line `Exit code N` gives N. Anything else (a
-/// refusal, an interruption, an exit code Claude Code gave a meaning of its own) has none.
-fn exit_code(r: &CallResult) -> Option<i32> {
-    if !r.is_error {
-        return r.plain_end.then_some(0);
+/// A tool call's exit code from Claude Code's own marks on its result (H13), never from what the program printed. Only
+/// a `Bash` call not moved to the background has one: no error with a plain end in Claude Code's record means 0; with
+/// an error, Claude Code's first line `Exit code N` gives N. Anything else (a refusal, an interruption, an exit code
+/// Claude Code gave a meaning of its own) has none. The report and the app's live log both read exit codes here.
+pub fn exit_code_of(tool: &str, input: &Value, is_error: bool, plain_end: bool, text: &str) -> Option<i32> {
+    if tool != "Bash" || input["run_in_background"] == Value::Bool(true) {
+        return None;
     }
-    r.text.lines().next()?.strip_prefix("Exit code ")?.parse().ok()
+    if !is_error {
+        return plain_end.then_some(0);
+    }
+    text.lines().next()?.strip_prefix("Exit code ")?.parse().ok()
 }
 
 /// Everything the gate refused: each refused decision, marked if the call ran anyway, and each connection refused

@@ -1,0 +1,38 @@
+{
+  "screen": "setup",
+  "preview": null,
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+    },
+    "linux": {
+      "status": "missing",
+      "text": "Steplet's own Linux is not installed yet."
+    },
+    "tools": {
+      "status": "unknown",
+      "text": "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+    },
+    "gate": {
+      "status": "unknown",
+      "text": "Steplet cannot look at its gate program until Windows' Linux feature is there."
+    },
+    "key_saved": false,
+    "opens_steplet_files": "off",
+    "ready": false
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

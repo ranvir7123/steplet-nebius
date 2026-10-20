@@ -1,0 +1,18 @@
+{
+  "screen": "open",
+  "preview": null,
+  "open_error": null,
+  "note": "Steplet was closed while a file was running. It stopped what was left of that run and removed its folders. Nothing of it is left.",
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
-  // The app's one window. Task 8: the empty Open screen; the screens behind it come with Tasks 10 to 13.
+  // The app's one window. Task 8: the empty Open screen; the screens behind it come with Tasks 10 to 13. The backend
+  // is in the context under "backend" (main.ts).
 </script>
 
 <div class="window">

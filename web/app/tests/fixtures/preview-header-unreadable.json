@@ -1,0 +1,48 @@
+{
+  "screen": "preview",
+  "preview": {
+    "sha256": "e9e775aec1ab7cc3d42b7a240d0f4ccb6f1d482060f48c1c42da1b42f446bade",
+    "outcome": "blocked",
+    "run_status": {
+      "kind": "blocked"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "findings": [
+      {
+        "rule": "read.refused",
+        "severity": "blocked",
+        "line": 3,
+        "title": "Steplet cannot read this file",
+        "detail": "a value with a colon then a space, or ending in a colon, must be in double quotes",
+        "advice": "Ask the sender to fix the line named here; steplet-sign check shows them what is allowed.",
+        "quote": null
+      }
+    ],
+    "here": [],
+    "file": null,
+    "counts": {
+      "steps": 0,
+      "commands": 0,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 0
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

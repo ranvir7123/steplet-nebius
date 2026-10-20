@@ -1,0 +1,95 @@
+{
+  "screen": "setup",
+  "preview": null,
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0)."
+    },
+    "linux": {
+      "status": "missing",
+      "text": "Steplet's own Linux is not installed yet."
+    },
+    "tools": {
+      "status": "unknown",
+      "text": "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+    },
+    "gate": {
+      "status": "unknown",
+      "text": "Steplet cannot look at its gate program until Windows' Linux feature is there."
+    },
+    "key_saved": false,
+    "opens_steplet_files": "off",
+    "ready": false
+  },
+  "setup_lines": [
+    [
+      {
+        "kind": "text",
+        "text": "Installing: Ubuntu 26.04 LTS"
+      }
+    ],
+    [
+      {
+        "kind": "invisible",
+        "codepoint": 27
+      },
+      {
+        "kind": "text",
+        "text": "[2K[==========                ] 41.0%"
+      }
+    ],
+    [
+      {
+        "kind": "invisible",
+        "codepoint": 27
+      },
+      {
+        "kind": "text",
+        "text": "[2K[==========================] 100.0%"
+      }
+    ],
+    [
+      {
+        "kind": "text",
+        "text": "Ubuntu 26.04 LTS has been installed."
+      }
+    ],
+    [
+      {
+        "kind": "text",
+        "text": "Reading package lists..."
+      }
+    ],
+    [
+      {
+        "kind": "text",
+        "text": "Setting up git (1:2.51.0-1ubuntu1) ..."
+      }
+    ],
+    [
+      {
+        "kind": "text",
+        "text": "Setting up python3 (3.13.7-1) ..."
+      }
+    ],
+    [
+      {
+        "kind": "text",
+        "text": "added 1 package in 9s"
+      }
+    ]
+  ],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}

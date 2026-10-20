@@ -1,0 +1,232 @@
+{
+  "screen": "chooser",
+  "preview": {
+    "sha256": "01fa37b71e7824a498b73fffc32487e5e68e447244fb3585dd06bc94c12087c2",
+    "outcome": "green",
+    "run_status": {
+      "kind": "green"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "findings": [],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Count the lines of the README in Hello-World"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Ana Lee"
+          }
+        ]
+      },
+      "expires": "2027-09-30",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/octocat/Hello-World.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Check that the README file is there."
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Count the lines in the README file."
+            }
+          ]
+        },
+        {
+          "line": 12,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report the count."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 15,
+          "text": [
+            {
+              "kind": "text",
+              "text": "wc -l README"
+            }
+          ]
+        }
+      ],
+      "domains": [],
+      "read": [],
+      "write": [],
+      "never": [
+        {
+          "line": 17,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change any file."
+            }
+          ]
+        },
+        {
+          "line": 18,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not use the network."
+            }
+          ]
+        }
+      ],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Count the README lines\n\nThe repository is already checked out at the commit above.\n\n1. Check that `README` exists.\n2. Run `wc -l README`.\n3. Report the number it prints, and nothing else.\n"
+        }
+      ],
+      "body_line": 20
+    },
+    "counts": {
+      "steps": 3,
+      "commands": 1,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 2
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": {
+    "claude": {
+      "ready": false,
+      "promises": [
+        {
+          "text": "Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.",
+          "items": [],
+          "tests": [
+            "a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not",
+            "a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next",
+            "a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run",
+            "a_writing_command_made_to_skip_the_gate_stops_the_run",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares"
+          ]
+        },
+        {
+          "text": "The agent cannot fetch any web address, unless you say yes to that exact address.",
+          "items": [],
+          "tests": [
+            "a_web_fetch_is_allowed_only_to_a_site_the_file_declares",
+            "a_yes_allows_exactly_the_request_shown"
+          ]
+        },
+        {
+          "text": "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run).",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained",
+            "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+            "the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after"
+          ]
+        },
+        {
+          "text": "Your own files are not inside Steplet's Linux, where this task runs.",
+          "items": [],
+          "tests": [
+            "use_case_1_runs_with_none_of_the_receiver_s_files_present"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        },
+        {
+          "text": "Programs this task runs cannot start Windows programs.",
+          "items": [],
+          "tests": [
+            "every_try_of_the_hostile_fixture_is_contained"
+          ]
+        }
+      ],
+      "data_leaves": "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
+    },
+    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer (D1)."
+  },
+  "setup": {
+    "wsl": {
+      "status": "missing",
+      "text": "Windows' Linux feature (WSL 2) is not on this computer."
+    },
+    "linux": {
+      "status": "unknown",
+      "text": "Steplet cannot look at its own Linux until Windows' Linux feature is there."
+    },
+    "tools": {
+      "status": "unknown",
+      "text": "Steplet cannot look at the tools in its Linux until Windows' Linux feature is there."
+    },
+    "gate": {
+      "status": "unknown",
+      "text": "Steplet cannot look at its gate program until Windows' Linux feature is there."
+    },
+    "key_saved": false,
+    "opens_steplet_files": "off",
+    "ready": false
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null
+}
