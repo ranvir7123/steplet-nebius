@@ -702,3 +702,35 @@ fn another_model_is_allowed_only_right_after_a_model_refused_this_file() {
     assert_eq!(start(&raw, true), Err(NOT_NOW.into()));
     assert_eq!(*seen.lock().unwrap(), [false, false, true]);
 }
+
+/// Task 14 review: the live log says how a call ended in the report's words, so a call Steplet or the receiver
+/// refused first says "It did not run" in both.
+#[test]
+fn a_refused_call_ends_in_the_live_log_as_in_the_report() {
+    use steplet_app::session::{ASK_LIMIT, RUN_LIMIT, Relay};
+    use steplet_app::views::{EventView, Limits};
+    use steplet_run::{Check, Event, NotYes, Progress};
+    let mut relay = Relay::new(Limits { ask: ASK_LIMIT, run: RUN_LIMIT });
+    let input = json!({ "command": "rm -rf build" });
+    let mut ended = Vec::new();
+    for p in [
+        Progress::Event(Event::ToolUse { id: "u1".into(), name: "Bash".into(), input: input.clone() }),
+        Progress::Checked { call: "u1".into(), check: Check::RefusedWhenAsked { how: NotYes::SaidNo }, reason: None },
+        Progress::Event(Event::ToolResult {
+            id: "u1".into(),
+            is_error: true,
+            text: "Steplet refused this: the receiver said no".into(),
+            plain_end: false,
+        }),
+        Progress::Event(Event::ToolUse { id: "u2".into(), name: "Bash".into(), input: json!({ "command": "ls" }) }),
+        Progress::Checked { call: "u2".into(), check: Check::Allowed, reason: None },
+        Progress::Event(Event::ToolResult { id: "u2".into(), is_error: false, text: "a\n".into(), plain_end: true }),
+    ] {
+        for v in relay.relay(&p).views {
+            if let ProgressView::Event { event: EventView::Result { ended: words, .. } } = v {
+                ended.push(words);
+            }
+        }
+    }
+    assert_eq!(ended, ["It did not run", "Exit code 0"]);
+}

@@ -46,8 +46,8 @@
   const SHOWN_LINES = 40;
 
   interface Result {
-    is_error: boolean;
-    exit_code: number | null;
+    /** How the call ended, in Rust's words (the report's). */
+    ended: string;
     failed: boolean;
     output: Shown;
     lines: number;
@@ -99,7 +99,7 @@
         break;
       }
       case "result": {
-        const result = { is_error: e.is_error, exit_code: e.exit_code, failed: e.failed, output: e.output, lines: e.lines };
+        const result = { ended: e.ended, failed: e.failed, output: e.output, lines: e.lines };
         const row = callRow(e.id);
         if (row) row.result = result;
         else rows.push({ kind: "call", id: e.id, tool: [], what: [], check: null, reason: null, result, all: false });
@@ -309,7 +309,6 @@
           ? "amber"
           : "note";
   /** Refused at the gate: it never ran, so there is no exit to tell. */
-  const refusedBeforeRunning = (c: CheckView | null) => c?.kind === "refused" || c?.kind === "refused_by_you";
   const repository = $derived(view.file?.repository ?? null);
   const count = (n: number) => n.toLocaleString("en-US");
 </script>
@@ -398,11 +397,7 @@
                 <span class="check note"><Icon kind="note" />Steplet is checking it</span>
               {/if}
               {#if r.reason}<span class="reason">Steplet's reason: {r.reason}</span>{/if}
-              {#if r.result && !refusedBeforeRunning(r.check)}
-                <span class="exit" class:failed={r.result.failed}>
-                  {#if r.result.exit_code !== null}Exit code {r.result.exit_code}{:else if r.result.is_error}Ended with an error{:else}Done{/if}
-                </span>
-              {/if}
+              {#if r.result}<span class="exit" class:failed={r.result.failed}>{r.result.ended}</span>{/if}
             </div>
             {#if r.result && r.result.lines > 0}
               {@const result = r.result}

@@ -613,9 +613,17 @@ pub enum EventView {
     AgentSays { text: Shown },
     /// A tool call the agent made. `what` is its command, path or address; `fields` its whole request.
     Call { id: String, tool: Shown, what: Shown, fields: Vec<FieldView> },
-    /// A tool call's result. `exit_code` from Claude Code's own marks (H13), never from the output; `failed`: it
-    /// ended with an exit code other than 0, which the log makes stand out.
-    Result { id: String, is_error: bool, exit_code: Option<i32>, failed: bool, output: Shown, lines: u32 },
+    /// A tool call's result. `exit_code` from Claude Code's own marks (H13), never from the output; `ended` and
+    /// `failed` as the report says them (`ended_words`).
+    Result {
+        id: String,
+        is_error: bool,
+        exit_code: Option<i32>,
+        ended: String,
+        failed: bool,
+        output: Shown,
+        lines: u32,
+    },
     /// Steplet's record of a call that did not ask the gate; `harmless` means a harmless read and the run went on.
     Skipped { id: String, tool: Shown, what: Shown, harmless: bool },
     /// A model refused (E1); `to` is the model Claude Code then used, if it switched.
@@ -630,8 +638,9 @@ pub enum EventView {
     Retry { words: String },
 }
 
-/// The live log's row for `e`. `call` is the tool name and request of the call a result belongs to, when known.
-pub fn event_view(e: &Event, call: Option<(&str, &Value)>) -> Option<EventView> {
+/// The live log's row for `e`. `call` is the tool name and request of the call a result belongs to, when known, and
+/// whether Steplet or the receiver refused that call before it ran.
+pub fn event_view(e: &Event, call: Option<(&str, &Value, bool)>) -> Option<EventView> {
     Some(match e {
         Event::Started { model, .. } => EventView::Started { model: line(model) },
         Event::AgentText(text) => EventView::AgentSays { text: shown(text) },
@@ -642,12 +651,15 @@ pub fn event_view(e: &Event, call: Option<(&str, &Value)>) -> Option<EventView> 
             fields: fields(input),
         },
         Event::ToolResult { id, is_error, text, plain_end } => {
-            let exit_code = call.and_then(|(tool, input)| exit_code_of(tool, input, *is_error, *plain_end, text));
+            let exit_code = call.and_then(|(tool, input, _)| exit_code_of(tool, input, *is_error, *plain_end, text));
+            let refused_first = call.is_some_and(|(_, _, refused)| refused);
+            let (ended, failed) = ended_words(exit_code, Some(*is_error), refused_first);
             EventView::Result {
                 id: id.clone(),
                 is_error: *is_error,
                 exit_code,
-                failed: exit_code.is_some_and(|code| code != 0),
+                ended,
+                failed,
                 output: shown(text),
                 lines: text.lines().count() as u32,
             }
@@ -881,10 +893,18 @@ pub struct FailureView {
 pub fn windows_says(said: impl std::fmt::Display) -> String {
     let said = said.to_string();
     let words = match said.rfind(" (os error ") {
-        Some(at) if said.ends_with(')') => &said[..at],
+        Some(at) if is_os_code(&said[at + " (os error ".len()..]) => &said[..at],
         _ => &said,
     };
-    format!("Windows says: {words}")
+    if words.trim().is_empty() { "Windows gave no reason.".into() } else { format!("Windows says: {}", words.trim()) }
+}
+
+/// Rust's own tail of an operating-system error: a number (perhaps negative) and ")", nothing else.
+fn is_os_code(tail: &str) -> bool {
+    tail.strip_suffix(')').is_some_and(|n| {
+        let digits = n.strip_prefix('-').unwrap_or(n);
+        !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+    })
 }
 
 pub fn failure(reason: &str, detail: Option<&str>) -> FailureView {
@@ -1015,7 +1035,7 @@ pub struct Limits {
 
 /// The screen's view of one piece of live progress. `call` is the tool name and request of the call a result belongs
 /// to, when known.
-pub fn progress_view(p: &Progress, call: Option<(&str, &Value)>, limits: Limits) -> Option<ProgressView> {
+pub fn progress_view(p: &Progress, call: Option<(&str, &Value, bool)>, limits: Limits) -> Option<ProgressView> {
     let ask_limit = limits.ask;
     Some(match p {
         Progress::Prepared(prepared) => ProgressView::Prepared {
@@ -1208,20 +1228,33 @@ pub fn report_view(r: &Report) -> ReportView {
     }
 }
 
+/// Steplet or the receiver refused the call before it ran.
+pub fn refused_first(check: &Check) -> bool {
+    matches!(check, Check::Refused | Check::RefusedWhenAsked { .. } | Check::TurnedAway)
+}
+
+/// How a call ended, in Steplet's words, the same in the live log, the report and the saved file; and whether it
+/// failed (an exit code other than 0, or an error with no exit code), which the screens make stand out.
+/// `ended_in_error` is `None` when nothing came back.
+pub fn ended_words(exit_code: Option<i32>, ended_in_error: Option<bool>, refused_first: bool) -> (String, bool) {
+    match (exit_code, ended_in_error) {
+        _ if refused_first => ("It did not run".into(), false),
+        (Some(code), _) => (format!("Exit code {code}"), code != 0),
+        (None, Some(true)) => ("Ended with an error".into(), true),
+        (None, Some(false)) => ("Done".into(), false),
+        (None, None) => ("No result came back".into(), false),
+    }
+}
+
 fn command_view(c: &ReportCommand) -> CommandView {
-    let refused_first = matches!(c.check, Check::Refused | Check::RefusedWhenAsked { .. } | Check::TurnedAway);
-    let ended = match c.exit_code {
-        Some(code) => format!("Exit code {code}"),
-        None if refused_first => "It did not run".into(),
-        None => "Exit code not known".into(),
-    };
+    let (ended, failed) = ended_words(c.exit_code, c.ended_in_error, refused_first(&c.check));
     CommandView {
         tool: line(&c.tool),
         command: shown(&c.command),
         check: check_view(&c.check),
         exit_code: c.exit_code,
         ended,
-        failed: c.exit_code.is_some_and(|code| code != 0),
+        failed,
         output: shown(&c.output),
         lines: c.output.lines().count() as u32,
         after_stop: c.after_stop,

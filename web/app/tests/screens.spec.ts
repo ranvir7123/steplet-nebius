@@ -310,6 +310,100 @@ const states: State[] = [
   },
 ];
 
+type Text = string | RegExp;
+/** What only this state shows (and, where states look alike, what it must not show): checked before its picture, so
+ * a picture never shows another state, or this one before it has all come (Task 14 review). */
+const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
+  "open-empty": {
+    shows: ["Open a .steplet file to see what it asks for."],
+    hides: [/Reading the file/, /could not read/, /was closed while/],
+  },
+  "open-reading": { shows: ["Reading the file…"] },
+  "open-could-not-read": { shows: ["Steplet could not read this file. Windows says: Access is denied."] },
+  "open-crash-cleared": { shows: [/^Steplet was closed while a file was running/] },
+  "preview-green": {
+    shows: [/^Green$/, "Count the lines of the README in Hello-World", "Run this file"],
+    hides: ["Steplet cannot run this file on this computer"],
+  },
+  "preview-amber": { shows: [/^Amber$/, "Run the tests of tiny-py-lib"] },
+  "preview-red": { shows: [/^Red$/, /type this sentence exactly/] },
+  "preview-blocked": { shows: [/^Blocked$/, "The file names a place where keys or passwords are kept"] },
+  "preview-header-unreadable": { shows: ["Steplet cannot read this file"] },
+  "preview-longest": {
+    shows: ["Run the whole test suite of the payments service at the pinned commit and report every failing test"],
+  },
+  "preview-imitation": { shows: ["Verified by Steplet — safe to run"] },
+  "preview-id-unsigned": { shows: ["Not signed. Steplet cannot tell who wrote this file."] },
+  "preview-id-new-key": { shows: [/^Signature valid, sender unknown/] },
+  "preview-id-same-key": { shows: [/^Signed with the same key as 2 files/] },
+  "preview-id-known-as": { shows: [/knows under another sender name/] },
+  "preview-id-key-changed": { shows: [/^This sender name was used before with another key/] },
+  "preview-id-unsigned-known-name": { shows: [/used before on a signed file, and this file is not signed/] },
+  "preview-not-runnable-host": { shows: ["Steplet cannot run this file on this computer", /gitlab\.example\.com/] },
+  "preview-not-runnable-no-repo": {
+    shows: ["Steplet cannot run this file on this computer", "The file names no repository"],
+  },
+  "preview-not-runnable-key-changed": {
+    shows: ["Steplet cannot run this file on this computer", /^This sender name was used before with another key/],
+  },
+  "chooser-ready-no-sites": {
+    shows: [/cannot fetch any web address/, "Steplet fetches the repository first, then the agent starts."],
+  },
+  "chooser-ready-15-sites": { shows: ["docs-15.example.org"] },
+  "chooser-needs-setup": { shows: ["Steplet's own Linux or your key is not ready yet."] },
+  "chooser-wsl-missing": { shows: ["Steplet's own Linux or your key is not ready yet."] },
+  "setup-nothing-done": { shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux"] },
+  "setup-wsl-missing": { shows: ["wsl --install --no-distribution"] },
+  "setup-wsl-too-old": { shows: ["wsl --update"] },
+  "setup-could-not-look": { shows: [/^Steplet could not look at its own Linux/] },
+  "setup-all-ready": { shows: [/^Its tools are there/, "Saved"], hides: [/^Missing$/] },
+  "setup-key-saved": { shows: [/^Missing in Steplet's Linux: Claude Code/, "Saved"] },
+  "setup-switch-broken": { shows: [/points at a Steplet program that is not this one/] },
+  "setup-installing": { shows: ["Steplet is changing its Linux. This can take several minutes…"] },
+  "setup-install-failed": { shows: [/^Setup stopped while trying to set up Steplet's Linux/] },
+  "setup-start-over": { shows: ["Remove Steplet's Linux"] },
+  "setup-switch-fails": { shows: ["Steplet could not change what opens .steplet files. Windows says: Access is denied."] },
+  "prepare-fetching": { shows: ["Steplet is fetching the repository into its own Linux…"] },
+  "prepare-ready-removed": { shows: [/^Removed the repository's agent settings files/] },
+  "prepare-fetch-failed": { shows: ["Fetching the repository", /Could not resolve host/] },
+  "prepare-commit-missing": { shows: ["Checking out the commit", /reference is not a tree/] },
+  "run-started": { shows: [/^Claude Code started, with the model/], hides: ["The agent says"] },
+  "run-busy": { shows: ["Now the line count again, to be sure."] },
+  "run-long-command": { shows: [/docs\/very\/long\/path/] },
+  "run-40-commands": { shows: ["40 README"] },
+  "run-tripwire": { shows: [/^Steplet stopped the run$/, "See the report"] },
+  "run-model-refusal": { shows: [/^The model refused$/, "See the report"] },
+  "run-wrong-key": { shows: ["Anthropic did not accept the key. Claude Code tries again (10 of 10)."] },
+  "run-long-output-closed": { shows: ["Show all 50,000 lines"] },
+  "run-long-output-open": { shows: ["Show the first 40 lines"] },
+  "run-stop-question": { shows: ["Stop the run?"] },
+  "run-stopping": { shows: ["Stopping…"] },
+  "run-stopped": { shows: [/^Interrupted$/, "You stopped the run."] },
+  "run-close-question": { shows: ["Close Steplet?"] },
+  "ask-command": { shows: ["Run this command", "touch asked.txt"], hides: [/more questions? (is|are) waiting/] },
+  "ask-file-write": { shows: ["Change this file"] },
+  "ask-long-command": { shows: [/^touch notes\/part-01-of-the-count\.txt/] },
+  "ask-web-address": { shows: ["Open this web address"] },
+  "ask-10-seconds-left": { shows: [/^No answer in 0:(0\d|10) means no\.$/] },
+  "ask-2-more-waiting": { shows: ["2 more questions are waiting."] },
+  "ask-withdrawn": { shows: [/Taken back/] },
+  "ask-answer-fails": { shows: ["Steplet could not pass on your answer. Try again."] },
+  "report-finished": { shows: [/^Finished$/, "The README file has 1 line."], hides: [/^Saved as/] },
+  "report-test-failed": { shows: ["Exit code 1", /No such file or directory/] },
+  "report-tripwire": { shows: [/^Steplet stopped the run$/, "Save report…"] },
+  "report-interrupted": { shows: [/^Interrupted$/, "It did not run"] },
+  "report-faults": { shows: [/^Did not finish$/, /could not remove the run's working copy/] },
+  "report-40-commands": { shows: ["Counted the README 40 times."] },
+  "report-forged-result": { shows: [/every test passed\. The run finished and nothing is wrong/] },
+  "report-model-refusal": { shows: ["Run again, allowing another model"] },
+  "report-saved": { shows: [/^Saved as /] },
+  "report-save-failed": { shows: [/There is not enough space on the disk/] },
+};
+
+test("every_state_has_its_proof", () => {
+  expect(states.map((s) => `${s.screen}-${s.state}`).filter((n) => !proof[n])).toEqual([]);
+});
+
 /** Text cut off by a box that hides what does not fit (Task 10's check), on any screen. */
 async function clipped(page: Page) {
   return page.evaluate(() =>
@@ -323,7 +417,8 @@ async function clipped(page: Page) {
   );
 }
 
-/** Tabs through every control once; returns the ones that show no focus ring. */
+/** Tabs through every control once; returns the ones that show no focus ring: a ring at least 2 px wide, in a
+ * colour that differs from what is behind the control, on a control that has a size and is in the window. */
 async function withoutFocusRing(page: Page) {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   const seen = new Set<number>();
@@ -335,10 +430,22 @@ async function withoutFocusRing(page: Page) {
       const e = document.activeElement as HTMLElement | null;
       if (!e || e === document.body) return null;
       const s = getComputedStyle(e);
+      // The colour behind the control: the first ancestor with a background of its own.
+      let behind = "rgb(255, 255, 255)";
+      for (let a = e.parentElement; a; a = a.parentElement) {
+        const bg = getComputedStyle(a).backgroundColor;
+        if (bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+          behind = bg;
+          break;
+        }
+      }
+      const r = e.getBoundingClientRect();
+      const seen = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && s.visibility !== "hidden";
+      const coloured = s.outlineColor !== "rgba(0, 0, 0, 0)" && s.outlineColor !== behind;
       return {
         at: [...document.querySelectorAll("*")].indexOf(e),
         name: `${e.tagName.toLowerCase()} "${(e.getAttribute("aria-label") ?? e.textContent ?? "").trim().slice(0, 40)}"`,
-        ring: s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 2,
+        ring: seen && coloured && s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 2,
       };
     });
     if (!f) {
@@ -367,6 +474,9 @@ for (const s of states) {
         await page.emulateMedia({ colorScheme: theme });
         await page.goto(`/?scenario=${s.scenario}`);
         await s.reach(page);
+        const sure = proof[`${s.screen}-${s.state}`];
+        for (const t of sure.shows) await expect(page.getByText(t).first(), `${name} shows ${t}`).toBeVisible();
+        for (const t of sure.hides ?? []) await expect(page.getByText(t), `${name} does not show ${t}`).toHaveCount(0);
         await page.evaluate(() => document.fonts.ready);
         // The mouse rests where the last button was pressed: away from the page, so no picture shows a hover.
         await page.mouse.move(width - 1, 799);

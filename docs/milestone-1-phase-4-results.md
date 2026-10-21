@@ -3854,3 +3854,106 @@ The first two runs of the Rust tests did not get as far as testing. One stopped 
 - **The 24-line box of a long output.** Scrolling it with the mouse wheel and the keyboard (it takes focus) was tried only in Chromium.
 - **`windows_says`.** It was tested with made-up strings. It drops the " (os error N)" part, which Rust itself adds, so Windows set to another language ends the same way. That was not tried.
 - **The scenarios are scripted.** The refusal, the switch, "the receiver said no" and the failed test are made from scripted events run through Steplet's own Rust code, not from a real run.
+
+## Task 14 review
+
+A code reviewer read the Task 14 commit (a769184) on its own, without building it. It found nothing Critical and six Important points. All six were fixed test first. Where a new test passed at its first run, a planted fault showed that it can fail.
+
+1. **The live log and the report said different things about how a call ended.** The live log had its own words ("Done", "Ended with an error") and its own rule for refused calls. That rule did not know a turned-away call. The report said "Exit code not known" for a tool that has no exit code.
+   - Now one rule in Rust (`views::ended_words`) gives the words and the red mark for the live log, the report and the saved file:
+     - "Exit code N";
+     - "Ended with an error" (red);
+     - "Done";
+     - "It did not run" (refused first);
+     - "No result came back".
+   - The runner records whether each result came back as an error (`ReportCommand.ended_in_error`).
+   - The Relay keeps each call's check, so a live result knows whether its call was refused first.
+   - The page no longer decides any of it.
+   - Tests:
+     - `the_live_log_marks_a_failed_command` and `each_command_says_how_it_ended` (extended);
+     - `a_refused_call_ends_in_the_live_log_as_in_the_report`: it failed on a planted Relay that ignores the check ("Ended with an error" for "It did not run");
+     - `the_live_log_says_how_each_call_ended_as_the_report_does`.
+2. **Nothing checked that a picture shows the state its name says.** Each state now names text only it shows, and for look-alikes text it must not show. The test checks these before the picture, and `every_state_has_its_proof` fails if a state has none. Planted: the finished report reached with the interrupted scenario gave `Error: report-finished-light-1100 shows /^Finished$/`.
+3. **The focus check counted a ring nobody could see.** The ring now needs all of these:
+   - a colour that differs from what is behind the control;
+   - a control with a size;
+   - a control in the window.
+
+   Planted: `:focus-visible { outline-color: transparent; }` gave `Error: controls without a focus ring`. The old check passed it.
+4. **A link's box touched the text around it** when an address came straight after other text, as in git's `access '…'`. The box now keeps a 4 px gap from any text before or after it. An address that starts its text stays in line with the column. Test: `a_link_box_keeps_a_gap_from_the_text_around_it` (gap 0 before the fix).
+5. **`windows_says` cut too much from some messages.** "File (os error 5) is bad (see docs)" became "File". It now drops only Rust's own " (os error N)" ending, and an empty message reads "Windows gave no reason." Test: `windows_errors_read_without_their_code_number` (extended). It failed on the old rule with `left: "Windows says: File"`.
+6. **The red for a failed command** is the `red-fg` colour on the surfaces the contrast check already covers. No change was needed.
+
+`chooser-wsl-missing` looks the same as `chooser-needs-setup` on this screen. The difference shows on Setup.
+
+The tests failed first:
+
+```
+> cargo test -p steplet-app --offline -j 1 --test views --test session
+      1 error[E0026]: variant `steplet_app::views::EventView::Result` does not have a field named `ended`
+      2 error[E0308]: mismatched types
+> (planted: the Relay ignores each call's check) cargo test -p steplet-app --offline -j 1 --test session a_refused_call
+test a_refused_call_ends_in_the_live_log_as_in_the_report ... FAILED
+  left: ["Ended with an error", "Exit code 0"]
+ right: ["It did not run", "Exit code 0"]
+restored identical
+> (planted: the old rule) cargo test -p steplet-app --offline -j 1 --test views windows_errors
+test windows_errors_read_without_their_code_number ... FAILED
+  left: "Windows says: File"
+ right: "Windows says: File (os error 5) is bad (see docs)"
+restored identical
+> npx --offline playwright test --config playwright.reuse.config.ts --project=screens run.spec --grep "how_each_call_ended"
+  x  1 [screens] › app\tests\run.spec.ts:189:1 › the_live_log_says_how_each_call_ended_as_the_report_does (6.4s)
+    Expected substring: "It did not run"
+    Received string:    "Bash rm -rf build Refused: you said no   Steplet refused this: the receiver said no "
+> npx --offline playwright test --config playwright.reuse.config.ts --project=screens run.spec --grep "gap_from_the_text"
+  x  1 [screens] › app\tests\run.spec.ts:199:1 › a_link_box_keeps_a_gap_from_the_text_around_it (313ms)
+    Expected: >= 3
+    Received:    0
+planted: report-finished reached with report-interrupted
+    Error: report-finished-light-1100 shows /^Finished$/
+  1 failed
+screens.spec.ts restored, identical
+planted: :focus-visible { outline-color: transparent; }
+    Error: controls without a focus ring
+  1 failed
+base.css restored, identical
+```
+
+Then they pass, with everything else, and the pictures were all taken again:
+
+```
+> STEPLET_BLESS=1 cargo test -p steplet-app --offline -j 1 --test fixtures
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens --workers=4
+  322 passed (4.6m)
+screens exit 0
+> npm --prefix web run build; cargo test --workspace --offline -j 1 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+save: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+session: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+views: test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+fixtures: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+   (68 "test result: ok" lines in all, none failed: 348 passed, 42 ignored)
+tests exit 0
+> cargo test -p steplet-app --offline -j 1 --test session_live -- --ignored --nocapture --test-threads=1
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 201.08s
+   (the real runs' live results carry "ended":"Exit code 0")
+> npm --prefix web run check
+1792547268130 COMPLETED 158 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 1 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.41s
+clippy exit 0
+```
+
+The 322 screen tests are 41 screen tests, the state-proof check and the 280 pictures. The changed pictures were looked at again: the live log's refused row says "It did not run", and the address box in git's message has its gap on both sides. One side effect was kept: when an address box wraps to a new line after text, its 4 px gap shows at the line's start, because a box cannot tell that it starts a line.
+
+Minor points left for later (the reviewer's):
+- The wait for a state to settle ignores changes in digits and in colour. Each state's proof text now covers what a picture must show.
+- With a question open, Tab stays inside the question, so only its controls are ring-checked in those states. The text-cut-off check does not see text hidden behind a sideways scroll bar.
+- Every output box is named "What it printed", so a screen reader hears the same name for each call.
+- The request check compares the start of each address with the page's own, so a port such as 41800 would pass.
+- Whether a page is scrolled is read once, before the mouse moves.

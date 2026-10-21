@@ -244,7 +244,7 @@ fn live_and_report_views_keep_outside_text_in_pieces() {
         },
     ];
     for e in &events {
-        let view = event_view(e, Some(("Bash", &input)));
+        let view = event_view(e, Some(("Bash", &input, false)));
         assert_eq!(stray_text(&view, q), Vec::<String>::new(), "{e:?}");
     }
     let question = Question {
@@ -484,6 +484,13 @@ fn windows_errors_read_without_their_code_number() {
     assert_eq!(windows_says("Access is denied. (os error 5)"), "Windows says: Access is denied.");
     assert_eq!(windows_says("The disk is full."), "Windows says: The disk is full.");
     assert_eq!(windows_says("a (os error 5) in the middle"), "Windows says: a (os error 5) in the middle");
+    // Task 14 review: only Rust's own code number goes, and an empty message says so.
+    assert_eq!(
+        windows_says("File (os error 5) is bad (see docs)"),
+        "Windows says: File (os error 5) is bad (see docs)"
+    );
+    assert_eq!(windows_says(" (os error 5)"), "Windows gave no reason.");
+    assert_eq!(windows_says(""), "Windows gave no reason.");
 }
 
 /// Found by looking (Task 14): the help for Windows' Linux feature says what is wrong with it, missing or too old.
@@ -543,6 +550,18 @@ fn each_command_says_how_it_ended() {
         ended(vec![bash("make test"), result(true, "Steplet refused this")], deny),
         ("It did not run".into(), false)
     );
+    // Task 14 review: the same words as the live log for a tool with no exit code, and for a call with no result.
+    let write = Event::ToolUse {
+        id: "u1".into(),
+        name: "Write".into(),
+        input: json!({ "file_path": "/work/r1/repo/a.txt", "content": "a" }),
+    };
+    assert_eq!(ended(vec![write.clone(), result(false, "File created")], Vec::new()), ("Done".into(), false));
+    assert_eq!(
+        ended(vec![write.clone(), result(true, "Permission denied")], Vec::new()),
+        ("Ended with an error".into(), true)
+    );
+    assert_eq!(ended(vec![write], Vec::new()), ("No result came back".into(), false));
 }
 
 fn client() -> steplet_run::Client {
@@ -562,13 +581,20 @@ fn client() -> steplet_run::Client {
 #[test]
 fn the_live_log_marks_a_failed_command() {
     let input = json!({ "command": "make test" });
-    let failed = |is_error: bool, text: &str| {
+    let live = |tool: &str, is_error: bool, text: &str, refused_first: bool| {
         let e = Event::ToolResult { id: "u1".into(), is_error, text: text.into(), plain_end: !is_error };
-        match event_view(&e, Some(("Bash", &input))) {
-            Some(steplet_app::views::EventView::Result { failed, .. }) => failed,
+        match event_view(&e, Some((tool, &input, refused_first))) {
+            Some(steplet_app::views::EventView::Result { ended, failed, .. }) => (ended, failed),
             other => panic!("not a result: {other:?}"),
         }
     };
-    assert!(failed(true, "Exit code 2\nfailed\n"));
-    assert!(!failed(false, "ok\n"));
+    assert_eq!(live("Bash", true, "Exit code 2\nfailed\n", false), ("Exit code 2".into(), true));
+    assert_eq!(live("Bash", false, "ok\n", false), ("Exit code 0".into(), false));
+    // Task 14 review: the live log and the report say the same, from one rule in Rust.
+    assert_eq!(live("Write", false, "File created", false), ("Done".into(), false));
+    assert_eq!(live("Write", true, "Permission denied", false), ("Ended with an error".into(), true));
+    assert_eq!(
+        live("Bash", true, "Steplet refused this: the receiver said no", true),
+        ("It did not run".into(), false)
+    );
 }

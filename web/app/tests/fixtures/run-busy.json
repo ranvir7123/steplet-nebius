@@ -294,6 +294,7 @@
         "id": "toolu_01",
         "is_error": false,
         "exit_code": 0,
+        "ended": "Exit code 0",
         "failed": false,
         "output": [
           {
@@ -355,6 +356,7 @@
         "id": "toolu_02",
         "is_error": false,
         "exit_code": 0,
+        "ended": "Exit code 0",
         "failed": false,
         "output": [
           {
@@ -428,6 +430,7 @@
         "id": "toolu_03",
         "is_error": true,
         "exit_code": null,
+        "ended": "It did not run",
         "failed": false,
         "output": [
           {
@@ -489,6 +492,7 @@
         "id": "toolu_04",
         "is_error": false,
         "exit_code": 0,
+        "ended": "Exit code 0",
         "failed": false,
         "output": [
           {

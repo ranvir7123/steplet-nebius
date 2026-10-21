@@ -441,17 +441,19 @@ pub struct Relayed {
 }
 
 /// The runner's progress, as the screen shows it: each call's request kept so its result gets its exit code (H13),
-/// and the questions one at a time, the later ones waiting their turn.
+/// each call's check kept so its result says how it ended in the report's words, and the questions one at a time,
+/// the later ones waiting their turn.
 pub struct Relay {
     limits: views::Limits,
     calls: HashMap<String, (String, Value)>,
+    refused_first: HashMap<String, bool>,
     showing: Option<u64>,
     waiting: VecDeque<Question>,
 }
 
 impl Relay {
     pub fn new(limits: views::Limits) -> Relay {
-        Relay { limits, calls: HashMap::new(), showing: None, waiting: VecDeque::new() }
+        Relay { limits, calls: HashMap::new(), refused_first: HashMap::new(), showing: None, waiting: VecDeque::new() }
     }
 
     pub fn relay(&mut self, p: &Progress) -> Relayed {
@@ -481,7 +483,10 @@ impl Relay {
                         self.calls.insert(id.clone(), (name.clone(), input.clone()));
                         None
                     }
-                    Event::ToolResult { id, .. } => self.calls.get(id).map(|(n, i)| (n.as_str(), i)),
+                    Event::ToolResult { id, .. } => self
+                        .calls
+                        .get(id)
+                        .map(|(n, i)| (n.as_str(), i, self.refused_first.get(id).copied().unwrap_or(false))),
                     _ => None,
                 };
                 out.views.extend(views::progress_view(p, call, self.limits));
@@ -491,7 +496,11 @@ impl Relay {
                     out.views.push(ProgressView::Checked { call: id.clone(), check, reason: None });
                 }
             }
-            Progress::Prepared(_) | Progress::Checked { .. } => {
+            Progress::Checked { call, check, .. } => {
+                self.refused_first.insert(call.clone(), views::refused_first(check));
+                out.views.extend(views::progress_view(p, None, self.limits));
+            }
+            Progress::Prepared(_) => {
                 out.views.extend(views::progress_view(p, None, self.limits));
             }
         }

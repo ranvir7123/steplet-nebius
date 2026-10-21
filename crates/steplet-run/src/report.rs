@@ -74,6 +74,8 @@ pub struct ReportCommand {
     /// `make test; true` ends in 0 whatever the tests did); `None` when it did not run, has not ended, or Claude Code
     /// did not say or gave the exit code a meaning of its own. Other tools have none.
     pub exit_code: Option<i32>,
+    /// Whether Claude Code marked what came back as an error; `None` when nothing came back.
+    pub ended_in_error: Option<bool>,
     /// What came back, as Claude Code gave it.
     pub output: String,
     /// Steplet was already stopping the run before this call's result came (or none came): what it shows was cut
@@ -430,6 +432,7 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                 command: scrub.text(&what(name, input)),
                 check,
                 exit_code,
+                ended_in_error: result.map(|r| r.is_error),
                 output: result.map_or(String::new(), |r| scrub.text(r.text)),
                 after_stop,
             })

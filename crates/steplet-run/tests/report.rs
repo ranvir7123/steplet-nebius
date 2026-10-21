@@ -145,6 +145,7 @@ fn a_run_that_ended_on_its_own_is_completed_with_the_command_s_real_exit_code() 
             command: "python3 -m unittest discover".into(),
             check: Check::Allowed,
             exit_code: Some(5),
+            ended_in_error: Some(true),
             output: "Exit code 5\n\nRan 0 tests in 0.000s\n\nNO TESTS RAN".into(),
             after_stop: false,
         }]

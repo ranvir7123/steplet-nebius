@@ -185,3 +185,43 @@ test("an_answer_that_did_not_reach_steplet_can_be_given_again", async ({ page })
   await expect(dialog).toHaveCount(0);
   await expect(log(page)).toContainText(f.replies.no);
 });
+
+test("the_live_log_says_how_each_call_ended_as_the_report_does", async ({ page }) => {
+  // Task 14 review: the live log had words of its own ("Done", "Ended with an error") and hid how a refused call
+  // ended; it now shows Rust's words, the report's.
+  await runOf(page, "run-busy");
+  const rm = log(page).locator("li").filter({ hasText: "rm -rf build" });
+  await expect(rm).toContainText("It did not run");
+  const wc = log(page).locator("li").filter({ hasText: "wc -l README" }).first();
+  await expect(wc).toContainText("Exit code 0");
+});
+
+test("a_link_box_keeps_a_gap_from_the_text_around_it", async ({ page }) => {
+  // Task 14 review: the box had a gap only after a link's shown text, so an address right after a quote touched it.
+  await runOf(page, "prepare-fetch-failed");
+  const gaps = await page.getByRole("alert").locator(".real").first().evaluate((box) => {
+    const link = box.parentElement!;
+    const edge = (node: Node | null, end: boolean) => {
+      if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) return null;
+      const r = document.createRange();
+      const at = end ? node.textContent.length - 1 : 0;
+      r.setStart(node, at);
+      r.setEnd(node, at + 1);
+      return r.getBoundingClientRect();
+    };
+    const b = box.getBoundingClientRect();
+    // The nearest text on each side, past the markers Svelte leaves between pieces.
+    const near = (from: Node | null, back: boolean) => {
+      let n = from;
+      while (n && (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !n.textContent))) {
+        n = back ? n.previousSibling : n.nextSibling;
+      }
+      return n;
+    };
+    const before = edge(near(link.previousSibling, true), true);
+    const after = edge(near(link.nextSibling, false), false);
+    return { before: before ? b.left - before.right : null, after: after ? after.left - b.right : null };
+  });
+  expect(gaps.before).toBeGreaterThanOrEqual(3);
+  expect(gaps.after).toBeGreaterThanOrEqual(3);
+});
