@@ -80,57 +80,75 @@ pub fn ready_to_run(look: &State, claude_found: Option<&str>, lock_free: bool) -
 const KEPT_TEST_FILES: &[&str] = &["listener.py", "fake_model.py", "made-up-key.sha256"];
 const KEPT_TEST_ENDINGS: &[&str] = &[".script.json", ".model.log", ".listener.log"];
 
-/// What a case left, from the look after it (`support::after_case_look`): each path, or `program <pid> <command>`, or
-/// `could not read: <line>` for a line the look should not have printed. Empty when the case left nothing.
+/// What a case left, from the look after it (`support::after_case_look`, records ended by a NUL): each path, or
+/// `program <pid> <command>`, or `could not look: <why>`, or `could not read: <record>` for a record the look should
+/// not have printed, a path that does not start at `/`, or one holding a control character (a line break in a name a
+/// task's program chose). Shown text has every control character replaced by `?`. Empty when the case left nothing.
 pub fn leftovers(listing: &str) -> Vec<String> {
+    let shown = |text: &str| text.chars().map(|c| if c.is_control() { '?' } else { c }).collect::<String>();
     let mut left = Vec::new();
-    for line in listing.lines().map(|l| l.trim_end_matches('\r')).filter(|l| !l.trim().is_empty()) {
-        let (kind, what) = line.split_once(' ').unwrap_or((line, ""));
+    for record in listing.split('\0').filter(|r| !r.trim().is_empty()) {
+        let unreadable = format!("could not read: {}", shown(record));
+        let Some((kind, what)) = record.split_once('\t') else {
+            left.push(unreadable);
+            continue;
+        };
+        let path = what.starts_with('/') && !what.contains(|c: char| c.is_control());
         match kind {
-            _ if what.is_empty() => left.push(format!("could not read: {line}")),
-            "left" | "marker" => left.push(what.to_owned()),
-            "test-file" => {
+            "left" | "marker" if path => left.push(what.to_owned()),
+            "test-file" if path => {
                 let name = what.rsplit('/').next().unwrap_or(what);
                 if !(KEPT_TEST_FILES.contains(&name) || KEPT_TEST_ENDINGS.iter().any(|e| name.ends_with(e))) {
                     left.push(what.to_owned());
                 }
             }
-            "program" => left.push(line.to_owned()),
-            _ => left.push(format!("could not read: {line}")),
+            "program" => match what.split_once('\t') {
+                Some((pid, command)) if !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()) => {
+                    left.push(format!("program {pid} {}", shown(command)));
+                }
+                _ => left.push(unreadable),
+            },
+            "could-not-look" => left.push(format!("could not look: {}", shown(what))),
+            _ => left.push(unreadable),
         }
     }
     left
 }
 
-/// The script root runs to remove what `leftovers` named: each path below a place the look lists (never the place
-/// itself, Steplet's runs folder, a path with `..` or a quote), and each program named by its number.
+/// The folders the look lists the contents of; the clean-up removes only what sits directly inside one of them.
+const LOOKED_IN: &[&str] = &[
+    "/work",
+    "/var/lib/steplet/runs",
+    "/opt/steplet/gate/runs",
+    "/var/lib/steplet",
+    "/tmp",
+    "/var/tmp",
+    "/opt/steplet-test",
+];
+
+/// The script root runs to remove what `leftovers` named. First it ends each program named, by its number; then it
+/// removes each path that sits directly inside a folder the look lists (never Steplet's runs folder, nothing deeper,
+/// where a link on the way could lead out, and nothing with `..`, a quote or a control character). Everything else is
+/// left as it is: it has been named, and the suite does not pass.
 pub fn removal_script(left: &[String]) -> String {
-    const BELOW: &[&str] = &[
-        "/work/",
-        "/var/lib/steplet/",
-        "/opt/steplet/gate/runs/",
-        "/tmp/",
-        "/var/tmp/",
-        "/opt/steplet-test/",
-        "/home/",
-    ];
-    let mut script = String::new();
+    let mut ends = String::new();
+    let mut removals = String::new();
     for what in left {
         if let Some(rest) = what.strip_prefix("program ") {
             let pid = rest.split(' ').next().unwrap_or("");
             if !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()) {
-                script += &format!("kill -KILL {pid}\n");
+                ends += &format!("kill -KILL {pid}\n");
             }
             continue;
         }
-        let below = BELOW.iter().any(|b| what.strip_prefix(b).is_some_and(|rest| !rest.is_empty()));
-        let safe =
-            !what.contains(['\'', '\n']) && !what.split('/').any(|p| p == "..") && what != "/var/lib/steplet/runs";
-        if below && safe {
-            script += &format!("rm -rf -- '{what}'\n");
+        let Some((folder, name)) = what.rsplit_once('/') else { continue };
+        let inside = LOOKED_IN.contains(&folder) && !name.is_empty() && name != "." && name != "..";
+        let safe = !what.contains(|c: char| c == '\'' || c.is_control()) && what != "/var/lib/steplet/runs";
+        if inside && safe {
+            removals += &format!("rm -rf -- '{what}'\n");
         }
     }
-    script
+    ends + &removals
 }
 
 /// What the runner needs from this computer.
@@ -422,12 +440,12 @@ impl Machine for ThisComputer {
     }
 
     fn after_case_look(&mut self) -> String {
-        let Some(distro) = self.distro.clone() else { return "could-not-look Steplet's Linux was not found\n".into() };
+        let Some(distro) = self.distro.clone() else { return "could-not-look\tSteplet's Linux was not found\0".into() };
         if self.held.is_none() {
-            return "could-not-look the suite does not hold Steplet's one-run lock\n".into();
+            return "could-not-look\tthe suite does not hold Steplet's one-run lock\0".into();
         }
         std::panic::catch_unwind(|| support::after_case_look(&distro))
-            .unwrap_or_else(|_| "could-not-look the look inside Steplet's Linux failed\n".into())
+            .unwrap_or_else(|_| "could-not-look\tthe look inside Steplet's Linux failed\0".into())
     }
 
     fn remove(&mut self, left: &[String]) {

@@ -694,12 +694,137 @@ rustc 1.98.0 (88d9e12ae 2026-08-18)
 cargo 1.98.0 (797e8a9bc 2026-08-05)
 ```
 
+### The automatic security check, and what changed (after commit fdb8295)
+
+An automatic security review of the committed code found a real problem in the look after a case. The look listed what a case left as plain lines of text, and the clean-up acted on those lines as root inside Steplet's Linux. A program the task runs works as the `steplet` account and can name a file in `/tmp` with a line break inside it; that one name would then read as two lines, and the second could pose as a program to end or a path to remove. The clean-up also removed deeper paths and files under `/home`, where a link on the way could lead out. Nothing of this had run yet (the look first runs in Step 5), but the suite exists to replay untrusted samples, so it was fixed at once:
+
+- The look now ends each record with a NUL, the one character a file name can never hold (`find -printf '…\0'`, `grep -Z`, `printf '…\0'`), and reads Steplet's raw output (`stdout_bytes`), since the usual text drops NULs.
+- A record whose path holds a control character, or does not start at `/`, is named as "could not read" (its control characters shown as `?`) and never acted on.
+- Programs to end come only from their own records, by number, and are ended first; then only paths directly inside one of the folders the look lists are removed. Nothing deeper, nothing under `/home`, never Steplet's runs folder. This also settles the small point the code review had left for later.
+
+The tests first, against the code before the fix (the verdict tests, with the three that fail):
+
+```
+> cargo test -p steplet-suite --offline --test verdict; echo "exit: $?"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests\verdict.rs (target\debug\deps\verdict-ba926aa185fd982f.exe)
+
+running 17 tests
+test sample_that_did_not_run ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_did_not_try ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_fails ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_passes ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test blocked_only_when_every_test_of_the_case_says_ok ... ok
+test a_case_that_did_not_run_is_never_shown_as_blocked ... ok
+test a_missing_or_ignored_test_is_not_blocked ... ok
+test a_test_named_by_two_cases_runs_once ... ok
+test a_name_with_a_line_break_cannot_add_a_record_of_its_own ... FAILED
+test nothing_counts_from_a_test_program_that_did_not_finish_or_does_not_add_up ... ok
+test test_programs_get_only_the_windows_variables_they_need ... ok
+test leftovers_after_a_case_are_named_and_fail_the_suite ... FAILED
+test the_suite_refuses_another_claude_code_version ... ok
+test the_clean_up_removes_only_what_the_look_named_below_its_places ... FAILED
+test the_look_after_a_case_touches_nothing_while_another_run_holds_the_lock ... ok
+test the_suite_starts_nothing_while_a_run_holds_the_lock ... ok
+test the_reader_reads_rust_s_own_test_output ... ok
+
+failures:
+
+---- a_name_with_a_line_break_cannot_add_a_record_of_its_own stdout ----
+
+thread 'a_name_with_a_line_break_cannot_add_a_record_of_its_own' (49552) panicked at crates\steplet-suite\tests\verdict.rs:425:5:
+assertion `left == right` failed
+  left: ["could not read: left\t/tmp/steplet-a", "could not read: program\t1\tx\0marker\t/tmp/steplet-b", "/etc\0left\t/work/t11b\0"]
+ right: ["could not read: left?/tmp/steplet-a?program?1?x", "could not read: marker?/tmp/steplet-b?left /etc", "/work/t11b"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- leftovers_after_a_case_are_named_and_fail_the_suite stdout ----
+
+thread 'leftovers_after_a_case_are_named_and_fail_the_suite' (37964) panicked at crates\steplet-suite\tests\verdict.rs:324:5:
+assertion `left == right` failed
+  left: ["could not read: test-file\t/opt/steplet-test/listener.py\0test-file\t/opt/steplet-test/cmd.exe\0test-file\t/opt/steplet-test/t11b.listener.log\0left\t/work/t11b\0"]
+ right: ["/opt/steplet-test/cmd.exe", "/work/t11b"]
+
+---- the_clean_up_removes_only_what_the_look_named_below_its_places stdout ----
+
+thread 'the_clean_up_removes_only_what_the_look_named_below_its_places' (35304) panicked at crates\steplet-suite\tests\verdict.rs:411:5:
+assertion `left == right` failed
+  left: "rm -rf -- '/work/t11b'\nrm -rf -- '/opt/steplet-test/cmd.exe'\nkill -KILL 812\nrm -rf -- '/var/lib/steplet/t11b.stamp'\nrm -rf -- '/tmp/steplet-dir/inner/marker.txt'\nrm -rf -- '/home/steplet/notes.txt'\n"
+ right: "kill -KILL 812\nrm -rf -- '/work/t11b'\nrm -rf -- '/opt/steplet-test/cmd.exe'\nrm -rf -- '/var/lib/steplet/t11b.stamp'\n"
+
+
+failures:
+    a_name_with_a_line_break_cannot_add_a_record_of_its_own
+    leftovers_after_a_case_are_named_and_fail_the_suite
+    the_clean_up_removes_only_what_the_look_named_below_its_places
+
+test result: FAILED. 10 passed; 3 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p steplet-suite --test verdict`
+exit: 101
+```
+
+The first failure shows the problem itself: the old reader split the name holding a line break into separate records. After the fix (the verdict tests' part, then every test program's result line):
+
+```
+> cargo test -p steplet-suite --offline; echo "exit: $?"
+     Running tests\verdict.rs (target\debug\deps\verdict-ba926aa185fd982f.exe)
+
+running 17 tests
+test sample_that_did_not_run ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_did_not_try ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_fails ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test sample_that_passes ... ignored, a sample for the_reader_reads_rust_s_own_test_output
+test the_suite_refuses_another_claude_code_version ... ok
+test a_name_with_a_line_break_cannot_add_a_record_of_its_own ... ok
+test a_missing_or_ignored_test_is_not_blocked ... ok
+test a_case_that_did_not_run_is_never_shown_as_blocked ... ok
+test the_look_after_a_case_touches_nothing_while_another_run_holds_the_lock ... ok
+test the_clean_up_removes_only_what_the_look_named_below_its_places ... ok
+test nothing_counts_from_a_test_program_that_did_not_finish_or_does_not_add_up ... ok
+test a_test_named_by_two_cases_runs_once ... ok
+test leftovers_after_a_case_are_named_and_fail_the_suite ... ok
+test blocked_only_when_every_test_of_the_case_says_ok ... ok
+test test_programs_get_only_the_windows_variables_they_need ... ok
+test the_suite_starts_nothing_while_a_run_holds_the_lock ... ok
+test the_reader_reads_rust_s_own_test_output ... ok
+
+test result: ok. 13 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.11s
+…
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 13 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit: 0
+```
+
+23 passed, 0 failed. Then:
+
+```
+> cargo fmt --all -- --check; echo "exit: $?"
+exit: 0
+```
+
+```
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings; echo "exit: $?"
+    Checking steplet-suite v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-suite)
+    Checking steplet-app v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-app)
+    Checking steplet-run v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-run)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.32s
+exit: 0
+```
+
+`steplet-run` and `steplet-app` are checked again because their tests share the changed helper. The new look itself (`support::after_case_look`) has not run on Steplet's Linux yet; it runs first in Step 5.
+
 ### Step 5: the first scripted run of what exists — waiting
 
 `cargo suite scripted` needs Steplet's Linux (Z9). The double-click session still owns `steplet.exe` and Steplet's Linux, so this step waits until you say in words that Steplet's Linux is free. Then: `cargo suite scripted`, its rows, the time and the record's name go here, and the commit of Step 6.
 
 ### What this task did not verify
 
+- **The look's new NUL-ended records on the real Steplet's Linux** (with Ubuntu 26.04's own `find`, `grep`, `tr` and `cut`), and whether a name holding a line break is shown as "could not read" there too: shown with made-up records only.
 - **Anything on Steplet's Linux.** The check of this computer before a Linux case (the lock, `setup::look`, reading Claude Code's version with `node`), the look after each case (`support::after_case_look`), the clean-up script run as root, `hold_linux` and `marker` were written but have not run against Steplet's Linux yet. They run first in Step 5. The list of files `/opt/steplet-test` keeps on purpose (the helpers and their logs) comes from reading the tests, not from looking: if Step 5 finds another file the tests leave there on purpose, the suite will call it left behind until the list is corrected.
 - **The short list of Windows variables** was tried only with the nine Windows-only cases. A Linux test that needs another variable would fail in Step 5, and the list would grow by one.
 - **The stop when another run holds the lock, or another Claude Code is installed,** is shown with a stand-in for this computer only.

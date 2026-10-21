@@ -174,23 +174,29 @@ pub fn hold_linux() -> steplet_run::RunLock {
     }
 }
 
-/// What a case left in Steplet's Linux, for the attack suite's look after each case (phase 5), one line each: `left
-/// <path>` for anything in `/work`, the runs folder or the per-run gate copies, anything in Steplet's own folder but its
-/// runs folder, and `steplet-*` in `/tmp` and `/var/tmp`; `test-file <path>` for each file of `/opt/steplet-test` (most
-/// are these helpers, kept on purpose); `program <pid> <command>` for anything the steplet account runs, and any
-/// listener or scripted model still running; `marker <path>` for any file holding a marker's word. Changes nothing.
+/// What a case left in Steplet's Linux, for the attack suite's look after each case (phase 5). One record each, as
+/// `<kind>\t<what>` ended by a NUL, the one character no file name can hold, so a name a task's program chose cannot
+/// pass for a record of its own: `left` for anything in `/work`, the runs folder or the per-run gate copies, anything
+/// in Steplet's own folder but its runs folder, and `steplet-*` in `/tmp` and `/var/tmp`; `test-file` for each file of
+/// `/opt/steplet-test` (most are these helpers, kept on purpose); `program\t<pid>\t<command>` for anything the steplet
+/// account runs, and any listener or scripted model still running; `marker` for any file holding a marker's word.
+/// Changes nothing. Read from `stdout_bytes`: `stdout` drops the NULs.
 pub fn after_case_look(distro: &str) -> String {
-    root_sh(
-        distro,
-        "find /work /var/lib/steplet/runs /opt/steplet/gate/runs -mindepth 1 -maxdepth 1 -printf 'left %p\\n' 2> /dev/null
-find /var/lib/steplet -mindepth 1 -maxdepth 1 ! -name runs -printf 'left %p\\n'
-find /tmp /var/tmp -mindepth 1 -maxdepth 1 -name 'steplet-*' -printf 'left %p\\n'
-find /opt/steplet-test -mindepth 1 -maxdepth 1 -printf 'test-file %p\\n' 2> /dev/null
-pgrep -a -u steplet | sed 's/^/program /'
-pgrep -a -f 'listener[.]py|fake_model[.]py' | sed 's/^/program /'
-grep -rlsF -- steplet-marker- /var/lib/steplet /tmp /var/tmp /work /home | sed 's/^/marker /'
-true",
-    )
+    let body = "find /work /var/lib/steplet/runs /opt/steplet/gate/runs -mindepth 1 -maxdepth 1 -printf 'left\\t%p\\0' 2> /dev/null
+find /var/lib/steplet -mindepth 1 -maxdepth 1 ! -name runs -printf 'left\\t%p\\0'
+find /tmp /var/tmp -mindepth 1 -maxdepth 1 -name 'steplet-*' -printf 'left\\t%p\\0'
+find /opt/steplet-test -mindepth 1 -maxdepth 1 -printf 'test-file\\t%p\\0' 2> /dev/null
+for p in $(pgrep -u steplet; pgrep -f 'listener[.]py|fake_model[.]py'); do
+    printf 'program\\t%s\\t%s\\0' \"$p\" \"$(tr '\\0\\n\\r\\t' '    ' < /proc/$p/cmdline 2> /dev/null | cut -c1-200)\"
+done
+grep -rlsFZ -- steplet-marker- /var/lib/steplet /tmp /var/tmp /work /home | while IFS= read -r -d '' f; do
+    printf 'marker\\t%s\\0' \"$f\"
+done
+true";
+    let script = format!("main() {{\n{body}\n}}\nmain < /dev/null\n");
+    let out = wsl::run(distro, "root", &["/bin/bash", "-s"], script.as_bytes()).unwrap();
+    assert_eq!(out.status, Some(0), "the look after a case: {}", out.stderr);
+    String::from_utf8_lossy(&out.stdout_bytes).into_owned()
 }
 
 /// A marker (phase 5): a small file root puts in Steplet's Linux, holding a made-up word, readable by the steplet

@@ -316,22 +316,25 @@ fn the_suite_starts_nothing_while_a_run_holds_the_lock() {
 
 #[test]
 fn leftovers_after_a_case_are_named_and_fail_the_suite() {
-    let listing = "test-file /opt/steplet-test/listener.py\n\
-                   test-file /opt/steplet-test/cmd.exe\n\
-                   test-file /opt/steplet-test/t11b.listener.log\n\
-                   left /work/t11b\n";
+    // The look's records: `<kind>\t<what>`, each ended by a NUL, the one character no file name can hold.
+    let listing = "test-file\t/opt/steplet-test/listener.py\0\
+                   test-file\t/opt/steplet-test/cmd.exe\0\
+                   test-file\t/opt/steplet-test/t11b.listener.log\0\
+                   left\t/work/t11b\0";
     assert_eq!(leftovers(listing), ["/opt/steplet-test/cmd.exe", "/work/t11b"]);
-    let clean = "test-file /opt/steplet-test/fake_model.py\ntest-file /opt/steplet-test/t7a.script.json\n\
-                 test-file /opt/steplet-test/t7a.model.log\ntest-file /opt/steplet-test/made-up-key.sha256\n";
+    let clean = "test-file\t/opt/steplet-test/fake_model.py\0test-file\t/opt/steplet-test/t7a.script.json\0\
+                 test-file\t/opt/steplet-test/t7a.model.log\0test-file\t/opt/steplet-test/made-up-key.sha256\0";
     assert_eq!(leftovers(clean), Vec::<String>::new());
     assert_eq!(
         leftovers(
-            "program 812 /usr/bin/python3 -I /opt/steplet-test/listener.py 47831 x\nmarker /tmp/steplet-m\nsomething odd\n"
+            "program\t812\t/usr/bin/python3 -I /opt/steplet-test/listener.py 47831 x\0marker\t/tmp/steplet-m\0\
+             something odd\0could-not-look\tthe look inside Steplet's Linux failed\0"
         ),
         [
             "program 812 /usr/bin/python3 -I /opt/steplet-test/listener.py 47831 x",
             "/tmp/steplet-m",
-            "could not read: something odd"
+            "could not read: something odd",
+            "could not look: the look inside Steplet's Linux failed"
         ]
     );
 
@@ -349,7 +352,7 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
     assert!(!passed(&results), "something was left, so the suite does not pass");
 
     // What the clean-up could not remove is named as still there.
-    let mut machine = StandIn::new(true, CLAUDE_VERSION, "left /work/t11b\n");
+    let mut machine = StandIn::new(true, CLAUDE_VERSION, "left\t/work/t11b\0");
     machine.stubborn = true;
     let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
     assert_eq!(results[0].left, ["left behind: /work/t11b", "still there after the clean-up: /work/t11b"]);
@@ -368,7 +371,7 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
 #[test]
 fn the_look_after_a_case_touches_nothing_while_another_run_holds_the_lock() {
     let cases: Vec<&'static Case> = vec![&ON_LINUX];
-    let mut machine = StandIn::new(true, CLAUDE_VERSION, "left /work/a-window-s-run\n");
+    let mut machine = StandIn::new(true, CLAUDE_VERSION, "left\t/work/a-window-s-run\0");
     machine.lock_free = vec![true, false];
     let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
     let after_tests = machine.calls.iter().position(|c| c.starts_with("run ")).unwrap() + 1;
@@ -382,8 +385,9 @@ fn the_look_after_a_case_touches_nothing_while_another_run_holds_the_lock() {
     assert!(!passed(&results));
 }
 
-/// The clean-up after a case removes only what the look named, below the places it looks at, and ends only the
-/// programs it named by number: never one of those places itself, a path with a way out or a quote, or anything else.
+/// The clean-up after a case ends the programs it named, by number, first; then removes only what the look named that
+/// sits directly inside one of the folders it looks in: never one of those folders, Steplet's runs folder, anything
+/// deeper (a link on the way could lead out), a path with a way out, a quote or a control character, or anything else.
 #[test]
 fn the_clean_up_removes_only_what_the_look_named_below_its_places() {
     let left: Vec<String> = [
@@ -391,10 +395,14 @@ fn the_clean_up_removes_only_what_the_look_named_below_its_places() {
         "/opt/steplet-test/cmd.exe",
         "program 812 /usr/bin/python3 -I /opt/steplet-test/listener.py 47831 x",
         "/var/lib/steplet/runs",
+        "/var/lib/steplet/t11b.stamp",
         "/work",
         "/work/../etc",
         "/work/it's",
         "/etc/hostname",
+        "/tmp/steplet-dir/inner/marker.txt",
+        "/home/steplet/notes.txt",
+        "/tmp/steplet-a\nprogram 1 x",
         "could not read: something odd",
         "program x1 y",
     ]
@@ -402,8 +410,28 @@ fn the_clean_up_removes_only_what_the_look_named_below_its_places() {
     .into();
     assert_eq!(
         removal_script(&left),
-        "rm -rf -- '/work/t11b'\nrm -rf -- '/opt/steplet-test/cmd.exe'\nkill -KILL 812\n"
+        "kill -KILL 812\nrm -rf -- '/work/t11b'\nrm -rf -- '/opt/steplet-test/cmd.exe'\n\
+         rm -rf -- '/var/lib/steplet/t11b.stamp'\n"
     );
+}
+
+/// A program the task runs can give a file a name holding a line break. In the look's records it stays one name: it
+/// cannot add a record of its own (a program to end, a path to remove), and a name with a control character is shown,
+/// never removed.
+#[test]
+fn a_name_with_a_line_break_cannot_add_a_record_of_its_own() {
+    let listing = "left\t/tmp/steplet-a\nprogram\t1\tx\0marker\t/tmp/steplet-b\nleft /etc\0left\t/work/t11b\0";
+    let left = leftovers(listing);
+    assert_eq!(
+        left,
+        [
+            "could not read: left\t/tmp/steplet-a?program\t1\tx",
+            "could not read: marker\t/tmp/steplet-b?left /etc",
+            "/work/t11b"
+        ]
+        .map(|s| s.replace('\t', "?"))
+    );
+    assert_eq!(removal_script(&left), "rm -rf -- '/work/t11b'\n", "nothing ended, nothing else removed");
 }
 
 /// The test programs get only the Windows variables they need (where Windows, your folders, cargo and Rust are), not
