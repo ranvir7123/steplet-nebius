@@ -19,4 +19,5 @@ pub const COMMANDS: &[&str] = &[
     "answer",
     "stop_run",
     "stop_and_close",
+    "save_report",
 ];

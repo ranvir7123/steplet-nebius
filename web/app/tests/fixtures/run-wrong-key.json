@@ -319,6 +319,11 @@
         "end": {
           "kind": "did_not_finish"
         },
+        "end_words": {
+          "title": "Did not finish",
+          "text": "The run ended before the agent finished.",
+          "icon": "amber"
+        },
         "completed": false,
         "stopped_by_you": false,
         "commands": [],
@@ -362,5 +367,6 @@
   },
   "saved_to": null,
   "save_error": null,
-  "switch_error": null
+  "switch_error": null,
+  "allowed_switch": []
 }

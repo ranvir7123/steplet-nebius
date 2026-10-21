@@ -168,7 +168,7 @@ fn start_run_checks_the_file_again_now() {
     // The example expires at the end of 2027-09-30; it was previewed before that, and Run is pressed after.
     let after_expiry = 1_822_521_600 + 2 * 86_400;
     let refused =
-        session(quick(), after_expiry, &dir).start(&raw, &sha(&raw), None, ready(), Arc::new(Seen::default()));
+        session(quick(), after_expiry, &dir).start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
     assert_eq!(refused, Err("This file expired after you opened it.".to_string()));
 }
 
@@ -179,7 +179,8 @@ fn start_run_refuses_bytes_that_changed() {
     let raw = read("examples/run-tests.steplet");
     let mut changed = raw.clone();
     changed.extend_from_slice(b"\nOne more line the sender did not write.\n");
-    let refused = session(quick(), NOW, &dir).start(&changed, &sha(&raw), None, ready(), Arc::new(Seen::default()));
+    let refused =
+        session(quick(), NOW, &dir).start(&changed, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
     assert_eq!(
         refused,
         Err("This file changed after you opened it. Open it again to see what it asks for now.".to_string())
@@ -192,7 +193,7 @@ fn red_needs_the_exact_sentence_on_the_rust_side_too() {
     let dir = scratch("red");
     let raw = read("corpus/hostile/hide.link-mismatch.hit.steplet");
     let s = session(quick(), NOW, &dir);
-    let start = |typed: Option<&str>| s.start(&raw, &sha(&raw), typed, ready(), Arc::new(Seen::default()));
+    let start = |typed: Option<&str>| s.start(&raw, &sha(&raw), typed, false, ready(), Arc::new(Seen::default()));
     let (wrong, dotted) = (RED_SENTENCE.replace("risks", "risk"), format!("{RED_SENTENCE}."));
     for typed in [None, Some(wrong.as_str()), Some(dotted.as_str())] {
         assert_eq!(
@@ -202,7 +203,7 @@ fn red_needs_the_exact_sentence_on_the_rust_side_too() {
         );
     }
     let screen = Arc::new(Seen::default());
-    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), ready(), screen.clone()), Ok(()));
+    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, ready(), screen.clone()), Ok(()));
     wait_until("the run's end", || screen.ended());
 }
 
@@ -212,7 +213,7 @@ fn run_is_refused_while_another_window_runs() {
     let dir = scratch("busy");
     let raw = read("examples/run-tests.steplet");
     let _other_window = RunLock::take().expect("no run here yet");
-    let refused = session(quick(), NOW, &dir).start(&raw, &sha(&raw), None, ready(), Arc::new(Seen::default()));
+    let refused = session(quick(), NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
     assert_eq!(refused, Err("Another Steplet window is running a file. Finish or stop it first.".to_string()));
 }
 
@@ -234,7 +235,7 @@ fn an_answer_reaches_the_runner_bound_to_its_question() {
         });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
-    s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     let question = |n: usize| {
         wait_until("a question", || screen.questions().len() > n);
         screen
@@ -279,7 +280,7 @@ fn a_question_flashes_the_taskbar_and_waits_its_turn() {
         });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
-    s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     wait_until("the first question", || screen.questions().len() == 1);
     std::thread::sleep(Duration::from_millis(400));
     assert_eq!(screen.questions().len(), 1, "the second waits behind the first");
@@ -304,7 +305,7 @@ fn closing_during_a_run_asks_first() {
     let screen = Arc::new(Seen::default());
     let s = session(until_stopped(), NOW, &dir);
     assert!(s.may_close(), "nothing runs yet");
-    s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     assert!(!s.may_close(), "a run is going on: the window asks first");
     s.stop_and_close();
     wait_until("the window to close after the run", || *screen.closed.lock().unwrap());
@@ -344,7 +345,7 @@ fn the_pins_are_written_when_run_starts_and_not_before() {
     assert!(!pins_path.exists(), "opening wrote no pin");
     let screen = Arc::new(Seen::default());
     Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p)
-        .start(&raw, &sha(&raw), None, ready(), screen.clone())
+        .start(&raw, &sha(&raw), None, false, ready(), screen.clone())
         .unwrap();
     wait_until("the run's end", || screen.ended());
     let Pins::Known(known) = pins::load(&pins_path) else { panic!("the pins file reads") };
@@ -360,7 +361,7 @@ fn a_run_that_cannot_start_says_why_in_words() {
         Err(RunError::Busy)
     });
     let screen = Arc::new(Seen::default());
-    session(run, NOW, &dir).start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.ended());
     let sent = screen.sent.lock().unwrap();
     let Some(ProgressView::Failed { failure, .. }) = sent.last() else { panic!("{sent:?}") };
@@ -416,13 +417,13 @@ fn a_known_sender_with_another_key_needs_the_sentence_too() {
     assert_eq!(preview.colour, "red", "the preview is red here");
     let s = Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p);
     assert_eq!(
-        s.start(&raw, &sha(&raw), None, ready(), Arc::new(Seen::default())),
+        s.start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default())),
         Err("This file is red: type the sentence exactly before you run it.".to_string())
     );
     let Pins::Known(known) = pins::load(&pins_path) else { panic!("the pins file reads") };
     assert_eq!(known.iter().map(|k| k.key.as_str()).collect::<Vec<_>>(), [OTHER_KEY], "the old pin stays");
     let screen = Arc::new(Seen::default());
-    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), ready(), screen.clone()), Ok(()));
+    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, ready(), screen.clone()), Ok(()));
     wait_until("the run's end", || screen.ended());
 }
 
@@ -475,13 +476,13 @@ fn a_crashed_run_is_cleared_before_the_next_run_starts() {
     let now: Arc<dyn Fn() -> i64 + Send + Sync> = Arc::new(move || tick.load(std::sync::atomic::Ordering::SeqCst));
     let s = Session::new(crash_once, discard, now, p.clone());
     let first = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, ready(), first.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), first.clone()).unwrap();
     wait_until("the crash's end", || first.ended() && !s.running());
     assert!(p.marker.exists(), "the crashed run's marker stays");
     let crashed: serde_json::Value = serde_json::from_slice(&std::fs::read(&p.marker).unwrap()).unwrap();
     clock.store(NOW + 5, std::sync::atomic::Ordering::SeqCst);
     let second = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, ready(), second.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), second.clone()).unwrap();
     wait_until("the second run's end", || second.ended() && !s.running());
     assert_eq!(
         *cleared.lock().unwrap(),
@@ -519,7 +520,7 @@ fn two_starts_at_once_start_one_run() {
     let starts: Vec<_> = (0..2)
         .map(|_| {
             let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
-            std::thread::spawn(move || s.start(&raw, &sha(&raw), None, ready(), screen))
+            std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, ready(), screen))
         })
         .collect();
     let mut got: Vec<Result<(), String>> = starts.into_iter().map(|t| t.join().unwrap()).collect();
@@ -549,7 +550,7 @@ fn stop_pressed_while_starting_is_kept() {
     let screen = Arc::new(Seen::default());
     let starting = {
         let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
-        std::thread::spawn(move || s.start(&raw, &sha(&raw), None, ready(), screen))
+        std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, ready(), screen))
     };
     std::thread::sleep(Duration::from_millis(100));
     assert!(!s.may_close(), "closing while it starts asks first");
@@ -572,7 +573,7 @@ fn closing_when_no_run_goes_on_closes_now_and_only_now() {
     let s = session(quick(), NOW, &dir);
     assert!(!s.stop_and_close(), "nothing runs: the window closes now");
     let screen = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.ended() && !s.running());
     assert!(!*screen.closed.lock().unwrap(), "the next run's end does not close the window");
 }
@@ -620,7 +621,7 @@ fn progress_reaches_the_screen_in_the_order_it_was_made() {
             Ok(empty_report())
         });
     let screen = Arc::new(Slow::default());
-    session(run, NOW, &dir).start(&raw, &sha(&raw), None, ready(), screen.clone()).unwrap();
+    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.0.ended());
     let sent = screen.0.sent.lock().unwrap();
     let kinds: Vec<String> = sent
@@ -634,4 +635,26 @@ fn progress_reaches_the_screen_in_the_order_it_was_made() {
         })
         .collect();
     assert_eq!(kinds, ["question 1", "waiting 1", "closed 1", "question 2", "waiting 0", "closed 2", "finished"]);
+}
+
+/// Task 13 (E1): "Run again, allowing another model" reaches the run, and a plain Run never allows it.
+#[test]
+fn allowing_another_model_reaches_the_run_only_when_asked() {
+    let _one = alone();
+    let dir = scratch("allow-switch");
+    let raw = read("examples/run-tests.steplet");
+    let seen: Arc<Mutex<Vec<bool>>> = Arc::default();
+    let keep = seen.clone();
+    let run: RunFn =
+        Arc::new(move |_: &RunLock, req: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| {
+            keep.lock().unwrap().push(req.allow_model_switch);
+            Ok(empty_report())
+        });
+    let s = session(run, NOW, &dir);
+    for allow in [false, true] {
+        let screen = Arc::new(Seen::default());
+        s.start(&raw, &sha(&raw), None, allow, ready(), screen.clone()).unwrap();
+        wait_until("the run's end", || screen.ended() && !s.running());
+    }
+    assert_eq!(*seen.lock().unwrap(), [false, true]);
 }

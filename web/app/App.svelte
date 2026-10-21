@@ -6,9 +6,11 @@
   import Chooser from "./screens/Chooser.svelte";
   import Open from "./screens/Open.svelte";
   import Preview from "./screens/Preview.svelte";
+  import Report from "./screens/Report.svelte";
   import Run from "./screens/Run.svelte";
   import Setup from "./screens/Setup.svelte";
   import type { PreviewView } from "../shared/types/PreviewView";
+  import type { ReportView } from "../shared/types/ReportView";
 
   const backend = getContext<Backend>("backend");
 
@@ -17,7 +19,8 @@
     | { kind: "preview"; view: PreviewView }
     // `typed`: the red file's sentence, for Rust to check again when the run starts.
     | { kind: "chooser"; view: PreviewView; typed: string | null }
-    | { kind: "run"; view: PreviewView; typed: string | null }
+    | { kind: "run"; view: PreviewView; typed: string | null; allowModelSwitch: boolean }
+    | { kind: "report"; view: PreviewView; typed: string | null; report: ReportView }
     // `back`: the screen Setup was opened from.
     | { kind: "setup"; back: Screen };
   let screen = $state<Screen>({ kind: "open" });
@@ -94,7 +97,7 @@
 <div class="window">
   {#if !busy}
     <header class="bar">
-      {#if screen.kind === "preview" || screen.kind === "chooser" || screen.kind === "run"}
+      {#if screen.kind === "preview" || screen.kind === "chooser" || screen.kind === "run" || screen.kind === "report"}
         <button class="link" type="button" onclick={() => back({ kind: "open" })}>Open another file</button>
       {/if}
       {#if screen.kind !== "setup"}
@@ -111,15 +114,29 @@
     {:else if screen.kind === "chooser"}
       {@const view = screen.view}
       {@const typed = screen.typed}
-      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={() => back({ kind: "run", view, typed })} />
+      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={() => back({ kind: "run", view, typed, allowModelSwitch: false })}
+      />
     {:else if screen.kind === "run"}
       {@const view = screen.view}
-      <Run
-        {view}
-        typed={screen.typed}
-        onback={() => back({ kind: "preview", view })}
+      {@const typed = screen.typed}
+      {#key screen}
+        <Run
+          {view}
+          {typed}
+          allowModelSwitch={screen.allowModelSwitch}
+          onback={() => back({ kind: "preview", view })}
+          onopen={() => back({ kind: "open" })}
+          onreport={(report) => back({ kind: "report", view, typed, report })}
+          onbusy={(b) => (busy = b)}
+        />
+      {/key}
+    {:else if screen.kind === "report"}
+      {@const view = screen.view}
+      {@const typed = screen.typed}
+      <Report
+        report={screen.report}
+        onrun={(allowModelSwitch) => back({ kind: "run", view, typed, allowModelSwitch })}
         onopen={() => back({ kind: "open" })}
-        onbusy={(b) => (busy = b)}
       />
     {:else}
       {@const to = screen.back}

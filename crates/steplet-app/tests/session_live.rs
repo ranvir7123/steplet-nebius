@@ -107,7 +107,7 @@ fn run_session(name: &str, script: &Value, port: u16, key: &str) -> Arc<Receiver
     let raw = std::fs::read(root().join("examples/run-tests.steplet")).unwrap();
     let ready =
         Ready { distro_id: distro.clone(), gate_exe: support::install_gate(&distro), key: ApiKey::new(key.into()) };
-    session.start(&raw, &sha(&raw), None, Ok(ready), screen.clone()).unwrap();
+    session.start(&raw, &sha(&raw), None, false, Ok(ready), screen.clone()).unwrap();
     let start = Instant::now();
     while !screen.ended() || session.running() {
         assert!(start.elapsed() < Duration::from_secs(300), "the run did not end");

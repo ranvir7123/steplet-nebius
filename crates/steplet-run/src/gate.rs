@@ -74,8 +74,9 @@ pub enum Asked {
     Decision { client: Client, request: GateRequest, answer: GateAnswer, took: Duration, delivered: bool },
     /// The key, for Claude Code's `apiKeyHelper`; `served` is true once the gate has read it.
     Key { client: Client, served: bool },
-    /// Refused before any decision; `client` is `None` when Windows would not say who it was.
-    Refused { client: Option<Client>, reason: String },
+    /// Refused before any decision; `client` is `None` when Windows would not say who it was, and `call` is the tool
+    /// call's id when the request was read far enough to name one (the report labels that call, Task 13).
+    Refused { client: Option<Client>, reason: String, call: Option<String> },
 }
 
 #[derive(Debug)]
@@ -264,7 +265,7 @@ where
                 // With no free end, every later request finds no pipe, which the gate refuses.
                 record(
                     &rules.records,
-                    Asked::Refused { client: None, reason: format!("the pipe could not stay open: {e}") },
+                    Asked::Refused { client: None, reason: format!("the pipe could not stay open: {e}"), call: None },
                 );
                 return;
             }
@@ -320,8 +321,8 @@ where
     D: Fn(&GateRequest) -> GateAnswer + Send + Sync + 'static,
 {
     let started = Instant::now();
-    let refused = |client: Option<Client>, reason: String| {
-        record(&rules.records, Asked::Refused { client, reason });
+    let refused = |client: Option<Client>, reason: String, call: Option<String>| {
+        record(&rules.records, Asked::Refused { client, reason, call });
     };
     let mut line = Vec::new();
     let read = {
@@ -329,40 +330,44 @@ where
         tokio::time::timeout(rules.deadline, reader.read_until(b'\n', &mut line)).await
     };
     match read {
-        Err(_) => return refused(None, "no request came before the deadline".into()),
-        Ok(Err(e)) => return refused(None, format!("the request could not be read: {e}")),
+        Err(_) => return refused(None, "no request came before the deadline".into(), None),
+        Ok(Err(e)) => return refused(None, format!("the request could not be read: {e}"), None),
         Ok(Ok(_)) if line.len() > LONGEST_REQUEST => {
-            refused(None, "the request is longer than 16 MiB".into());
+            refused(None, "the request is longer than 16 MiB".into(), None);
             return send(&mut conn, &deny_json("the request is too long")).await.unwrap_or(());
         }
         Ok(Ok(_)) if line.last() != Some(&b'\n') => {
-            return refused(None, "the connection closed before a whole request".into());
+            return refused(None, "the connection closed before a whole request".into(), None);
         }
         Ok(Ok(_)) => {}
     }
     let parsed: Option<Value> = serde_json::from_slice(&line).ok();
     let wants_key = parsed.as_ref().is_some_and(|v| v["kind"] == "key");
+    // The tool call the request is about, as the gate program says: only for labelling that call in the report (and
+    // never over a call that ran), and only once the request comes from the run's own gate program.
+    let call = || parsed.as_ref().and_then(|v| v.get("tool_use_id")).and_then(Value::as_str).map(str::to_owned);
     let no = |why: &str| if wants_key { json!({"error": why}) } else { deny_json(why) };
 
     let client = match Client::of_pipe(conn.as_raw_handle()) {
         Ok(c) => c,
         Err(e) => {
-            refused(None, format!("Windows would not say who connected: {e}"));
+            refused(None, format!("Windows would not say who connected: {e}"), None);
             return send(&mut conn, &no("Steplet could not tell who asked")).await.unwrap_or(());
         }
     };
     if let Some(reason) = who_may_not_ask(&client, &rules.me, &rules.program) {
-        refused(Some(client), reason);
+        // A stranger's request names no call of the run's own.
+        refused(Some(client), reason, None);
         return send(&mut conn, &no("Steplet does not take requests from this program")).await.unwrap_or(());
     }
     let incoming = match parsed.as_ref().map(read_request) {
         Some(Ok(incoming)) => incoming,
         Some(Err(why)) => {
-            refused(Some(client), why.into());
+            refused(Some(client), why.into(), call());
             return send(&mut conn, &no(why)).await.unwrap_or(());
         }
         None => {
-            refused(Some(client), "the request is not JSON".into());
+            refused(Some(client), "the request is not JSON".into(), None);
             return send(&mut conn, &no("the request is not JSON")).await.unwrap_or(());
         }
     };
@@ -371,7 +376,7 @@ where
         Incoming::Decide(r) => &r.run_token,
     };
     if !same(token, &rules.token) {
-        refused(Some(client), "the request carries the wrong run token".into());
+        refused(Some(client), "the request carries the wrong run token".into(), call());
         return send(&mut conn, &no("this is not the run's gate")).await.unwrap_or(());
     }
 

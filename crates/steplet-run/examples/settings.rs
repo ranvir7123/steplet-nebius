@@ -18,7 +18,7 @@ fn main() {
     let gate = GateLink::new("/opt/steplet/gate/steplet-gate.exe", &pipe, "sampletoken", &log, deadline)
         .expect("plain gate values");
     println!("--- {}", paths.settings());
-    print!("{}", settings_json(&steplet, &paths, &gate));
+    print!("{}", settings_json(&steplet, &paths, &gate, false));
     println!("--- {}", paths.mcp());
     print!("{}", mcp_json(&gate));
 }

@@ -1018,7 +1018,7 @@ pub enum EndView {
 pub struct CheckView {
     /// `allowed`, `allowed_by_you`, `refused`, `refused_by_you` (refused after asking the receiver),
     /// `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run)
-    /// or `not_judged`.
+    /// `not_judged` or `turned_away` (the gate turned its connection away, and it did not run).
     pub kind: String,
     /// Steplet's words for it.
     pub words: String,
@@ -1041,6 +1041,7 @@ pub fn check_view(c: &Check) -> CheckView {
             ("ran_without_asking", "Ran without asking Steplet: Steplet stopped the run")
         }
         Check::NotJudged => ("not_judged", "No result came, so there is no sign it ran"),
+        Check::TurnedAway => ("turned_away", "Steplet turned this call's connection away"),
     };
     CheckView { kind: kind.into(), words: words.into() }
 }
@@ -1074,9 +1075,34 @@ pub struct AnswerView {
     pub reply: String,
 }
 
+/// How a run ended, as its report's first line says it, in Steplet's words: a title, a sentence, and its outcome
+/// icon (`green`, `amber` or `red`). The live log's end, the report screen and the saved report all use these.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct EndWords {
+    pub title: String,
+    pub text: String,
+    pub icon: String,
+}
+
+fn end_words(end: &EndView) -> EndWords {
+    let (title, text, icon) = match end {
+        EndView::Finished => ("Finished", "The run finished.", "green"),
+        EndView::StoppedBySteplet { why, .. } => ("Steplet stopped the run", why.as_str(), "red"),
+        EndView::StoppedByYou => {
+            ("Interrupted", "You stopped the run. Its folder was reset, so you can run the file again.", "amber")
+        }
+        EndView::ModelRefused => {
+            ("The model refused", "The model refused the task, so the run did not finish.", "amber")
+        }
+        EndView::DidNotFinish => ("Did not finish", "The run ended before the agent finished.", "amber"),
+    };
+    EndWords { title: title.into(), text: text.into(), icon: icon.into() }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct ReportView {
     pub end: EndView,
+    pub end_words: EndWords,
     pub completed: bool,
     pub stopped_by_you: bool,
     pub commands: Vec<CommandView>,
@@ -1115,6 +1141,7 @@ pub fn report_view(r: &Report) -> ReportView {
         EndView::DidNotFinish
     };
     ReportView {
+        end_words: end_words(&end),
         end,
         completed: r.completed,
         stopped_by_you: r.stopped_by_you,
@@ -1195,4 +1222,6 @@ pub struct Fixture {
     pub save_error: Option<String>,
     /// `set_opens_steplet_files`'s refusal instead, in Steplet's words (Windows would not change the entry).
     pub switch_error: Option<String>,
+    /// What the run sends when the receiver pressed "Run again, allowing another model" (E1).
+    pub allowed_switch: Vec<ProgressView>,
 }

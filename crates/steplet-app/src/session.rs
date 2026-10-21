@@ -115,22 +115,33 @@ pub struct Session {
     /// The receiver chose "Stop and close": the window closes once the run is over. Read and changed only while
     /// `current` is locked, so the run's end never misses it.
     close_after: Arc<AtomicBool>,
+    /// The report of the last run that finished in this window, for "Save report…".
+    last: Arc<Mutex<Option<views::ReportView>>>,
 }
 
 impl Session {
     pub fn new(run: RunFn, discard: DiscardFn, now: Arc<dyn Fn() -> i64 + Send + Sync>, places: Places) -> Session {
-        Session { run, discard, now, places, current: Arc::default(), close_after: Arc::default() }
+        Session {
+            run,
+            discard,
+            now,
+            places,
+            current: Arc::default(),
+            close_after: Arc::default(),
+            last: Arc::default(),
+        }
     }
 
     /// Starts the run of the file read as `raw`, previewed with the SHA-256 `previewed`; `typed` is the red file's
-    /// sentence. A refusal is Steplet's own sentence; once started, the run's end comes as progress. The run counts
-    /// as going on from the first moment, so a Stop, or closing the window, while Steplet still checks the file is
-    /// kept, and a second Run is refused.
+    /// sentence; `allow_model_switch` is "Run again, allowing another model" (E1). A refusal is Steplet's own
+    /// sentence; once started, the run's end comes as progress. The run counts as going on from the first moment, so
+    /// a Stop, or closing the window, while Steplet still checks the file is kept, and a second Run is refused.
     pub fn start(
         &self,
         raw: &[u8],
         previewed: &str,
         typed: Option<&str>,
+        allow_model_switch: bool,
         ready: Result<Ready, String>,
         screen: Arc<dyn Screen>,
     ) -> Result<(), String> {
@@ -144,7 +155,7 @@ impl Session {
             // A close asked for while an earlier run was ending is not carried over to this one.
             self.close_after.store(false, Ordering::SeqCst);
         }
-        let started = self.begin(raw, previewed, typed, ready, screen.clone(), stop, answers);
+        let started = self.begin(raw, previewed, typed, allow_model_switch, ready, screen.clone(), stop, answers);
         if started.is_err() {
             let close = {
                 let mut current = lock(&self.current);
@@ -164,6 +175,7 @@ impl Session {
         raw: &[u8],
         previewed: &str,
         typed: Option<&str>,
+        allow_model_switch: bool,
         ready: Result<Ready, String>,
         screen: Arc<dyn Screen>,
         stop: StopSignal,
@@ -202,6 +214,7 @@ impl Session {
             steplet: file,
             max_turns: MAX_TURNS,
             deadline: RUN_LIMIT,
+            allow_model_switch,
         };
         // The sender is pinned while Steplet holds the lock, so two windows never write the list at once.
         if let (Some(path), Some(SigStatus::Valid { fingerprint })) = (&self.places.pins, &report.signature) {
@@ -239,8 +252,13 @@ impl Session {
             answers: Some(answers),
             ask_limit: ASK_LIMIT,
         });
-        let (run, current, close_after, marker_path) =
-            (self.run.clone(), self.current.clone(), self.close_after.clone(), self.places.marker.clone());
+        let (run, current, close_after, marker_path, last) = (
+            self.run.clone(),
+            self.current.clone(),
+            self.close_after.clone(),
+            self.places.marker.clone(),
+            self.last.clone(),
+        );
         std::thread::spawn(move || {
             let end = if stop.is_set() {
                 // Stop came while Steplet was still checking the file: the agent never starts.
@@ -276,6 +294,9 @@ impl Session {
                 let _ = std::fs::remove_file(&marker_path);
             }
             drop(one_run);
+            if let ProgressView::Finished { report } = &end {
+                *lock(&last) = Some(report.clone());
+            }
             let close = {
                 let mut current = lock(&current);
                 *current = None;
@@ -302,6 +323,11 @@ impl Session {
         if let Some(c) = lock(&self.current).as_ref() {
             c.stop.stop();
         }
+    }
+
+    /// The report of the last run that finished in this window.
+    pub fn last_report(&self) -> Option<views::ReportView> {
+        lock(&self.last).clone()
     }
 
     pub fn running(&self) -> bool {

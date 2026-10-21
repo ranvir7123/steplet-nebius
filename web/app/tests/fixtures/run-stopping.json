@@ -496,6 +496,11 @@
         "end": {
           "kind": "stopped_by_you"
         },
+        "end_words": {
+          "title": "Interrupted",
+          "text": "You stopped the run. Its folder was reset, so you can run the file again.",
+          "icon": "amber"
+        },
         "completed": false,
         "stopped_by_you": true,
         "commands": [
@@ -670,5 +675,6 @@
   },
   "saved_to": null,
   "save_error": null,
-  "switch_error": null
+  "switch_error": null,
+  "allowed_switch": []
 }

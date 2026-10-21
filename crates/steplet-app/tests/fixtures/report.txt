@@ -1,0 +1,48 @@
+Steplet report
+
+How the run ended
+  Finished. The run finished.
+
+The commands, each with its check, its exit code and everything it printed
+  1. Bash: wc -l README
+     Steplet's check: Allowed by Steplet's checker
+     Exit code: 0
+     What it printed (1 line):
+     | 1 README
+  2. Bash: touch asked.txt
+     Steplet's check: You allowed this exact request
+     Exit code: 0
+     What it printed: nothing
+  3. Bash: rm -rf build
+     Steplet's check: Refused by Steplet's checker
+     Exit code: not known
+     What it printed (1 line):
+     | Steplet refused this: the file does not ask for this command
+
+What Steplet refused
+  - Bash rm -rf build: the file does not ask for this command
+
+Your answers
+  - Bash: touch asked.txt
+    You said yes to this exact request.
+
+The models
+  Used: claude-opus-5, claude-sonnet-5
+  - claude-opus-5 refused. The kind of request it refused: cyber.
+    | This request looks like it could be used to harm a computer system.
+    Claude Code went on with claude-sonnet-5.
+
+The files the run changed in its working copy (the copy is deleted now)
+  - ?? asked.txt
+
+The trust check
+  The run's settings mark no folder as trusted.
+
+What went wrong around the run
+  - Steplet could not read the run's config for the trust check: wsl.exe did not answer within 2 minutes.
+
+Steplet's notes
+  - Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.
+
+The agent says (its own words, not Steplet's)
+  | The README has 1 line.

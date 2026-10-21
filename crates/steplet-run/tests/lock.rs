@@ -41,6 +41,7 @@ fn run_live_is_refused_while_another_run_holds_the_lock() {
         task_text: "made up".into(),
         max_turns: 1,
         deadline: Duration::from_secs(60),
+        allow_model_switch: false,
     };
     let setup = RunSetup {
         gate_exe: "/opt/steplet/gate/steplet-gate.exe".into(),

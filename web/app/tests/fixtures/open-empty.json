@@ -16,5 +16,6 @@
   },
   "saved_to": null,
   "save_error": null,
-  "switch_error": null
+  "switch_error": null,
+  "allowed_switch": []
 }

@@ -56,7 +56,7 @@ fn the_settings_are_exactly_the_planned_shape() {
     let s = steplet("allow:\n  domains:\n    - pypi.org\n    - files.pythonhosted.org\n");
     let g = gate("/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd");
     assert_eq!(
-        read(&settings_json(&s, &paths("r1"), &g)),
+        read(&settings_json(&s, &paths("r1"), &g, false)),
         json!({
             "sandbox": {
                 "enabled": true,
@@ -94,7 +94,7 @@ fn the_settings_match_the_file_the_task_2_runs_used() {
     let helper = format!("{} --deadline-ms 30000", used["apiKeyHelper"].as_str().unwrap());
     used["apiKeyHelper"] = helper.into();
     used["permissions"]["deny"].as_array_mut().unwrap().push("Edit(//var/lib/steplet/**)".into());
-    assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g)), used);
+    assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g, false)), used);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn no_allow_rules_and_no_read_rule_on_the_work_folder() {
     // R4 and C9 on their own, so that a later change to the shape cannot quietly add either.
     let s = steplet("allow:\n  commands:\n    - cargo test\n  read:\n    - src\n  write:\n    - target\n");
     let g = gate("/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd");
-    let v = read(&settings_json(&s, &paths("r1"), &g));
+    let v = read(&settings_json(&s, &paths("r1"), &g, false));
     let permissions = v["permissions"].as_object().unwrap();
     assert_eq!(permissions.keys().collect::<Vec<_>>(), ["deny"], "deny rules only (R4)");
     for rule in permissions["deny"].as_array().unwrap() {
@@ -111,7 +111,7 @@ fn no_allow_rules_and_no_read_rule_on_the_work_folder() {
     assert_eq!(v["sandbox"]["network"]["allowedDomains"], json!([]), "no declared site, no network");
     assert_eq!(
         v,
-        read(&settings_json(&steplet(""), &paths("r1"), &g)),
+        read(&settings_json(&steplet(""), &paths("r1"), &g, false)),
         "the file's commands and folders reach the gate's checker only, never the settings"
     );
 }
@@ -207,4 +207,14 @@ fn the_scripts_and_the_paths_name_the_same_temporary_folder() {
     ] {
         assert!(script.contains(&format!("{prefix}$")), "{name} names the run's temporary folder as {prefix}<id>");
     }
+}
+
+/// Task 13 (E1): the run stays on the model the receiver approved, unless they pressed "Run again, allowing another
+/// model" after a refusal; only then may Claude Code switch models.
+#[test]
+fn switch_models_only_when_the_receiver_allowed_it() {
+    let g = gate("/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd");
+    let switch = |allowed| read(&settings_json(&steplet(""), &paths("r1"), &g, allowed))["switchModelsOnFlag"].clone();
+    assert_eq!(switch(false), json!(false));
+    assert_eq!(switch(true), json!(true));
 }

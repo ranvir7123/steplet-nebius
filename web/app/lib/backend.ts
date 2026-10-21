@@ -34,8 +34,9 @@ export interface Backend {
   saveKey(key: string): Promise<SetupView>;
   forgetKey(): Promise<SetupView>;
   setOpensStepletFiles(on: boolean): Promise<SetupView>;
-  /** Starts the run of the file previewed with this SHA-256; `typed` is the red file's sentence. */
-  startRun(sha256: string, typed: string | null): Promise<void>;
+  /** Starts the run of the file previewed with this SHA-256; `typed` is the red file's sentence;
+   * `allowModelSwitch` is "Run again, allowing another model" (E1). */
+  startRun(sha256: string, typed: string | null, allowModelSwitch: boolean): Promise<void>;
   /** The receiver's answer to a question, bound to the request's fingerprint; false when no such question is open. */
   answer(question: number, yes: boolean, fingerprint: string): Promise<boolean>;
   stopRun(): Promise<void>;

@@ -204,14 +204,14 @@ pub fn run_live_locked(
     let (mut changed, mut config) = (None, None);
     if agent_ran {
         changed = changes(paths)
-            .map_err(|e| after.push(format!("Steplet could not list the files the run changed: {e:?}")))
+            .map_err(|e| after.push(format!("Steplet could not list the files the run changed: {e}")))
             .ok();
         config = run_config(paths)
-            .map_err(|e| after.push(format!("Steplet could not read the run's config for the trust check: {e:?}")))
+            .map_err(|e| after.push(format!("Steplet could not read the run's config for the trust check: {e}")))
             .ok();
     }
     if let Err(e) = discard(paths) {
-        after.push(format!("the run's folders could not be removed: {e:?}"));
+        after.push(format!("Steplet could not remove the run's folders: {e}"));
     }
     let trust = if agent_ran { read_trust(config.as_deref()) } else { Trust::Unknown };
     let mut report = build_report(&outcome, changed.as_deref(), trust, &secrets);

@@ -60,4 +60,8 @@ saved_to: string | null, save_error: string | null,
 /**
  * `set_opens_steplet_files`'s refusal instead, in Steplet's words (Windows would not change the entry).
  */
-switch_error: string | null, };
+switch_error: string | null, 
+/**
+ * What the run sends when the receiver pressed "Run again, allowing another model" (E1).
+ */
+allowed_switch: Array<ProgressView>, };

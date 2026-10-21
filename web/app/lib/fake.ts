@@ -115,8 +115,9 @@ export const backend: Backend = {
     setup = on ? c.switch_on : c.switch_off;
     return setup;
   },
-  async startRun() {
-    void emit((await fixture()).progress);
+  async startRun(_sha256, _typed, allowModelSwitch) {
+    const f = await fixture();
+    void emit(allowModelSwitch ? f.allowed_switch : f.progress);
   },
   async answer(question, yes) {
     const f = await fixture();

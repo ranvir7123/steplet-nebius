@@ -14,6 +14,7 @@ pub mod key;
 pub mod open;
 pub mod pins;
 pub mod register;
+pub mod save;
 pub mod session;
 pub mod setup;
 pub mod views;
@@ -153,12 +154,20 @@ fn start_run(
     window: tauri::WebviewWindow,
     sha256: String,
     typed: Option<String>,
+    allow_model_switch: bool,
 ) -> Result<(), String> {
     let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
     // The clean-up at start holds the one-run lock while it removes a crash's run; a run starts after it.
     state.looked_at_start();
     let ready = setup::ready_for_run(&state.look());
-    state.session.start(&raw, &sha256, typed.as_deref(), ready, std::sync::Arc::new(WindowScreen(window)))
+    state.session.start(
+        &raw,
+        &sha256,
+        typed.as_deref(),
+        allow_model_switch,
+        ready,
+        std::sync::Arc::new(WindowScreen(window)),
+    )
 }
 
 /// The receiver's answer to question `question`, bound to the request's fingerprint (R7).
@@ -170,6 +179,17 @@ fn answer(state: tauri::State<AppState>, question: u32, yes: bool, fingerprint: 
 #[tauri::command]
 fn stop_run(state: tauri::State<AppState>) {
     state.session.stop();
+}
+
+/// Saves the last run's report through Windows' own Save dialog (S4): where it was saved, or `None` when the
+/// receiver cancelled. A failure is Steplet's own sentence.
+#[tauri::command(async)]
+fn save_report(state: tauri::State<AppState>, window: tauri::WebviewWindow) -> Result<Option<String>, String> {
+    let report = state.session.last_report().ok_or("There is no report to save yet.")?;
+    let owner = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+    let Some(path) = save::ask_where(owner, &save::Stamp::now()) else { return Ok(None) };
+    save::write_report(&path, &report).map_err(|e| format!("Steplet could not save the report. Windows says: {e}"))?;
+    Ok(Some(path.display().to_string()))
 }
 
 /// The receiver closes the window while a file runs: Stop, then close once the run is over. When the run has
@@ -301,7 +321,8 @@ pub fn run() {
             start_run,
             answer,
             stop_run,
-            stop_and_close
+            stop_and_close,
+            save_report
         ])
         .on_window_event(|window, event| {
             // Closing while a file runs asks first: the page shows the question (`close-asked`).

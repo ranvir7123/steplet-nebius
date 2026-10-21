@@ -28,6 +28,7 @@ fn request(seconds: u64) -> RunRequest {
         task_text: "Follow the script.".into(),
         max_turns: 6,
         deadline: Duration::from_secs(seconds),
+        allow_model_switch: false,
     }
 }
 

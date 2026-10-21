@@ -259,7 +259,7 @@ fn a_program_other_than_the_gate_is_refused() {
     println!("--- recorded: {asked:#?}");
     assert_eq!(asked.len(), 2);
     for a in &asked {
-        let Asked::Refused { client: Some(client), reason } = a else { panic!("{a:?}") };
+        let Asked::Refused { client: Some(client), reason, .. } = a else { panic!("{a:?}") };
         assert!(reason.contains("program"), "{reason}");
         assert!(client.program.eq_ignore_ascii_case(&this_program()));
     }
@@ -688,6 +688,7 @@ fn run_request(task_seconds: u64) -> RunRequest {
         task_text: "Follow the script.".into(),
         max_turns: 8,
         deadline: Duration::from_secs(task_seconds),
+        allow_model_switch: false,
     }
 }
 

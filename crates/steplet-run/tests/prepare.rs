@@ -28,6 +28,7 @@ fn request(url: &str, commit: &str) -> RunRequest {
         task_text: "Run the tests.".into(),
         max_turns: 4,
         deadline: Duration::from_secs(60),
+        allow_model_switch: false,
     }
 }
 
@@ -136,7 +137,11 @@ fn prepare_makes_one_fresh_working_copy_at_the_declared_commit() {
         assert_eq!(owner_and_mode(&distro, path), want, "{path}");
     }
     let file = |path: &str| wsl::run(&distro, "root", &["/usr/bin/cat", path], b"").unwrap().stdout;
-    assert_eq!(file(paths.settings()), settings_json(&req.steplet, &paths, &g), "the settings file, byte for byte");
+    assert_eq!(
+        file(paths.settings()),
+        settings_json(&req.steplet, &paths, &g, req.allow_model_switch),
+        "the settings file, byte for byte"
+    );
     assert_eq!(file(paths.mcp()), mcp_json(&g), "the MCP config, byte for byte");
     for home in [paths.run_home(), paths.run_config(), paths.run_tmp()] {
         assert_eq!(run(&distro, "root", &["/usr/bin/ls", "-A", home]), "", "{home} starts empty");

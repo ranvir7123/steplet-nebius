@@ -261,6 +261,7 @@ fn run_live_refuses_an_ask_limit_the_gate_deadline_cannot_cover() {
         task_text: "made up".into(),
         max_turns: 1,
         deadline: Duration::from_secs(60),
+        allow_model_switch: false,
     };
     // A made-up distribution: nothing may reach WSL.
     let paths = RunPaths::new("{00000000-0000-0000-0000-000000000000}", "p4t4x").unwrap();

@@ -13,7 +13,7 @@ pub(crate) const GATE_SERVER: &str = "gate";
 const MOUNTS: &str = "/mnt";
 
 /// The settings file of one run of `s`.
-pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink) -> String {
+pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink, allow_model_switch: bool) -> String {
     let repo = paths.work_repo();
     let git = format!("{repo}/.git");
     let domains: Vec<&str> = s.allow.domains.iter().map(|d| d.text.as_str()).collect();
@@ -40,8 +40,9 @@ pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink) -> String {
             // refuses such a write, before any question.
             "deny": [rule("Read", MOUNTS), rule("Read", STATE_ROOT), rule("Edit", &git), rule("Edit", STATE_ROOT)],
         },
-        // E1: the run stays on the model the receiver approved; a refusal ends it.
-        "switchModelsOnFlag": false,
+        // E1: the run stays on the model the receiver approved, and a refusal ends it, unless the receiver chose to
+        // run again allowing another model.
+        "switchModelsOnFlag": allow_model_switch,
         // H2: the gate asks the app for the key over the pipe, so the key is never written to the Linux disk.
         "apiKeyHelper": format!(
             "{} --key --pipe {} --token {} --deadline-ms {}",

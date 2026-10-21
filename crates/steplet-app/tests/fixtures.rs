@@ -405,6 +405,7 @@ fn fixture(screen: &str) -> Fixture {
         saved_to: None,
         save_error: None,
         switch_error: None,
+        allowed_switch: Vec::new(),
     }
 }
 
@@ -659,7 +660,30 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         text: "I can't help with that.".into(),
     });
     let refusal_report = refusal.report(&refusal.outcome(), &[]);
-    s.insert("run-model-refusal", run_screen(finished(refusal.progress(&[]), refusal_report.clone())));
+    // E1, D7: run again allowing another model; Claude Code switches, finishes, and the report lists both models.
+    let mut switched = Run::new();
+    switched.events.push(Event::ModelSwitch {
+        from: MODEL.into(),
+        to: Some("claude-sonnet-5".into()),
+        category: "cyber".into(),
+        explanation: "This request looks like it could be used to harm a computer system.".into(),
+    });
+    switched.bash("wc -l README", false, "1 README\n", 0);
+    switched.events.push(Event::Result {
+        subtype: "success".into(),
+        is_error: false,
+        stop_reason: "end_turn".into(),
+        models: vec![MODEL.into(), "claude-sonnet-5".into()],
+        text: "The README has 1 line.".into(),
+    });
+    let switched_report = switched.report(&switched.outcome(), &[]);
+    s.insert(
+        "run-model-refusal",
+        Fixture {
+            allowed_switch: finished(switched.progress(&[]), switched_report),
+            ..run_screen(finished(refusal.progress(&[]), refusal_report.clone()))
+        },
+    );
     let mut stopped = busy.outcome();
     stopped.stopped_by_you = true;
     stopped.exit_code = Some(124);
@@ -748,6 +772,7 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     // Report
     let report_screen = |report: ReportView| Fixture {
         preview: Some(plain_preview(&example)),
+        chooser: Some(chooser_for(&example, true)),
         progress: vec![ProgressView::Finished { report }],
         ..fixture("report")
     };

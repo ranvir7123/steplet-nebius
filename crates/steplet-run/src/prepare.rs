@@ -39,6 +39,22 @@ pub enum PrepareError {
     Step { step: &'static str, detail: String },
 }
 
+/// In Steplet's words, as one sentence, for a report's faults (Task 13): never Rust's debugging form.
+impl std::fmt::Display for PrepareError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let said = match self {
+            PrepareError::Refused(what) => format!("Steplet will not hand this {} to its Linux", what.0),
+            PrepareError::Wsl(why) => format!("WSL could not be started: {}", why.trim()),
+            PrepareError::Step { step, detail } => match detail.lines().rev().map(str::trim).find(|l| !l.is_empty()) {
+                Some(last) => format!("it stopped while trying to {step}, and printed: {last}"),
+                None => format!("it stopped while trying to {step}"),
+            },
+        };
+        let said = said.trim_end_matches('.');
+        write!(f, "{said}.")
+    }
+}
+
 /// What preparing a run did, for the prepare screen.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prepared {
@@ -64,7 +80,7 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Pr
     if !is_commit(&req.commit) {
         return Err(PrepareError::Refused(BadValue("commit")));
     }
-    let settings = base64(settings_json(&req.steplet, paths, gate).as_bytes());
+    let settings = base64(settings_json(&req.steplet, paths, gate, req.allow_model_switch).as_bytes());
     let mcp = base64(mcp_json(gate).as_bytes());
     let args = ["prepare", paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp];
     let out = as_root(paths, PREPARE, &args, PREPARE_LIMIT)?;

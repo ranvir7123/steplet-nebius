@@ -3394,3 +3394,153 @@ Minor points left for later:
 - The sender is pinned before the marker is written and the runner starts; if those then fail, the sender is pinned for a run that never started.
 - A run's id is its second and Steplet's process number: two runs in one second in one window would share an id (their raw log files).
 - The real window's close question and `close-asked` event are not tested in the real window (the screen test drives it with a stand-in event); Stop during "Preparing" is tested in Rust, not in the real window.
+
+## Task 13: the report screen, and saving it
+
+When a run ends, the run screen's end panel has **See the report**. The report opens with how the run ended, in Steplet's words (Finished; Steplet stopped the run and why; Interrupted; The model refused; Did not finish), with what to do next:
+
+- **Save report…** opens Windows' own Save dialog, offering `steplet-report-YYYY-MM-DD-HHMM.txt`;
+- **Run again**;
+- **Run again, allowing another model**, after a model refused (E1);
+- **Open another file**.
+
+When the run did not finish, the outcome also lists what went wrong. When a model refused, it names the model, the kind of request and the model's explanation.
+
+Then, in the report's order, each in its own panel:
+
+- every command, with Steplet's check, its exit code (from Claude Code's own record, never from the output) and everything it printed;
+- what Steplet refused;
+- your answers;
+- the models used and any refusal;
+- the files the run changed in its working copy (already deleted);
+- the trust check;
+- what went wrong around the run;
+- Steplet's notes;
+- and last, labelled, what the agent says: "Its own words, not Steplet's: they say nothing about whether the run went well."
+
+The saved file is plain text with the same sections in the same order. Text that is not Steplet's own is set off with "| ". Every character that shows nothing is written as its code (`[U+200B]`). The file is UTF-8 with Windows line endings, and is written in full before it replaces anything.
+
+### Changes from the plan, recorded here
+
+- **The outcome's words come from Rust** (`ReportView.end_words`: title, sentence, colour), so the live log's end, the report screen and the saved file say the same thing. Before, the words lived in the page (Task 12); `web/app/lib/end.ts` now only maps the colour to its icon.
+- **The report is one click away** ("See the report" on the run screen's end panel), not shown in place of the log at once: a receiver reading the log is not pulled away from it.
+- **Which call a refused connection was for:** the gate now records the call's id with a refusal (`Asked::Refused.call`), but only once the request comes from the run's own gate program (a request with the wrong run token, or one it could not read). The report labels that call "Steplet turned this call's connection away" (`Check::TurnedAway`) only when the call did not run. A call that ran without a decision keeps its own label, so a refusal can never hide a breach. Test: `a_call_turned_away_is_labelled_as_such`.
+- **Faults in words:** `PrepareError` now reads as one sentence. The runner's three faults after the run use it ("Steplet could not list the files the run changed: it stopped while trying to …, and printed: …."), and the third now begins like the others ("Steplet could not remove the run's folders: …"). Test: `faults_are_in_words`, which also checks that `run.rs` holds no `{e:?}`.
+- **The saved file keeps a tab as a tab** (it hides nothing). Characters that show nothing are already removed by the runner's cleaning before the report exists, so the test that the file hides nothing also puts a badge into a report by hand and checks it is written as `[U+200B]`.
+- **The local time for the default name** comes from Windows' `GetLocalTime`. One more feature of the `windows-sys` library is switched on for it (`Win32_System_SystemInformation`); nothing was downloaded, and the lock file did not change.
+- **"Run again, allowing another model" reaches the run** (`start_run`'s `allowModelSwitch`, `RunRequest.allow_model_switch`, the settings' `switchModelsOnFlag`). Tests: `switch_models_only_when_the_receiver_allowed_it` (runner) and `allowing_another_model_reaches_the_run_only_when_asked` (session).
+- **Five screen tests, not the plan's four:** `saving_says_where_or_why_not` was added.
+- **The saved scenarios:** the report ones now carry the chooser, since a test reaches the report the way a receiver does. `run-model-refusal` gained the run that may switch (`Fixture.allowed_switch`): it switches to another model, finishes, and its report lists both models (D7).
+
+### The tests first
+
+```
+> cargo test -p steplet-run --offline --test settings
+error[E0061]: this function takes 3 arguments but 4 arguments were supplied
+   --> crates\steplet-run\tests\settings.rs:217:34
+error: could not compile `steplet-run` (test "settings") due to 1 previous error
+> cargo test -p steplet-app --offline --test save
+error[E0432]: unresolved import `steplet_app::save`
+error[E0559]: variant `Asked::Refused` has no field named `call`
+error[E0599]: `PrepareError` doesn't implement `std::fmt::Display`
+error[E0599]: no variant, associated function, or constant named `TurnedAway` found for enum `Check` in the current scope
+error: could not compile `steplet-app` (test "save") due to 4 previous errors
+> cargo test -p steplet-app --offline --test session                 (allowing_another_model_reaches_the_run_only_when_asked)
+error[E0061]: this method takes 5 arguments but 6 arguments were supplied        (19 times)
+error[E0609]: no field `allow_model_switch` on type `&RunRequest`
+error: could not compile `steplet-app` (test "session") due to 20 previous errors
+> npx playwright test --project=screens report.spec
+  x  1 [screens] › app\tests\report.spec.ts:28:1 › the_agent_says_comes_last_and_is_labelled (30.0s)
+  x  2 [screens] › app\tests\report.spec.ts:39:1 › an_interrupted_run_offers_run_again (30.0s)
+  x  3 [screens] › app\tests\report.spec.ts:48:1 › exit_codes_come_from_the_run (30.1s)
+  x  4 [screens] › app\tests\report.spec.ts:56:1 › a_refusal_offers_run_again_allowing_another_model (5.3s)
+  x  5 [screens] › app\tests\report.spec.ts:72:1 › saving_says_where_or_why_not (30.0s)
+    Error: expect(locator).toBeVisible() failed
+  5 failed
+```
+
+The expected report text (`crates/steplet-app/tests/fixtures/report.txt`) was written by hand before `save.rs`, as its spec. The first run of `save.rs` matched it. After that first run, four of my own test lines were wrong and were corrected:
+
+- the file can never hold `[U+200B]` from the runner's own text (see above);
+- the words begin "Its own words" with a capital;
+- the interrupted scenario has no rows, so its new run shows the run screen but no log;
+- the forged output itself begins with "Exit code 1", so the test now matches the exit fact exactly.
+
+### Looking at the screens
+
+Every report state was screenshotted in light and dark, at 1100 and 560 wide, the whole page, then looked at:
+
+- finished; a failing test; a tripwire; interrupted; with faults; 40 commands; a forged result; saved; save failed;
+- a model refusal, and the run allowing another model.
+
+(A temporary test took the pictures, then was deleted; Task 14 makes the lasting set.) One change came from looking: the model refusal's outcome said only "The model refused". It now names the model, the kind of request and the explanation right above "Run again, allowing another model", and says that Steplet keeps the run on the model you approved. Right as it was:
+
+- the outcome's colour rule and icon;
+- the forged output showing "exit 0" only inside the output, with "Exit code 1" from the run;
+- the saved and failed-save lines;
+- "The agent says" last, with its label;
+- the narrow layout, where the buttons wrap.
+
+### The tests pass
+
+```
+> npm --prefix web run build; cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+     Running tests\fixtures.rs (target\debug\deps\fixtures-48f7b7c77eec6368.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+     Running tests\save.rs (target\debug\deps\save-3a9b4792b2ca5805.exe)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\session.rs (target\debug\deps\session-7450eba4944f5536.exe)
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.57s
+     Running tests\views.rs (target\debug\deps\views-7e0d05b887466b87.exe)
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+     Running tests\gate.rs (target\debug\deps\gate-14e7450eafef277d.exe)
+test result: ok. 15 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 9.14s
+     Running tests\report.rs (target\debug\deps\report-dd6ad705a2b495a9.exe)
+test result: ok. 22 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\settings.rs (target\debug\deps\settings-93734fd8a46dff54.exe)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\stream.rs (target\debug\deps\stream-c40aaa1b1cd80db1.exe)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   (the test programs Task 13 touched; 68 "test result: ok" lines in all, none failed: 340 passed, 42 ignored)
+exit 0
+> cargo test -p steplet-run --offline -j 2 --test gate -- --ignored --nocapture --test-threads=1
+test a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run
+test a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not
+test a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next
+test each_run_starts_the_gate_from_a_path_of_its_own
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 43.25s
+exit 0
+> cargo test -p steplet-app --offline -j 2 --test session_live -- --ignored --nocapture --test-threads=1
+--- {"kind":"finished","report":{"end":{"kind":"finished"},"end_words":{"title":"Finished","text":"The run finished.","icon":"green"}, …
+--- {"kind":"finished","report":{"end":{"kind":"did_not_finish"},"end_words":{"title":"Did not finish","text":"The run ended before the agent finished.","icon":"amber"}, … "faults":[[{"kind":"text","text":"Anthropic did not accept the key. Change it in Setup."}]], …
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 207.99s
+exit 0
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens
+  ok  3 [screens] › app\tests\report.spec.ts:29:1 › the_agent_says_comes_last_and_is_labelled (1.3s)
+  ok  9 [screens] › app\tests\report.spec.ts:40:1 › an_interrupted_run_offers_run_again (406ms)
+  ok 13 [screens] › app\tests\report.spec.ts:49:1 › exit_codes_come_from_the_run (378ms)
+  ok 17 [screens] › app\tests\report.spec.ts:58:1 › a_refusal_offers_run_again_allowing_another_model (714ms)
+  ok 20 [screens] › app\tests\report.spec.ts:75:1 › saving_says_where_or_why_not (660ms)
+  34 passed (15.5s)
+> npm --prefix web run check --offline
+1792542040255 COMPLETED 156 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+exit 0
+> cargo fmt --all -- --check
+exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.49s
+exit 0
+```
+
+The two Windows-registry tests (Z4, approved once) were skipped, as in Task 12. The live session run shows the report's words coming from Rust in a real run: "Finished" in green, and for the wrong key "Did not finish" in amber with the fault "Anthropic did not accept the key. Change it in Setup."
+
+### What this task did not verify
+
+- **Windows' real Save dialog was never opened.** `ask_where` (the call to `GetSaveFileNameW`) has no test. The screen tests take the place it would save to, or the error, from the stand-in. Checking it needs the real window: Task 15.
+- **The local time** (`Stamp::now`, Windows' `GetLocalTime`) has no test. Only the name made from a fixed time is tested.
+- **The report screen in the real window** was not opened. Every report screen test ran against the screens build and its stand-in. The real window comes in Task 15.
+- **A save that fails halfway** was not tried. No test checks that an existing file at that place is left whole when writing the new one fails.
+- **"Run again, allowing another model" against a real model refusal** was not tried. A real refusal cannot be made on demand. The tests show that the choice reaches the run (session) and the settings (runner), and the stand-in plays a switch.
+- **The model refusal and the switch in the saved scenarios** come from scripted events run through Steplet's own Rust code, not from a real Claude Code run.

@@ -201,6 +201,9 @@ pub struct RunRequest {
     pub task_text: String,
     pub max_turns: u32,
     pub deadline: Duration,
+    /// The receiver pressed "Run again, allowing another model" after a model refused (E1): only then may Claude
+    /// Code switch models.
+    pub allow_model_switch: bool,
 }
 
 /// One thing that happened in a run, as read from Claude Code's event stream or its error output. Nothing on the

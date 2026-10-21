@@ -101,6 +101,9 @@ pub enum Check {
     NotAsked { harmless: bool },
     /// No result came, so there is no evidence it ran (Task 9).
     NotJudged,
+    /// The gate turned the call's connection away before deciding (the wrong run token, a request it could not
+    /// read), and the call did not run (Task 13).
+    TurnedAway,
 }
 
 /// How a question ended without a yes.
@@ -372,6 +375,15 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
             _ => None,
         })
         .collect();
+    // The calls whose connection the gate turned away before deciding, as the gate program named them.
+    let turned_away: std::collections::HashSet<&str> = outcome
+        .requests
+        .iter()
+        .filter_map(|a| match a {
+            Asked::Refused { call: Some(call), .. } => Some(call.as_str()),
+            _ => None,
+        })
+        .collect();
     // The calls asked about that got no yes, and how each question ended.
     let not_yes: HashMap<&str, NotYes> =
         outcome.answers.iter().filter_map(|a| Some((a.call.as_str(), NotYes::of(&a.reply)?))).collect();
@@ -399,6 +411,10 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                     Some(&how) => Check::RefusedWhenAsked { how },
                     None => Check::Refused,
                 },
+                // Turned away, and it did not run: a call that ran without a decision stays what it is.
+                (None, _) if turned_away.contains(id.as_str()) && result.is_none_or(|r| r.is_error) => {
+                    Check::TurnedAway
+                }
                 (None, Some(&harmless)) => Check::NotAsked { harmless },
                 (None, None) => Check::NotJudged,
             };

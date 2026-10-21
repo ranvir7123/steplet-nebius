@@ -269,6 +269,11 @@
         "end": {
           "kind": "model_refused"
         },
+        "end_words": {
+          "title": "The model refused",
+          "text": "The model refused the task, so the run did not finish.",
+          "icon": "amber"
+        },
         "completed": false,
         "stopped_by_you": false,
         "commands": [],
@@ -327,5 +332,235 @@
   },
   "saved_to": null,
   "save_error": null,
-  "switch_error": null
+  "switch_error": null,
+  "allowed_switch": [
+    {
+      "kind": "prepared",
+      "commit": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+      "removed": [],
+      "limit_ms": 1800000
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "started",
+        "model": [
+          {
+            "kind": "text",
+            "text": "claude-opus-5"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "model_refused",
+        "from": [
+          {
+            "kind": "text",
+            "text": "claude-opus-5"
+          }
+        ],
+        "to": [
+          {
+            "kind": "text",
+            "text": "claude-sonnet-5"
+          }
+        ],
+        "category": [
+          {
+            "kind": "text",
+            "text": "cyber"
+          }
+        ],
+        "explanation": [
+          {
+            "kind": "text",
+            "text": "This request looks like it could be used to harm a computer system."
+          }
+        ]
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "call",
+        "id": "toolu_01",
+        "tool": [
+          {
+            "kind": "text",
+            "text": "Bash"
+          }
+        ],
+        "what": [
+          {
+            "kind": "text",
+            "text": "wc -l README"
+          }
+        ],
+        "fields": [
+          {
+            "name": [
+              {
+                "kind": "text",
+                "text": "command"
+              }
+            ],
+            "value": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "checked",
+      "call": "toolu_01",
+      "check": {
+        "kind": "allowed",
+        "words": "Allowed by Steplet's checker"
+      },
+      "reason": null
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "result",
+        "id": "toolu_01",
+        "is_error": false,
+        "exit_code": 0,
+        "output": [
+          {
+            "kind": "text",
+            "text": "1 README\n"
+          }
+        ],
+        "lines": 1
+      }
+    },
+    {
+      "kind": "event",
+      "event": {
+        "kind": "ended",
+        "models": [
+          [
+            {
+              "kind": "text",
+              "text": "claude-opus-5"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "text": "claude-sonnet-5"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "finished",
+      "report": {
+        "end": {
+          "kind": "finished"
+        },
+        "end_words": {
+          "title": "Finished",
+          "text": "The run finished.",
+          "icon": "green"
+        },
+        "completed": true,
+        "stopped_by_you": false,
+        "commands": [
+          {
+            "tool": [
+              {
+                "kind": "text",
+                "text": "Bash"
+              }
+            ],
+            "command": [
+              {
+                "kind": "text",
+                "text": "wc -l README"
+              }
+            ],
+            "check": {
+              "kind": "allowed",
+              "words": "Allowed by Steplet's checker"
+            },
+            "exit_code": 0,
+            "output": [
+              {
+                "kind": "text",
+                "text": "1 README\n"
+              }
+            ],
+            "lines": 1,
+            "after_stop": false
+          }
+        ],
+        "refused": [],
+        "answers": [],
+        "models": [
+          [
+            {
+              "kind": "text",
+              "text": "claude-opus-5"
+            }
+          ],
+          [
+            {
+              "kind": "text",
+              "text": "claude-sonnet-5"
+            }
+          ]
+        ],
+        "refusals": [
+          {
+            "model": [
+              {
+                "kind": "text",
+                "text": "claude-opus-5"
+              }
+            ],
+            "switched_to": [
+              {
+                "kind": "text",
+                "text": "claude-sonnet-5"
+              }
+            ],
+            "category": [
+              {
+                "kind": "text",
+                "text": "cyber"
+              }
+            ],
+            "explanation": [
+              {
+                "kind": "text",
+                "text": "This request looks like it could be used to harm a computer system."
+              }
+            ]
+          }
+        ],
+        "changed_files": [],
+        "trust": "The run's settings mark no folder as trusted.",
+        "faults": [],
+        "notes": [
+          "Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing."
+        ],
+        "agent_says": [
+          {
+            "kind": "text",
+            "text": "The README has 1 line."
+          }
+        ]
+      }
+    }
+  ]
 }

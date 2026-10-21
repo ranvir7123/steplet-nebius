@@ -327,7 +327,7 @@ fn the_key_and_the_run_s_token_are_hidden_in_every_field() {
     o.requests = vec![
         allow("u1", &format!("echo {both}")),
         deny("u2", &format!("printf {both}"), &both),
-        Asked::Refused { client: None, reason: both.clone() },
+        Asked::Refused { client: None, reason: both.clone(), call: None },
     ];
     o.faults = vec![both.clone()];
     o.stopped_by = Some(Tripwire::Hook(both.clone()));
@@ -465,7 +465,7 @@ fn each_call_shows_steplet_s_check_and_every_refusal_is_listed() {
     o.requests = vec![
         deny("u2", "touch made.txt", "Steplet refused: the file does not declare this command"),
         allow("u1", "cargo test"),
-        Asked::Refused { client: None, reason: "the run token was wrong".into() },
+        Asked::Refused { client: None, reason: "the run token was wrong".into(), call: None },
     ];
     let r = report(&o);
     let checks: Vec<(&str, &Check)> = r.commands.iter().map(|c| (c.command.as_str(), &c.check)).collect();
@@ -617,6 +617,7 @@ allow:
         task_text: "Follow the script.".into(),
         max_turns: 20,
         deadline: Duration::from_secs(180),
+        allow_model_switch: false,
     };
     let script = json!({"steps": [
         {"tool": "Bash", "input": {"command": "python3 -m unittest discover", "description": "Run the tests"}},
@@ -671,6 +672,7 @@ fn no_error_from_claude_code_does_not_always_mean_exit_code_0() {
         task_text: "Follow the script.".into(),
         max_turns: 20,
         deadline: Duration::from_secs(180),
+        allow_model_switch: false,
     };
     let script = json!({"steps": [
         {"tool": "Bash", "input": {"command": "grep -c made-up-absent-text README", "description": "Count"}},

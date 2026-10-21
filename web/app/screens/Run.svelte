@@ -16,7 +16,7 @@
   import type { QuestionView } from "../../shared/types/QuestionView";
   import type { ReportView } from "../../shared/types/ReportView";
   import type { Backend, Shown, Unlisten } from "../lib/backend";
-  import { endWords } from "../lib/end";
+  import { outcomeIcon } from "../lib/end";
   import { modal } from "../lib/modal";
   import { firstLines } from "../lib/shown";
   import Ask from "./Ask.svelte";
@@ -24,15 +24,20 @@
   let {
     view,
     typed,
+    allowModelSwitch,
     onback,
     onopen,
+    onreport,
     onbusy,
   }: {
     view: PreviewView;
     /** The red file's sentence, for Rust to check again. */
     typed: string | null;
+    /** "Run again, allowing another model" (E1). */
+    allowModelSwitch: boolean;
     onback: () => void;
     onopen: () => void;
+    onreport: (report: ReportView) => void;
     /** Whether a run goes on: the window then offers no other file and no Setup. */
     onbusy: (busy: boolean) => void;
   } = $props();
@@ -188,7 +193,7 @@
     phase = "preparing";
     following = true;
     try {
-      await backend.startRun(view.sha256, typed);
+      await backend.startRun(view.sha256, typed, allowModelSwitch);
     } catch (e) {
       // Rust refused to start: its own sentence (the file changed, expired, another run goes on, …).
       take({
@@ -266,7 +271,7 @@
     const s = Math.floor(ms / 1000);
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
-  const end = $derived(report ? endWords(report.end) : null);
+  const end = $derived(report ? { ...report.end_words, icon: outcomeIcon(report.end_words.icon) } : null);
   const lastSaid = $derived.by(() => {
     for (let i = rows.length - 1; i >= 0; i--) {
       const r = rows[i];
@@ -466,8 +471,10 @@
         </ul>
       {/if}
       {#if !closing}
+        {@const r = report}
         <div class="actions">
-          <button class="button primary" type="button" onclick={start}>Run again</button>
+          <button class="button primary" type="button" onclick={() => onreport(r)}>See the report</button>
+          <button class="button" type="button" onclick={start}>Run again</button>
           <button class="button" type="button" onclick={onopen}>Open another file</button>
         </div>
       {/if}

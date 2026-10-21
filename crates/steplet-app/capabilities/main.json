@@ -19,6 +19,7 @@
     "allow-start-run",
     "allow-answer",
     "allow-stop-run",
-    "allow-stop-and-close"
+    "allow-stop-and-close",
+    "allow-save-report"
   ]
 }

@@ -2,10 +2,11 @@
 import type { AnswerView } from "./AnswerView";
 import type { CommandView } from "./CommandView";
 import type { EndView } from "./EndView";
+import type { EndWords } from "./EndWords";
 import type { RefusalView } from "./RefusalView";
 import type { Seg } from "./Seg";
 
-export type ReportView = { end: EndView, completed: boolean, stopped_by_you: boolean, commands: Array<CommandView>, refused: Array<Array<Seg>>, answers: Array<AnswerView>, models: Array<Array<Seg>>, refusals: Array<RefusalView>, 
+export type ReportView = { end: EndView, end_words: EndWords, completed: boolean, stopped_by_you: boolean, commands: Array<CommandView>, refused: Array<Array<Seg>>, answers: Array<AnswerView>, models: Array<Array<Seg>>, refusals: Array<RefusalView>, 
 /**
  * `None` when Steplet could not look; `faults` says why.
  */
