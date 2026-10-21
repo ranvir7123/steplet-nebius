@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans, run inline in one session (the owner's choice since phase 0: not through separate agents). Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Written 22 Oct 2026. Status: **written, not approved.** Nothing in it has been built, installed or run. Every item in section 5 needs the owner's yes when its task reaches it.
+Written 22 Oct 2026. Status: **approved by the owner on 22 Oct 2026 with the recommended option for every choice: K1 A, K2 A, K3 A, K4 A, K5 A, K6 A; the smaller choices kept.** Nothing in it had been built, installed or run at approval. Every item in section 5 (Z2 to Z12) still needs the owner's yes when its task reaches it, and nothing runs on Steplet's Linux until the owner says the double-click session no longer uses it (Z9).
 
 **Goal:** one command that replays every known attack on a Steplet run and shows, attack by attack, that each one was blocked, and that refuses to call a line on the run chooser true unless its attacks were blocked on the pinned Claude Code version.
 

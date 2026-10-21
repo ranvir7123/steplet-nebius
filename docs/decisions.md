@@ -349,6 +349,19 @@ Plan: `docs/plans/2026-10-18-milestone-1-phase-4.md`, approved by the user on 18
 
 Corrections to earlier rows: **H8** now holds per run (J15). **Phase 3's open point on the raw logs** is closed by J6. The reason for J1's refusal is written here and not in `docs/rules.md`, which is generated from the rules in code and holds no checker reasons.
 
+## Milestone 1, phase 5 choices (22 Oct 2026)
+
+Plan: `docs/plans/2026-10-22-milestone-1-phase-5.md`, approved by the user on 22 Oct 2026 with the recommended option (A) for each of K1 to K6, and the smaller choices of its section 4 kept. Nothing had been built at approval. The plan describes each attack by what its test checks and what passing looks like, with harmless test files only (the user's choice on 22 Oct 2026, after an AI safety check on the assistant's side stopped one reply while the plan was being drafted on 21 Oct).
+
+| # | Decision | Why |
+|---|---|---|
+| K1 | **A: the one command is a small test-only program in the repository, `steplet-suite`, started with `cargo suite list`, `cargo suite scripted` or `cargo suite live`.** It runs exactly the tests its catalogue names and prints one row per attack: blocked, NOT blocked, did not run, or (live) did not try. Records go in `docs/suite/`. | A long `cargo test` line hides "did not run" among hundreds of lines and ties nothing to the run chooser's lines; a PowerShell script would hold the logic untested in a second language. |
+| K2 | **A: use case 5's sample is a new public repository on the user's GitHub, `steplet-uc5-sample`,** holding the harmless milestone 0 fixture, with a README saying it is a safety test sample whose every try is meant to fail. Publishing it still needs the user's yes (Z2). | Milestone done-means 3 asks for a public test repository, and only a real fetch runs the whole path (fetch, checkout inside the fence, removal of agent settings) with the sample in it; a second commit in `steplet-sample` would mix it into the use case 1 sample's history. |
+| K3 | **A: the live layer uses the model Steplet's runs really use (Claude Code's default; Steplet passes no `--model`), with a spending cap of $3,** the first case (L1) alone first, and every real-model run its own yes (Z3 to Z8). No live case spends anything unless `cargo suite live --yes-spend <dollars>` started it. | A cheaper model would test a model receivers never get; the measured cost of a run is about $0.07 (phase 3: $0.0786, phase 4: $0.068). |
+| K4 | **A: the chooser's network line says "…or to other programs on this computer" once the case of a program listening on Windows is blocked, and only while WSL runs in its default network mode,** which Steplet reads from `%USERPROFILE%\.wslconfig` (read only, never changed); otherwise the narrower line stays. | S8 and the new suite case test the default (`nat`) mode only; `mirrored` mode needs its own test. |
+| K5 | **A: the gate also checks who is at Steplet's end of the gate channel:** Steplet passes its own process number to the gate in the run's root-owned settings (`--steplet-pid`), and the gate refuses to talk to any other program. | Closes the easy route phase 3 measured (another program of the same Windows account could open its own end of the channel). A program of that account that reads Steplet's memory stays outside what Steplet can stop, and the plan says so. |
+| K6 | **A: phase 5 covers Claude Code 2.1.220 only.** Another version is added later by installing it and running `cargo suite scripted`, then `cargo suite live`. | Testing a second version now would add a download, a change to setup's pinned version and a second live layer to one phase. Keys not bound to an Anthropic workspace stay refused (J22) until then. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`
