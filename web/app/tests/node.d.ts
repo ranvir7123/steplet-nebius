@@ -6,3 +6,8 @@ declare module "node:url" {
 declare module "node:fs" {
   export function readFileSync(path: string | URL, encoding: "utf8"): string;
 }
+declare module "node:path" {
+  export function basename(path: string): string;
+  export function dirname(path: string): string;
+}
+declare const process: { env: Record<string, string | undefined> };

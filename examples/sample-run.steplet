@@ -1,0 +1,32 @@
+---
+steplet: 1
+title: Run the tests of steplet-sample
+sender: Sample Sender
+expires: 2027-10-20
+repository:
+  url: https://github.com/ranvir7123/steplet-sample.git
+  commit: 7e36d77a95ea1f36acf2aa906e27bc2903d93e61
+steps:
+  - Run the project's tests once.
+  - Report how many tests ran and whether they all passed.
+allow:
+  commands:
+    - python3 -m unittest discover -s tests -t .
+never:
+  - Do not change any file.
+  - Do not install anything.
+  - Do not use the network.
+signature: |
+  -----BEGIN SSH SIGNATURE-----
+  U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgs6hVJ49i9Co1wGXgsK79mdV7pG
+  busfjd44bPHhmVqCwAAAAKc3RlcGxldC12MQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gt
+  ZWQyNTUxOQAAAECLOiItETqHPnB6z1McofnmemFq9LbFpgOpiJXA+nXatXpX0vngMd3e61
+  NoaWvoSm5LJZwuYDs+iQnOLxuxNeYG
+  -----END SSH SIGNATURE-----
+---
+# Run the tests of steplet-sample
+
+The repository is already checked out at the commit above.
+
+1. Run `python3 -m unittest discover -s tests -t .` once, from the top folder of the repository.
+2. Report how many tests ran and whether they all passed, and nothing else.

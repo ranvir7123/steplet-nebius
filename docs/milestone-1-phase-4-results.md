@@ -3791,7 +3791,7 @@ test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; 
 | `run-started-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
 | `run-stop-question-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Now pictured as the window shows it (the bar had been drawn mid-page); right as it is. |
 | `run-stopped-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
-| `run-stopping-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the stand-in now takes 1.5 s to stop, so "Stopping�" can be seen; Stop is greyed). |
+| `run-stopping-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the stand-in now takes 1.5 s to stop, so "Stopping…" can be seen; Stop is greyed). |
 | `run-tripwire-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | "See the report" looked darker: the mouse rested on it from the previous click. The mouse now leaves the page before each picture. |
 | `run-wrong-key-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (one row counts the tries). |
 | `ask-10-seconds-left-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the countdown reads "No answer in 0:09 means no."). |
@@ -3957,3 +3957,647 @@ Minor points left for later (the reviewer's):
 - Every output box is named "What it printed", so a screen reader hears the same name for each call.
 - The request check compares the start of each address with the page's own, so a port such as 41800 would pass.
 - Whether a page is scrolled is read once, before the mouse moves.
+
+## Task 15: use case 1 on this laptop, from double-click to saved report
+
+You said yes to both outside steps (Z5) on 21 Oct 2026: Claude published the sample project on your GitHub, and you pasted your test key into Steplet's key box yourself. Claude never typed, read or printed the key.
+
+**What happened, in short:**
+- The sample project is public, and the sample file is signed and rated amber.
+- The first real run ended after 17 seconds: Anthropic refused your first key with error 400, because that key belongs to no workspace. The run cost nothing; the model never started.
+- That run showed a fault in Steplet: its report said "What went wrong around the run: Nothing". It now names any error from Anthropic that ends a run. Fixed test first.
+- With a new key made inside a workspace, the driven run finished: the file's one command ran with exit code 0 (5 tests, OK), and the report was saved.
+- Your run by hand also finished, and you saved its report through Windows' real Save dialog. But a real double-click in Explorer showed Windows' "Select an app" box, and Steplet was not in it. Steplet now writes the two entries Microsoft documents for that box; the box still leaves Steplet out, and why is not known. You opened the file through the box's "Choose an app on your PC".
+- Found and not fixed: a minimised Steplet window ignores a close, and the next close can leave Steplet running with no window.
+
+### Changes from the plan, recorded here
+
+- **`STEPLET_SAVE_TO` names a folder, not a file.** The e2e build saves the report there under the name the Save dialog would offer, so the real time (Windows' `GetLocalTime`) and the default name are both used for real. Every other build ignores the setting. Tests: `only_the_e2e_build_saves_without_the_dialog` (normal build) and `the_e2e_build_saves_in_the_tests_folder_under_the_offered_name` (e2e build).
+- **The sample file's details the plan did not fix:** sender "Sample Sender" (a new name, so no pin from earlier tests makes it red, and your own name is never pinned to a throwaway key); expires 20 Oct 2027 (Steplet allows at most 365 days ahead; 31 Oct 2027 was refused); three never lines (no file changes, no installs, no network).
+- **`real-app.spec.ts` has two tests.** "setup" finishes Steplet's Linux for this build (its gate program) and points double-click at this build. "use case 1" drives the window Windows opened for the file. Only one e2e window can be open at a time, because both use port 9333.
+- **The pictures are named `real-uc1-<screen>-light.png`,** so the `real-preview` and `real-setup` pictures of Tasks 10 and 11 stay as they were. Two pictures of the first try are kept as `real-uc1-try1-…`.
+- **The driven run says No to every question.** The test approves nothing the file did not ask for. There was no question.
+- **The tests run with `playwright.reuse.config.ts`,** a scratch file copied from the earlier work folder and not committed. Playwright's test web server (port 4180) outlives a run on Windows, and the next run then stopped with exit code -1073740791. The real-window tests do not use that server.
+- **A report fault for every error from Anthropic that ends a run** (below). Not in the plan; found by the first real run.
+- **The switch writes two more entries** (Step 5): the file type's "open with" list (`OpenWithProgids`) and a program entry `Applications\steplet.exe` offered for `.steplet` only. A program entry of that name that Steplet did not make is never changed or removed (the code review, below). Off removes only Steplet's own parts. Setup shows "Point it at this Steplet" when they are missing.
+- **Two of Setup's sentences changed.** For a switch that does not match this Steplet, Setup now says "The switch is on, but Windows' setting for it is out of date: Steplet was moved or changed." Before, it said the switch "points at a Steplet program that is not this one", which is not true of an older Steplet's setting. The key box's hint, once a key is saved, is now "Paste a new key to replace it": the old hint was cut off at the narrow size. The 20 Setup pictures with a saved key were taken again.
+- **The run by hand used the finished (release) build,** not this laptop's usual test build, to rule out the program kind (above). It has no debugging port, as the normal build.
+- **One stray byte fixed in this file:** an ellipsis on Task 14's line "Stopping…" had been saved in an old Windows encoding (byte 0x85), so the file was not valid UTF-8. Only that byte changed.
+
+### Step 1: the sample project
+
+Its files were checked first on this laptop, then published as a public repository with GitHub's own tool, signed in as you:
+
+```
+> python -m unittest discover -s tests -t . -v        (in C:\dev\m1\p4\steplet-sample)
+test_add (tests.test_calc.CalcTest.test_add) ... ok
+test_divide (tests.test_calc.CalcTest.test_divide) ... ok
+test_divide_by_zero (tests.test_calc.CalcTest.test_divide_by_zero) ... ok
+test_multiply (tests.test_calc.CalcTest.test_multiply) ... ok
+test_subtract (tests.test_calc.CalcTest.test_subtract) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.000s
+
+OK
+exit 0
+> git commit; gh repo create ranvir7123/steplet-sample --public --source . --remote origin --push
+7e36d77a95ea1f36acf2aa906e27bc2903d93e61 ranvir7123 <ranvir7123@gmail.com> A tiny calculator and its tests, for Steplet's sample run
+https://github.com/ranvir7123/steplet-sample
+branch 'main' set up to track 'origin/main'.
+To https://github.com/ranvir7123/steplet-sample.git
+ * [new branch]      HEAD -> main
+exit 0
+> gh api repos/ranvir7123/steplet-sample --jq '{full_name, visibility, default_branch, html_url}'
+{"default_branch":"main","full_name":"ranvir7123/steplet-sample","html_url":"https://github.com/ranvir7123/steplet-sample","visibility":"public"}
+> gh api "repos/ranvir7123/steplet-sample/git/trees/main?recursive=1" --jq '.tree[] | "\(.type) \(.path)"'
+blob README.md
+blob calc.py
+tree tests
+blob tests/__init__.py
+blob tests/test_calc.py
+> git ls-remote https://github.com/ranvir7123/steplet-sample.git
+7e36d77a95ea1f36acf2aa906e27bc2903d93e61	HEAD
+7e36d77a95ea1f36acf2aa906e27bc2903d93e61	refs/heads/main
+```
+
+The full commit hash is `7e36d77a95ea1f36acf2aa906e27bc2903d93e61`. `tests/__init__.py` is empty: Python 3.11 and later find tests in a folder only when it has one.
+
+### Step 2: the sample file, signed
+
+```
+> C:\Windows\System32\OpenSSH\ssh-keygen.exe -t ed25519 -f C:\dev\m1\p4\sample-key -N '""' -C steplet-sample
+Generating public/private ed25519 key pair.
+Your identification has been saved in C:\dev\m1\p4\sample-key
+Your public key has been saved in C:\dev\m1\p4\sample-key.pub
+The key fingerprint is:
+SHA256:uFtYc4nglJgl85NJnMxj+A9WFkOsorpvRK2k9cPtAlM steplet-sample
+exit 0
+> cargo run -p steplet-sign --offline -- check examples\sample-run.steplet   (before signing, with expires 2027-10-31)
+examples\sample-run.steplet: 1 problem
+  2 steps; allowed: 1 command, 0 domains, 0 read folders, 0 write folders; 3 never lines
+  repository: https://github.com/ranvir7123/steplet-sample.git at 7e36d77a95ea1f36acf2aa906e27bc2903d93e61
+  expires: 2027-10-31 (in 375 days)
+  signature: not signed
+  rating: blocked
+    amber, line 14: A command runs the repository's own code
+      python3 -m unittest discover -s tests -t .
+      Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.
+  problem: line 5: expires 2027-10-31, more than 365 days from today (2026-10-21)
+    allowed: a date from today to 365 days ahead; 14 days is usual
+    for example:
+      expires: 2026-11-04
+exit 1
+> cargo run -p steplet-sign --offline -- sign examples\sample-run.steplet --key C:\dev\m1\p4\sample-key --ssh-keygen C:\Windows\System32\OpenSSH\ssh-keygen.exe
+signed examples\sample-run.steplet
+  key SHA256:uFtYc4nglJgl85NJnMxj+A9WFkOsorpvRK2k9cPtAlM
+  expires 2027-10-20
+exit 0
+> cargo run -p steplet-sign --offline -- check examples\sample-run.steplet
+examples\sample-run.steplet: ok
+  2 steps; allowed: 1 command, 0 domains, 0 read folders, 0 write folders; 3 never lines
+  repository: https://github.com/ranvir7123/steplet-sample.git at 7e36d77a95ea1f36acf2aa906e27bc2903d93e61
+  expires: 2027-10-20 (in 364 days)
+  signature: valid, key SHA256:uFtYc4nglJgl85NJnMxj+A9WFkOsorpvRK2k9cPtAlM
+  rating: amber
+    amber, line 14: A command runs the repository's own code
+      python3 -m unittest discover -s tests -t .
+      Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.
+exit 0
+```
+
+The signature is valid and the colour is amber (`cap.runs-code`, G15), as the plan expects.
+
+### The save setting of the e2e build, test first
+
+```
+> cargo test -p steplet-app --offline -j 2 --test save
+error[E0432]: unresolved import `steplet_app::save::e2e_place`
+7 | use steplet_app::save::{Stamp, default_name, e2e_place, report_text, write_report};
+  |                                              ^^^^^^^^^ no `e2e_place` in `save`
+exit 101
+> (after the code) cargo test -p steplet-app --offline -j 2 --test save
+test only_the_e2e_build_saves_without_the_dialog ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-app --offline -j 2 --features e2e --test save --test shell
+test the_e2e_build_saves_in_the_tests_folder_under_the_offered_name ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test the_e2e_build_opens_its_debug_port_on_this_computer_only ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+> (planted: the build check removed, "if false && !cfg!(feature = "e2e")") cargo test -p steplet-app --offline -j 2 --test save only_the_e2e
+test only_the_e2e_build_saves_without_the_dialog ... FAILED
+assertion `left == right` failed
+  left: Some("C:\\reports\\steplet-report-2026-10-21-0605.txt")
+ right: None
+restored identical
+```
+
+### Step 4, first part: setup for this build, and your key
+
+This work folder's build had never put its gate program on Steplet's Linux, so the "setup" test pressed "Finish setting up Steplet's Linux" in the real window. Its first run read the checklist a moment too early, while the screen was still looking again after the install:
+
+```
+setup line after: Missing |  | The gate program for this Steplet is not in its Linux yet.
+    Error: expect(received).toMatch(expected)
+    Expected pattern: /^Ready/
+```
+
+The test now waits for that look. The install itself had finished (its last lines: `--- setup finished`, `gate: /opt/steplet/gate/steplet-gate-db111caf7d5fd1c7.exe`). Run again:
+
+```
+> npx --offline playwright test --config playwright.reuse.config.ts --project=real real-app.spec --grep setup
+setup line: Ready |  | Windows' Linux feature (WSL 2.6.3.0).
+setup line: Ready |  | Steplet's own Linux is installed.
+setup line: Ready |  | Its tools are there: git, Python, Claude Code and the rest.
+setup line: Ready |  | The gate program for this Steplet is in its Linux.
+key saved: no
+saved docs/screens/phase-4/real-uc1-setup-light.png
+  ok 1 [real] › app\tests\real-app.spec.ts:29:1 › setup: Steplet's Linux has this build's gate, and .steplet files open with this build (289ms)
+  1 passed (780ms)
+> Windows' open path for .steplet files, read after the test
+open command: "C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe" "%1"
+HKCU .steplet: Steplet.File
+```
+
+The switch had pointed at the earlier work folder's build; the screen showed "Point it at this Steplet", and the test pressed it. Then you pasted your key into the key box and pressed "Save key". The same test, run again, only looked for the word "Saved", never at the box:
+
+```
+key saved: yes
+  1 passed (898ms)
+```
+
+### Step 3 and Step 4: the run, driven
+
+The setup window was closed, then the file was opened the way a double-click opens it:
+
+```
+> $env:STEPLET_SAVE_TO = 'C:\dev\m1\p4\reports'; Invoke-Item examples\sample-run.steplet
+port 9333 up: True
+  pid 37528, started 15:44:18, window: 'Steplet'
+OpenWith dialogs open: 0
+"C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe" "C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\examples\sample-run.steplet"
+```
+
+**The first try: Anthropic refused the key.**
+
+```
+> STEPLET_SAVE_TO='C:\dev\m1\p4\reports' npx --offline playwright test --config playwright.reuse.config.ts --project=real real-app.spec --grep "use case 1"
+questions answered No: 0
+end: Did not finish | The run ended before the agent finished. | See the report | Run again | Open another file
+saved report: C:\dev\m1\p4\reports\steplet-report-2026-10-21-1544.txt
+  x  1 [real] › app\tests\real-app.spec.ts:69:1 › use case 1: preview, chooser, prepare, the run and the report, saved (17.0s)
+    Error: the saved report holds the file's test command
+    Expected: > 0
+    Received:   0
+test command exit 1
+```
+
+Claude Code's whole stream for that run was three lines. Summarised by a small script (each line's kind and the fields that say how it ended):
+
+```
+1 {"type": "system", "subtype": "init", "model": "claude-opus-5[1m]", "claude_code_version": "2.1.220", "apiKeySource": "apiKeyHelper"}
+2 {"type": "assistant", "error": "unknown", "content": ["API Error: 400 This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace."], "msg_model": "<synthetic>"}
+3 {"type": "result", "subtype": "success", "is_error": true, "api_error_status": 400, "terminal_reason": "api_error", "result": "API Error: 400 This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace."}
+```
+
+Anthropic's documentation (platform.claude.com/docs/en/manage-claude/authentication) says a key that is not bound to one workspace must send an `anthropic-workspace-id` header with each request. Claude Code can add such a header only from version 2.1.227 (`ANTHROPIC_CUSTOM_HEADERS`), and Steplet's Linux has 2.1.220. So you made a new key inside one workspace and saved it in Steplet's Setup, replacing the first.
+
+The saved report of the first try, whole (1,106 bytes):
+
+```
+Steplet report
+
+A line with "|" in front can hold text from the file or the run. Steplet's own words never have "|" in front.
+
+How the run ended
+  Did not finish. The run ended before the agent finished.
+
+The commands, each with its check, its exit code and everything it printed
+  The agent ran none.
+
+What Steplet refused
+  Nothing.
+
+Your answers
+  Steplet asked you nothing.
+
+The models
+  Used:
+  - | claude-opus-5[1m]
+
+The files the run changed in its working copy (the copy is deleted now)
+  None.
+
+The trust check
+  The run's settings mark no folder as trusted.
+
+What went wrong around the run
+  Nothing.
+
+Steplet's notes
+  - Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.
+
+The agent says (its own words, not Steplet's)
+  | API Error: 400 This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace.
+```
+
+**Found by this: the report hid why the run failed.** Only a wrong key (error 401, Task 12) was a fault. Any other error from Anthropic left "What went wrong" at "Nothing", and the only reason sat under "The agent says", which the report itself says not to trust. Now any error status on the run's last result, when that result is an error, is a fault in Steplet's own words. 401 keeps its sentence. Any other number N gave: "Anthropic refused the run's request with error N, so the agent could not go on. Claude Code passed on Anthropic's reason under "The agent says"." (The code review then changed the wording for errors that are no refusal; see "Task 15 review" below.) Anthropic's own words stay where text from the run goes. Test first:
+
+```
+> cargo test -p steplet-run --offline -j 2 --test report any_error_from_anthropic
+test any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words ... FAILED
+assertion `left == right` failed
+  left: []
+ right: ["Anthropic refused the run's request with error 400, so the agent could not go on. Claude Code passed on 
+Anthropic's reason under \"The agent says\"."]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+> (after the code) cargo test -p steplet-run --offline -j 2 --test report
+test a_key_anthropic_refuses_is_a_fault_in_words ... ok
+test any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words ... ok
+test result: ok. 23 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+(The test's expected sentence is one line; the terminal wrapped it.) The older test still holds: an error status on a result that is no error is no fault.
+
+**The second try, with the new key and the fixed build:**
+
+```
+> $env:STEPLET_SAVE_TO = 'C:\dev\m1\p4\reports'; Invoke-Item examples\sample-run.steplet
+port 9333 up: True
+  pid 5128, started 15:51:34, window: 'Steplet'
+OpenWith dialogs open: 0
+> STEPLET_SAVE_TO='C:\dev\m1\p4\reports' npx --offline playwright test --config playwright.reuse.config.ts --project=real real-app.spec --grep "use case 1"
+
+Running 1 test using 1 worker
+
+saved docs/screens/phase-4/real-uc1-preview-light.png
+saved docs/screens/phase-4/real-uc1-chooser-light.png
+saved docs/screens/phase-4/real-uc1-prepare-light.png
+saved docs/screens/phase-4/real-uc1-run-live-light.png
+questions answered No: 0
+end: Finished | The run finished. | See the report | Run again | Open another file
+saved docs/screens/phase-4/real-uc1-run-ended-light.png
+saved docs/screens/phase-4/real-uc1-report-light.png
+saved report: C:\dev\m1\p4\reports\steplet-report-2026-10-21-1551.txt
+saved docs/screens/phase-4/real-uc1-report-saved-light.png
+report: The commands, each with its check, its exit code and everything it printed
+report:   1. Tool:
+report:      | Bash
+report:      What it asked for:
+report:      | python3 -m unittest discover -s tests -t .
+report:      Steplet's check: Allowed by Steplet's checker
+report:      Exit code 0
+  ok 1 [real] › app\tests\real-app.spec.ts:69:1 › use case 1: preview, chooser, prepare, the run and the report, saved (12.8s)
+
+  1 passed (13.2s)
+test command exit 0
+```
+
+**The line with the test command's real exit code: `     Exit code 0`**, right under `     | python3 -m unittest discover -s tests -t .` and `Steplet's check: Allowed by Steplet's checker`.
+
+The saved report, whole (1,347 bytes, UTF-8, Windows line endings, shown here with the line endings as plain line breaks):
+
+```
+Steplet report
+
+A line with "|" in front can hold text from the file or the run. Steplet's own words never have "|" in front.
+
+How the run ended
+  Finished. The run finished.
+
+The commands, each with its check, its exit code and everything it printed
+  1. Tool:
+     | Bash
+     What it asked for:
+     | python3 -m unittest discover -s tests -t .
+     Steplet's check: Allowed by Steplet's checker
+     Exit code 0
+     What it printed (5 lines):
+     | .....
+     | ----------------------------------------------------------------------
+     | Ran 5 tests in 0.000s
+     |
+     | OK
+
+What Steplet refused
+  Nothing.
+
+Your answers
+  Steplet asked you nothing.
+
+The models
+  Used:
+  - | claude-opus-5[1m]
+
+The files the run changed in its working copy (the copy is deleted now)
+  - | ?? __pycache__/calc.cpython-314.pyc
+  - | ?? tests/__pycache__/__init__.cpython-314.pyc
+  - | ?? tests/__pycache__/test_calc.cpython-314.pyc
+
+The trust check
+  The run's settings mark no folder as trusted.
+
+What went wrong around the run
+  Nothing.
+
+Steplet's notes
+  - Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.
+
+The agent says (its own words, not Steplet's)
+  | 5 tests ran, and all passed.
+```
+
+The run took 7 seconds by the run screen's clock. The agent ran the one command the file allows, from the working copy's top folder, and nothing else; Steplet asked nothing. The three changed files are Python's own compiled copies, written when the tests ran.
+
+The run's real-window pictures, each looked at, right as they are:
+
+| Picture | What it shows |
+|---|---|
+| `real-uc1-setup-light.png` | Setup with all four lines Ready, the key saved, the switch on |
+| `real-uc1-preview-light.png` | the sample file's preview: amber, signed with the key seen before (the first try's Run pinned it), 1 command, 3 never lines, Run last |
+| `real-uc1-chooser-light.png` | the run chooser's six lines, what leaves the computer, Codex not available |
+| `real-uc1-prepare-light.png` | Fetched from GitHub, the commit checked out inside the fence, no agent settings files in the repository |
+| `real-uc1-run-live-light.png` | 0:04 into the run: Claude Code started with `claude-opus-5[1m]`, and what the agent says |
+| `real-uc1-run-ended-light.png` | Finished at 0:07: the one command, "Allowed by Steplet's checker", "Exit code 0", its five lines of output |
+| `real-uc1-report-light.png` | the whole report, every section in order |
+| `real-uc1-report-saved-light.png` | "Saved as C:\dev\m1\p4\reports\steplet-report-2026-10-21-1551.txt" |
+| `real-uc1-try1-run-ended-light.png`, `real-uc1-try1-report-light.png` | the first try, with "What went wrong around the run: Nothing" before the fix |
+
+Claude Code's own cost figures (`total_cost_usd` on each run's last line): the first try $0, the driven run $0.068002, the run by hand $0.068033.
+
+### Step 5: the run by hand, and what a real double-click found
+
+**A double-click in File Explorer did not open Steplet.** You double-clicked `examples\sample-run.steplet`, and Windows showed its own box, "Select an app to open this .steplet file". Steplet was not in its list: Cursor, Microsoft Visual Studio Version Selector, Notepad, Opera, Visual Studio Code, Windows Media Player Legacy and Word (with Antigravity and Claude above them, scrolled out of view). `Invoke-Item`, which Task 11 and Step 4 used, starts the file's program another way (`ShellExecuteEx`), so neither saw this.
+
+Windows itself knew Steplet. Asked through its own functions (`AssocQueryString` and `SHAssocEnumHandlers`, the list the box is meant to show), read-only:
+
+```
+AssocQueryString executable: C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe
+AssocQueryString friendly app name: Steplet
+AssocQueryString command: "C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe" "%1"
+AssocQueryString progid: Steplet.File
+SHAssocEnumHandlers(.steplet, filter 0) hr 0x00000000
+  Steplet | C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe | recommended: True
+  Notepad | C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2607.14.0_x64__8wekyb3d8bbwe\Notepad\Notepad.exe | recommended: False
+  Antigravity | C:\Users\RANVIR\AppData\Local\Programs\Antigravity\Antigravity.exe | recommended: False
+  Claude | C:\Users\RANVIR\AppData\Local\Microsoft\WindowsApps\Claude_pzs8sxrjxfjjc\claude-desktop.exe | recommended: False
+  Visual Studio Code | C:\Users\RANVIR\AppData\Local\Programs\Microsoft VS Code\Code.exe | recommended: False
+  Cursor | C:\Users\RANVIR\AppData\Local\Programs\cursor\Cursor.exe | recommended: False
+  Opera Internet Browser | C:\Users\RANVIR\AppData\Local\Programs\Opera\opera.exe | recommended: False
+  Microsoft Visual Studio Version Selector | C:\Program Files (x86)\Common Files\Microsoft Shared\MSEnv\VSLauncher.exe | recommended: False
+  Word | C:\Program Files\Microsoft Office\root\Office16\Winword.exe | recommended: False
+  Windows Media Player Legacy | C:\Program Files (x86)\Windows Media Player\wmplayer.exe | recommended: False
+SHAssocEnumHandlers(.steplet, filter 1) hr 0x00000000
+  Steplet | C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\debug\steplet.exe | recommended: True
+```
+
+So Windows names Steplet as the recommended program, and only the box leaves it out. The box appears at all because you never chose a program for this type yourself; that is Windows' rule, and Steplet does not try to get around it.
+
+What was tried, each time with a double-click by you:
+
+1. **Steplet's entry listed in the file type's own "open with" list.** Microsoft documents that a program is offered in the Open With box through `HKEY_CURRENT_USER\Software\Classes\.steplet\OpenWithProgids` ([how to include an application on the Open With dialog box](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-include-an-application-on-the-open-with-dialog-box)). The switch never wrote it. Now it does. Still not in the box.
+2. **The finished build.** This laptop's builds are console programs (Windows' program kind 3); the finished (release) build is a windowed one (kind 2), like every program the box listed. Built (4 min 41 s), set up (its own gate program) and switched to by you: still not in the box.
+3. **A program entry of Steplet's own.** Every program the box listed has an entry under `HKEY_CURRENT_USER\Software\Classes\Applications\<program>.exe`; Steplet had none. Microsoft documents that such an entry, with a `SupportedTypes` list, lets a program be listed in the Open With box for those types ([application registration](https://learn.microsoft.com/en-us/windows/win32/shell/app-registration)). The switch now writes `Applications\steplet.exe`, offered for `.steplet` only. Still not in the box.
+
+The entries Windows held after the third try:
+
+```
+== HKCU:\Software\Classes\Applications\steplet.exe
+  subkey Classes\Applications\steplet.exe\DefaultIcon
+    value '' = '"C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\release\steplet.exe",0'
+  subkey Classes\Applications\steplet.exe\shell
+  subkey Classes\Applications\steplet.exe\shell\open
+  subkey Classes\Applications\steplet.exe\shell\open\command
+    value '' = '"C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\release\steplet.exe" "%1"'
+  subkey Classes\Applications\steplet.exe\SupportedTypes
+    value '.steplet' = ''
+== HKCU:\Software\Classes\.steplet
+  value '' = 'Steplet.File'
+  subkey Classes\.steplet\OpenWithProgids
+    value 'Steplet.File' = ''
+== HKCU:\Software\Classes\Steplet.File
+  value '' = 'Steplet task file'
+  value 'Steplet.Application' = 'steplet.exe'
+  subkey Classes\Steplet.File\shell
+  subkey Classes\Steplet.File\shell\open
+  subkey Classes\Steplet.File\shell\open\command
+    value '' = '"C:\dev\runFile\.claude\worktrees\steplet-p4-task15-250d9e\target\release\steplet.exe" "%1"'
+```
+
+**Why the box leaves Steplet out is not known.** Finding out needs a tool that records what Windows reads (Microsoft's Process Monitor, not on this laptop), or a try after signing out or restarting Windows. Both entries stay: Microsoft documents them, and they are what a finished Steplet should write. The switch's tests check them, and Setup shows "Point it at this Steplet" for a switch turned on by an older Steplet, which lacks them. Setup's sentence for that case now reads "The switch is on, but Windows' setting for it is out of date: Steplet was moved or changed." The old sentence said the switch "points at a Steplet program that is not this one", which is not true of an older Steplet's setting.
+
+The switch's tests, with your yes each time (a made-up type `.steplet-test`, removed after):
+
+```
+> cargo test -p steplet-app --offline -j 2 --test register --no-run      (the tests first)
+error[E0425]: cannot find function `has_value` in module `register`
+ 46 |     assert!(register::has_value(&open_with, PROG_ID), "the file type offers Steplet's entry");
+> (planted: turn_on does not write OpenWithProgids) cargo test -p steplet-app --offline -j 2 --test register -- --test-threads=1
+test file_type_switch_round_trip ... FAILED
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... FAILED
+thread 'file_type_switch_round_trip' (37872) panicked at crates\steplet-app\tests\register.rs:39:5:
+thread 'turning_off_gives_the_file_type_back_to_the_program_that_had_it' (4576) panicked at crates\steplet-app\tests\register.rs:89:5:
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+restored identical
+> (planted: turn_on writes no SupportedTypes) cargo test -p steplet-app --offline -j 2 --test register -- --test-threads=1
+test file_type_switch_round_trip ... FAILED
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... FAILED
+thread 'file_type_switch_round_trip' (37148) panicked at crates\steplet-app\tests\register.rs:39:5:
+assertion `left == right` failed
+  left: Broken
+ right: On
+thread 'turning_off_gives_the_file_type_back_to_the_program_that_had_it' (35592) panicked at crates\steplet-app\tests\register.rs:101:5:
+assertion `left == right` failed
+  left: Broken
+ right: On
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+restored identical
+> cargo test -p steplet-app --offline -j 2 --test register -- --test-threads=1
+     Running tests\register.rs (target\debug\deps\register-b7fd4615a3017ff0.exe)
+
+running 2 tests
+test file_type_switch_round_trip ... ok
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+.steplet-test: not there
+Steplet.TestFile: not there
+Steplet.OtherTestFile: not there
+Applications\register-b7fd4615a3017ff0.exe: not there
+```
+
+The four "not there" lines are `reg query` after the run: the test left nothing behind. (The run just before that one printed no test lines at all, most likely because the antivirus held the freshly built test program; the same command run again gave the output above.)
+
+**The run by hand.** With the finished build and the switch pointing at it, you double-clicked the file in Explorer. In Windows' box you chose "Choose an app on your PC", picked `target\release\steplet.exe` and pressed "Just once", which records no lasting choice. Steplet opened with the file; you pressed Run, then Run with Claude Code, then See the report and Save report…, and saved through Windows' own Save dialog into Documents under the name Steplet offered. Then you closed Steplet with its X.
+
+```
+> Get-ChildItem <Documents> -Filter 'steplet-report-*.txt'
+Documents folder: C:\Users\RANVIR\OneDrive\Documents
+FullName      : C:\Users\RANVIR\OneDrive\Documents\steplet-report-2026-10-21-1818.txt
+Length        : 1347
+LastWriteTime : 21-10-2026 18:18:22
+steplet processes: 0
+> wc -c; the first three bytes; the line endings
+1347 /c/Users/RANVIR/OneDrive/Documents/steplet-report-2026-10-21-1818.txt
+ 53 74 65
+line endings: 47 CRLF of 47 lines
+```
+
+The file starts with the letters "Ste" (no byte-order mark), and every one of its 47 lines ends the Windows way. Its first lines:
+
+```
+Steplet report
+
+A line with "|" in front can hold text from the file or the run. Steplet's own words never have "|" in front.
+
+How the run ended
+  Finished. The run finished.
+
+The commands, each with its check, its exit code and everything it printed
+  1. Tool:
+     | Bash
+     What it asked for:
+     | python3 -m unittest discover -s tests -t .
+     Steplet's check: Allowed by Steplet's checker
+     Exit code 0
+```
+
+Its other lines are the same as the driven run's report above, line for line: the same five lines of output, nothing refused, no questions, `claude-opus-5[1m]`, the three compiled files, no trust, nothing wrong, "5 tests ran, and all passed."
+
+What Windows recorded after "Just once" (Explorer's own list for the type, which Steplet does not write):
+
+```
+== HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.steplet
+  subkey OpenWithList
+    value 'a' = 'steplet.exe'
+    value 'MRUList' = 'a'
+  subkey OpenWithProgids
+    value 'Steplet.File' = ''
+```
+
+**Windows' real Save dialog worked from Tauri's worker thread** (Task 13 left that open): it opened over Steplet's window, offered `steplet-report-2026-10-21-1818.txt`, and the file was written whole.
+
+### Found, and not fixed in this task
+
+- **A minimised Steplet window ignores a close,** and a close after that can leave Steplet running with no window. Seen twice with the e2e build. Each time the window had been minimised. Closing it from outside (`CloseMainWindow`, which sends the same message as the taskbar's "Close window") did nothing. After the window was restored, the next close removed the window and its WebView2 (port 9333 closed), but `steplet.exe` kept running: at least 50 seconds after that close the first time (with no window and 25 waiting threads), and over 20 seconds the second time. Both were ended by their process number. A window that was never minimised closed and ended at once, three times (the two run windows and your hand run). Tauri's own code (`tauri-runtime-wry` 2.12.1, `on_close_requested` and `on_window_close`) drops the window on a close that is not prevented, and ends the program when the last window is gone. Why that did not happen here is not known. There is no debugger on this laptop.
+- **The changed-files list shows Git's mark "??"** (Git's sign for a new file it does not track) in front of each path, in the report and the saved file. A receiver cannot read it. It comes from the runner's list (phase 3).
+- **Windows' "Select an app" box leaves Steplet out** (above).
+
+### What this task did not verify
+
+- **Why Windows 11's box leaves Steplet out,** and whether it lists Steplet after a sign-out or restart. A double-click in Explorer opens Steplet only through "Choose an app on your PC" (or "Always" there, which this task did not choose).
+- **The debug build's Explorer double-click.** The run by hand used the finished build, the one a receiver gets. The driven run used the e2e build through `Invoke-Item`.
+- **A question during a real run.** The real model ran only the allowed command, so the question screen was not seen with a real model.
+- **Dark mode in the real window.** This laptop was in light mode for the driven runs, so every `real-uc1-…` picture is light.
+- **A second real-model run with a refusal, a failing test, or a long output.** Only use case 1 ran, twice with a working key and once with a refused key.
+- **Whether the closing fault happens with the normal or finished builds.** It was seen only with the e2e build.
+- **`STEPLET_SAVE_TO` reaching the program through a real Explorer double-click.** It reached the e2e build through `Invoke-Item` from PowerShell (the report was saved in that folder). Explorer's own environment was never given the setting.
+
+### Task 15 review
+
+A code reviewer read this task's changes on its own, before the commit. It found two blocking points and six that should be fixed. Re-graded by what a receiver would get, three were important, and they were fixed test first:
+
+1. **Turning the switch off could remove a program entry Steplet did not make.** A program entry is named after the program's file, `steplet.exe`. If one was there before (another program of that name, or another copy of Steplet), turning the switch on overwrote its command, and turning it off deleted it whole. Now:
+   - Steplet treats the entry as its own only if it is not there yet, or already opens exactly this Steplet. Anyone else's is not touched at all.
+   - Turning off removes only the parts Steplet writes (its type, its open command, its icon), and the entry itself once it is empty.
+   - The entry is named in Steplet's own entry before it is written, so a write that fails halfway can still be undone.
+   - The file type's key is removed again only after Steplet's own value has gone from it (the earlier change also removed an empty key someone else left).
+   - Test: `a_program_entry_steplet_did_not_make_is_left_alone`.
+2. **The switch could read "broken" when it was not.** Microsoft documents the values of both lists as having no type (`REG_NONE`), and Windows may rewrite them so. Steplet only counted text values. Now any type counts. Test: the round trip rewrites both values as `REG_NONE` and expects "On".
+3. **The new report sentence said "refused" for errors that are no refusal.** Error 529 (Anthropic overloaded) or a 5xx (their side broke) means waiting may help. Now:
+   - Only a 4xx error says "Anthropic refused the run's request with error N, so the agent could not go on."
+   - Any other error says "Anthropic's service answered with error N, so the agent could not go on. It may work if you run it again later."
+   - The pointer "Claude Code passed on what Anthropic said under "The agent says"." is added only when that section holds something.
+   - Test: `any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words` (extended).
+
+Also taken from the review: Setup's sentence lost the word "entries" ("The switch is on, but Windows' setting for it is out of date: Steplet was moved or changed.").
+
+The tests failed first, on the code before these fixes. The registry tests ran with your yes, on made-up entries only:
+
+```
+> cargo test -p steplet-run --offline -j 2 --test report any_error
+test any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words ... FAILED
+thread 'any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words' (8976) panicked at crates\steplet-run\tests\report.rs:815:5:
+assertion `left == right` failed
+  left: ["Anthropic refused the run's request with error 400, so the agent could not go on. Claude Code passed on Anthropic's reason under \"The agent says\"."]
+ right: ["Anthropic refused the run's request with error 400, so the agent could not go on. Claude Code passed on what Anthropic said under \"The agent says\"."]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+> (old code) cargo test -p steplet-app --offline -j 2 --test register -- --test-threads=1
+test a_program_entry_steplet_did_not_make_is_left_alone ... FAILED
+test file_type_switch_round_trip ... FAILED
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... ok
+thread 'a_program_entry_steplet_did_not_make_is_left_alone' (34760) panicked at crates\steplet-app\tests\register.rs:147:5:
+assertion `left == right` failed: its command is not changed
+  left: Some("\"C:\\made-up\\steplet-made-up-test.exe\" \"%1\"")
+ right: Some("\"C:\\made-up\\another-program.exe\" \"%1\"")
+thread 'file_type_switch_round_trip' (39088) panicked at crates\steplet-app\tests\register.rs:65:5:
+assertion `left == right` failed: a value with no text is there all the same
+  left: Broken
+ right: On
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+.steplet-test: not there
+Steplet.TestFile: not there
+Steplet.OtherTestFile: not there
+Applications\register-b7fd4615a3017ff0.exe: not there
+Applications\steplet-made-up-test.exe: not there
+```
+
+Then they pass:
+
+```
+> cargo test -p steplet-run --offline -j 2 --test report
+test a_key_anthropic_refuses_is_a_fault_in_words ... ok
+test any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words ... ok
+test result: ok. 23 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-app --offline -j 2 --test register -- --test-threads=1
+test a_program_entry_steplet_did_not_make_is_left_alone ... ok
+test file_type_switch_round_trip ... ok
+test turning_off_gives_the_file_type_back_to_the_program_that_had_it ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+.steplet-test: not there
+Steplet.TestFile: not there
+Steplet.OtherTestFile: not there
+Applications\register-b7fd4615a3017ff0.exe: not there
+Applications\steplet-made-up-test.exe: not there
+```
+
+(The report run before this one stopped at `error: linking with link.exe failed: exit code: 1104`, the antivirus holding the new test program. The same command run again gave the output above.)
+
+Minor points left for later (the reviewer's):
+- When another program takes the file type after Steplet's switch was on, Setup says "Off", but Steplet's "open with" value and its program entry stay.
+- No test makes a write fail halfway through turning the switch on.
+- A run with two results from Claude Code is not handled on its own; none has been seen.
+- The e2e build's save setting is read in every build (it does nothing outside e2e).
+
+### The tests pass
+
+On the final code, after the review's fixes (the three registry tests are skipped here because they ran on their own above, with your yes):
+
+```
+> npm --prefix web run build --offline
+✓ built in 285ms
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.44s
+> cargo clippy -p steplet-app --all-targets --offline -j 2 --features e2e -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.81s
+> cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back --skip a_program_entry_steplet_did_not_make_is_left_alone
+   (68 "test result:" lines, none failed: 350 passed, 42 ignored)
+exit 0
+> cargo test -p steplet-app --offline -j 2 --features e2e --test save --test shell
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> npm --prefix web run check --offline
+1792588160227 COMPLETED 159 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> npm --prefix web run build:screens --offline; npx --offline playwright test --config playwright.reuse.config.ts --project=screens --workers=4
+  322 passed (4.5m)
+exit 0
+> cargo build --release -p steplet-gate -p steplet-app --offline -j 2
+    Finished `release` profile [optimized] target(s) in 1m 47s
+```
+
+The workspace has 350 passing tests, two more than Task 14's 348: `only_the_e2e_build_saves_without_the_dialog` and `any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words` (the third new one, `a_program_entry_steplet_did_not_make_is_left_alone`, is a registry test). The full picture run changed 31 pictures. Twenty are the Setup states with a saved key (the new hint, and the new sentence in `setup-switch-broken`). Ten others differed only in one digit of the run clock at the top (an 8 × 10 pixel spot), and one in 11 pixels by 1 step of 255. Those eleven were put back as they were, so the commit holds only the twenty that really changed.

@@ -192,12 +192,7 @@ pub fn build_report(outcome: &RunOutcome, changed: Option<&[String]>, trust: Tru
         changed_files: changed.map(|files| files.iter().map(|f| scrub.text(f)).collect()),
         trust,
         agent_says: scrub.text(agent_says(&outcome.events)),
-        faults: outcome
-            .faults
-            .iter()
-            .map(|f| scrub.text(f))
-            .chain(key_refused(&outcome.events).then(|| KEY_REFUSED.to_string()))
-            .collect(),
+        faults: outcome.faults.iter().map(|f| scrub.text(f)).chain(service_refused(&outcome.events)).collect(),
         answers: outcome
             .answers
             .iter()
@@ -354,8 +349,32 @@ fn shown(text: &str) -> String {
 /// The report's fault when the run ended on Anthropic's HTTP 401: a key it does not accept (Task 12).
 pub const KEY_REFUSED: &str = "Anthropic did not accept the key. Change it in Setup.";
 
-fn key_refused(events: &[Event]) -> bool {
-    events.iter().any(|e| matches!(e, Event::ApiError { status: 401 }))
+/// The report's fault when the run ended on an error from Anthropic, in Steplet's own words. 401 is a key it does
+/// not accept (Task 12); any other status says only its number, since Anthropic's reason is text from the run
+/// (Task 15: a key that belongs to no workspace ended a real run on 400). Only a 4xx is a refusal of the request; any
+/// other status is the service failing, and may pass. The fault points to "The agent says" only when it holds
+/// something. An error status on a result that is no error is no fault.
+fn service_refused(events: &[Event]) -> Option<String> {
+    events.windows(2).find_map(|pair| match pair {
+        [Event::ApiError { status: 401 }, Event::Result { is_error: true, .. }] => Some(KEY_REFUSED.to_string()),
+        [Event::ApiError { status }, Event::Result { is_error: true, text, .. }] => {
+            let what = if (400..500).contains(status) {
+                format!("Anthropic refused the run's request with error {status}, so the agent could not go on.")
+            } else {
+                format!(
+                    "Anthropic's service answered with error {status}, so the agent could not go on. It may work if you \
+                     run it again later."
+                )
+            };
+            let pointer = if text.trim().is_empty() {
+                ""
+            } else {
+                " Claude Code passed on what Anthropic said under \"The agent says\"."
+            };
+            Some(format!("{what}{pointer}"))
+        }
+        _ => None,
+    })
 }
 
 /// Every tool call, with Steplet's check, its result and whether the stop shaped it.

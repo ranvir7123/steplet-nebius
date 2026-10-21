@@ -358,7 +358,7 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "setup-could-not-look": { shows: [/^Steplet could not look at its own Linux/] },
   "setup-all-ready": { shows: [/^Its tools are there/, "Saved"], hides: [/^Missing$/] },
   "setup-key-saved": { shows: [/^Missing in Steplet's Linux: Claude Code/, "Saved"] },
-  "setup-switch-broken": { shows: [/points at a Steplet program that is not this one/] },
+  "setup-switch-broken": { shows: [/Windows' setting for it is out of date/] },
   "setup-installing": { shows: ["Steplet is changing its Linux. This can take several minutes…"] },
   "setup-install-failed": { shows: [/^Setup stopped while trying to set up Steplet's Linux/] },
   "setup-start-over": { shows: ["Remove Steplet's Linux"] },

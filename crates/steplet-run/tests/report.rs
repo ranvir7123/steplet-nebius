@@ -800,3 +800,37 @@ fn a_key_anthropic_refuses_is_a_fault_in_words() {
     let other = outcome(vec![started(), Event::ApiError { status: 529 }, finished("done")]);
     assert!(report(&other).faults.is_empty(), "{:?}", report(&other).faults);
 }
+
+/// Task 15: the real run with a key that belongs to no workspace ended on HTTP 400 (Claude Code 2.1.220's stream,
+/// its last line's `api_error_status`). Any error from Anthropic that ends the run is a fault in Steplet's own words,
+/// so "What went wrong" never says "Nothing" while the only reason sits in what the agent says.
+#[test]
+fn any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words() {
+    let said = "API Error: 400 This API key is not scoped to a workspace, so this request must include the \
+                anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key \
+                that is scoped to a workspace.";
+    let mut o = outcome(vec![started(), Event::ApiError { status: 400 }, result("success", true, "", said)]);
+    o.exit_code = Some(1);
+    let r = report(&o);
+    assert_eq!(
+        r.faults,
+        ["Anthropic refused the run's request with error 400, so the agent could not go on. Claude Code passed on \
+          what Anthropic said under \"The agent says\"."]
+    );
+    assert!(!r.completed);
+    assert_eq!(r.agent_says, said, "Anthropic's own words stay where text from the run goes");
+
+    // A busy or broken service is no refusal: running it again later may work.
+    let busy = outcome(vec![started(), Event::ApiError { status: 529 }, result("success", true, "", "Overloaded")]);
+    assert_eq!(
+        report(&busy).faults,
+        ["Anthropic's service answered with error 529, so the agent could not go on. It may work if you run it again \
+          later. Claude Code passed on what Anthropic said under \"The agent says\"."]
+    );
+    // With nothing under "The agent says", the fault does not point there.
+    let silent = outcome(vec![started(), Event::ApiError { status: 400 }, result("success", true, "", " ")]);
+    assert_eq!(
+        report(&silent).faults,
+        ["Anthropic refused the run's request with error 400, so the agent could not go on."]
+    );
+}

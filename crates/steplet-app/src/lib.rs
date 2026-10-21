@@ -182,12 +182,14 @@ fn stop_run(state: tauri::State<AppState>) {
 }
 
 /// Saves the last run's report through Windows' own Save dialog (S4): where it was saved, or `None` when the
-/// receiver cancelled. A failure is Steplet's own sentence.
+/// receiver cancelled. A failure is Steplet's own sentence. The e2e build saves in `STEPLET_SAVE_TO` when it is set.
 #[tauri::command(async)]
 fn save_report(state: tauri::State<AppState>, window: tauri::WebviewWindow) -> Result<Option<String>, String> {
     let report = state.session.last_report().ok_or("There is no report to save yet.")?;
     let owner = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
-    let Some(path) = save::ask_where(owner, &save::Stamp::now()) else { return Ok(None) };
+    let at = save::Stamp::now();
+    let place = save::e2e_place(std::env::var_os("STEPLET_SAVE_TO"), &at).or_else(|| save::ask_where(owner, &at));
+    let Some(path) = place else { return Ok(None) };
     save::write_report(&path, &report)
         .map_err(|e| format!("Steplet could not save the report. {}", views::windows_says(e)))?;
     Ok(Some(path.display().to_string()))

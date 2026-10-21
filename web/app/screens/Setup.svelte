@@ -221,7 +221,7 @@
           type="password"
           autocomplete="off"
           spellcheck="false"
-          placeholder={view.key_saved ? "Paste a new key to replace the saved one" : "Paste your key"}
+          placeholder={view.key_saved ? "Paste a new key to replace it" : "Paste your key"}
           bind:value={key}
         />
         <button class="button primary" type="button" disabled={key.trim() === ""} onclick={saveKey}>Save key</button>
@@ -248,7 +248,7 @@
       </p>
       {#if view.opens_steplet_files === "broken"}
         <div class="message warn">
-          <p>The switch is on, but it points at a Steplet program that is not this one: Steplet was moved or changed.</p>
+          <p>The switch is on, but Windows' setting for it is out of date: Steplet was moved or changed.</p>
           <button class="button" type="button" onclick={() => turn(true)}>Point it at this Steplet</button>
         </div>
       {/if}

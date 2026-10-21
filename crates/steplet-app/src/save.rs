@@ -39,6 +39,15 @@ pub fn default_name(at: &Stamp) -> String {
     format!("steplet-report-{:04}-{:02}-{:02}-{:02}{:02}.txt", at.year, at.month, at.day, at.hour, at.minute)
 }
 
+/// The e2e build only (Task 15): a folder from `STEPLET_SAVE_TO` takes the Save dialog's place, so a test can save
+/// the report without a dialog, under the name the dialog offers. Every other build ignores the setting.
+pub fn e2e_place(folder: Option<std::ffi::OsString>, at: &Stamp) -> Option<PathBuf> {
+    if !cfg!(feature = "e2e") {
+        return None;
+    }
+    folder.filter(|f| !f.is_empty()).map(|f| PathBuf::from(f).join(default_name(at)))
+}
+
 /// The report as text, one `\n` between lines.
 pub fn report_text(r: &ReportView) -> String {
     let mut out = Text::default();

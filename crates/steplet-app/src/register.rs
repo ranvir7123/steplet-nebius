@@ -1,8 +1,10 @@
 //! "Open .steplet files with Steplet" (J4 A): a switch in Setup, off until the receiver turns it on. Its entries are
 //! for this Windows user only (`HKEY_CURRENT_USER\Software\Classes`, no administrator rights): the file type names
-//! Steplet's entry, whose open command starts this program with the file. If another program's entry had the file
-//! type, Steplet notes which and gives the file type back to it when the switch goes off; otherwise off removes the
-//! file type's own value, and its key once nothing else is in it. Nothing another program put there is removed.
+//! Steplet's entry, whose open command starts this program with the file, and lists it among the entries it offers
+//! (`OpenWithProgids`); the program gets an entry of its own under `Applications`, offered for that type only, since
+//! Explorer's "Select an app" box lists programs from those entries (Task 15). If another program's entry had the
+//! file type, Steplet notes which and gives the file type back to it when the switch goes off; otherwise off removes
+//! the file type's own value, and its key once nothing else is in it. Nothing another program put there is removed.
 
 use std::io;
 use std::path::Path;
@@ -10,9 +12,9 @@ use std::ptr;
 
 use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, WIN32_ERROR};
 use windows_sys::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_REG_SZ, RegCloseKey,
-    RegCreateKeyExW, RegDeleteKeyValueW, RegDeleteKeyW, RegDeleteTreeW, RegGetValueW, RegOpenKeyExW, RegQueryInfoKeyW,
-    RegSetValueExW,
+    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_ANY, RRF_RT_REG_SZ,
+    RegCloseKey, RegCreateKeyExW, RegDeleteKeyValueW, RegDeleteKeyW, RegDeleteTreeW, RegGetValueW, RegOpenKeyExW,
+    RegQueryInfoKeyW, RegSetValueExW,
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
@@ -24,6 +26,12 @@ pub const PROG_ID: &str = "Steplet.File";
 const CLASSES: &str = r"Software\Classes";
 /// The value, in Steplet's own entry, that names the entry that had the file type before Steplet took it.
 const HAD_IT: &str = "Steplet.HadTheFileType";
+/// The file type's list of the entries it offers, one value per entry, named after it (Microsoft's "Open With" list).
+const OPEN_WITH: &str = "OpenWithProgids";
+/// Where each program has its own entry, named after its file (Microsoft's application registration).
+const APPLICATIONS: &str = r"Software\Classes\Applications";
+/// The value, in Steplet's own entry, that names the program entry Steplet made under `APPLICATIONS`.
+const MADE_APP: &str = "Steplet.Application";
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -38,24 +46,50 @@ fn command_for(exe: &Path) -> String {
     format!("\"{}\" \"%1\"", exe.display())
 }
 
-/// Turns the switch on: files of type `ext` open with the program `exe`.
+/// The name of the program entry for `exe`: its file's name. A path with no file name has no entry.
+fn app_name(exe: &Path) -> io::Result<String> {
+    exe.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the program's path names no file"))
+}
+
+/// Turns the switch on: files of type `ext` open with the program `exe`. The program entry under `APPLICATIONS` is
+/// Steplet's only when it is not there yet or already opens this program; another program's entry of the same name
+/// is left as it is.
 pub fn turn_on(ext: &str, prog_id: &str, exe: &Path) -> io::Result<()> {
+    // What can fail without writing is worked out first, so that such a failure changes nothing.
+    let app = app_name(exe)?;
     let (ext_key, prog_key) = (format!(r"{CLASSES}\{ext}"), format!(r"{CLASSES}\{prog_id}"));
+    let (app_key, command) = (format!(r"{APPLICATIONS}\{app}"), command_for(exe));
     let before = default_value(&ext_key);
     set_default(&prog_key, "Steplet task file")?;
     if let Some(other) = before.filter(|b| b != prog_id && !b.is_empty()) {
         set_value(&prog_key, Some(HAD_IT), &other)?;
     }
-    set_default(&format!(r"{prog_key}\shell\open\command"), &command_for(exe))?;
+    set_default(&format!(r"{prog_key}\shell\open\command"), &command)?;
     set_default(&ext_key, prog_id)?;
+    set_value(&format!(r"{ext_key}\{OPEN_WITH}"), Some(prog_id), "")?;
+    let app_command = format!(r"{app_key}\shell\open\command");
+    if !exists(&app_key) || default_value(&app_command).as_deref() == Some(command.as_str()) {
+        // Named first, so that turning off finds the entry even if a write below fails.
+        set_value(&prog_key, Some(MADE_APP), &app)?;
+        set_default(&app_command, &command)?;
+        set_default(&format!(r"{app_key}\DefaultIcon"), &format!("\"{}\",0", exe.display()))?;
+        set_value(&format!(r"{app_key}\SupportedTypes"), Some(ext), "")?;
+    }
     told_windows();
     Ok(())
 }
 
 /// Turns the switch off: the file type goes back to the entry that had it, or loses Steplet's value; then Steplet's
-/// own entry is removed.
+/// own entry is removed, with the program entry it made, as long as that still opens what Steplet's entry opens.
 pub fn turn_off(ext: &str, prog_id: &str) -> io::Result<()> {
     let (ext_key, prog_key) = (format!(r"{CLASSES}\{ext}"), format!(r"{CLASSES}\{prog_id}"));
+    let open_with = format!(r"{ext_key}\{OPEN_WITH}");
+    delete_value(&open_with, Some(prog_id))?;
+    if is_empty(&open_with) {
+        delete_tree(&open_with)?;
+    }
     if default_value(&ext_key).as_deref() == Some(prog_id) {
         match value(&prog_key, Some(HAD_IT)) {
             Some(other) => set_default(&ext_key, &other)?,
@@ -67,19 +101,46 @@ pub fn turn_off(ext: &str, prog_id: &str) -> io::Result<()> {
             }
         }
     }
+    // Only the program entry Steplet's own entry names, never the whole list, and only the parts Steplet writes.
+    let ours = default_value(&format!(r"{prog_key}\shell\open\command"));
+    if let Some(app) = value(&prog_key, Some(MADE_APP)).filter(|a| !a.is_empty() && !a.contains('\\')) {
+        let app_key = format!(r"{APPLICATIONS}\{app}");
+        if ours.is_some() && default_value(&format!(r"{app_key}\shell\open\command")) == ours {
+            let types = format!(r"{app_key}\SupportedTypes");
+            delete_value(&types, Some(ext))?;
+            delete_tree(&format!(r"{app_key}\shell\open\command"))?;
+            delete_tree(&format!(r"{app_key}\DefaultIcon"))?;
+            for part in [types, format!(r"{app_key}\shell\open"), format!(r"{app_key}\shell"), app_key] {
+                if is_empty(&part) {
+                    delete_tree(&part)?;
+                }
+            }
+        }
+    }
     delete_tree(&prog_key)?;
     told_windows();
     Ok(())
 }
 
-/// How the switch stands for the program `exe`: on, off, or on but pointing at a program that is not this one (it
-/// moved, or the entry was changed).
+/// How the switch stands for the program `exe`: on; off; or broken, when it points at a program that is not this one
+/// (it moved, or the entry was changed) or is not offered in Explorer's "Select an app" box (an older Steplet's).
 pub fn state(ext: &str, prog_id: &str, exe: &Path) -> Switch {
     if default_value(&format!(r"{CLASSES}\{ext}")).as_deref() != Some(prog_id) {
         return Switch::Off;
     }
+    let command = command_for(exe);
+    let offered = has_value(&format!(r"{CLASSES}\{ext}\{OPEN_WITH}"), prog_id)
+        && app_name(exe).is_ok_and(|app| {
+            let app_key = format!(r"{APPLICATIONS}\{app}");
+            match default_value(&format!(r"{app_key}\shell\open\command")) {
+                // Steplet's own program entry offers this type.
+                Some(c) if c == command => has_value(&format!(r"{app_key}\SupportedTypes"), ext),
+                // Another program's entry of that name is left alone; none at all is missing.
+                _ => exists(&app_key),
+            }
+        });
     match default_value(&format!(r"{CLASSES}\{prog_id}\shell\open\command")) {
-        Some(command) if command == command_for(exe) && exe.is_file() => Switch::On,
+        Some(c) if c == command && exe.is_file() && offered => Switch::On,
         _ => Switch::Broken,
     }
 }
@@ -131,6 +192,26 @@ fn value(subkey: &str, name: Option<&str>) -> Option<String> {
     String::from_utf16(&buf[..len]).ok()
 }
 
+/// Whether the key `subkey` of `HKEY_CURRENT_USER` holds the value `name`, of any type: Microsoft documents the
+/// values of the "Open With" lists as REG_NONE, and Windows may write them so.
+pub fn has_value(subkey: &str, name: &str) -> bool {
+    let (key, name) = (wide(subkey), wide(name));
+    let mut size: u32 = 0;
+    // SAFETY: a size query of any type: no buffer, Windows writes the size it needs in bytes.
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            key.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_ANY,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut size,
+        )
+    };
+    r == 0
+}
+
 /// Whether the key `subkey` of `HKEY_CURRENT_USER` is there.
 pub fn exists(subkey: &str) -> bool {
     let name = wide(subkey);
@@ -179,9 +260,16 @@ fn set_value(subkey: &str, name: Option<&str>, value: &str) -> io::Result<()> {
 
 /// Removes the default value of the key `subkey`. Nothing there is not a failure.
 fn delete_default(subkey: &str) -> io::Result<()> {
-    let name = wide(subkey);
-    // SAFETY: `name` is a whole wide string; a null value name is the default value.
-    let r = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, name.as_ptr(), ptr::null()) };
+    delete_value(subkey, None)
+}
+
+/// Removes the value `name` (`None`: the default value) of the key `subkey`. Nothing there is not a failure.
+fn delete_value(subkey: &str, name: Option<&str>) -> io::Result<()> {
+    let key = wide(subkey);
+    let name = name.map(wide);
+    let name_ptr = name.as_ref().map_or(ptr::null(), |n| n.as_ptr());
+    // SAFETY: `key` and `name` are whole wide strings; a null value name is the default value.
+    let r = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, key.as_ptr(), name_ptr) };
     if r == ERROR_FILE_NOT_FOUND { Ok(()) } else { checked(r) }
 }
 

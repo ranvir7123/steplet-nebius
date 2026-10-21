@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use serde_json::json;
-use steplet_app::save::{Stamp, default_name, report_text, write_report};
+use steplet_app::save::{Stamp, default_name, e2e_place, report_text, write_report};
 use steplet_app::views::{ReportView, report_view};
 use steplet_run::{
     Answer, Asked, Check, Client, Event, GateAnswer, GateRequest, PrepareError, Reply, RunOutcome, Trust, build_report,
@@ -238,6 +238,27 @@ fn a_turned_away_connection_never_hides_a_call_that_went_past_the_gate() {
 fn the_default_name_never_comes_from_the_file() {
     let at = Stamp { year: 2026, month: 10, day: 21, hour: 6, minute: 5 };
     assert_eq!(default_name(&at), "steplet-report-2026-10-21-0605.txt");
+}
+
+/// `STEPLET_SAVE_TO` is the e2e build's own setting (Task 15): every other build opens the Save dialog.
+#[test]
+#[cfg(not(feature = "e2e"))]
+fn only_the_e2e_build_saves_without_the_dialog() {
+    let at = Stamp { year: 2026, month: 10, day: 21, hour: 6, minute: 5 };
+    assert_eq!(e2e_place(Some(r"C:\reports".into()), &at), None);
+}
+
+/// In the e2e build, a test's folder takes the Save dialog's place, with the name the dialog offers.
+#[test]
+#[cfg(feature = "e2e")]
+fn the_e2e_build_saves_in_the_tests_folder_under_the_offered_name() {
+    let at = Stamp { year: 2026, month: 10, day: 21, hour: 6, minute: 5 };
+    assert_eq!(
+        e2e_place(Some(r"C:\reports".into()), &at),
+        Some(std::path::PathBuf::from(r"C:\reports\steplet-report-2026-10-21-0605.txt"))
+    );
+    assert_eq!(e2e_place(None, &at), None);
+    assert_eq!(e2e_place(Some("".into()), &at), None);
 }
 
 /// The runner's faults read as sentences: never Rust's own debugging form of an error.
