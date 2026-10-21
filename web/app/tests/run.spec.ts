@@ -136,6 +136,19 @@ test("a_50000_line_output_keeps_the_log_responsive", async ({ page }) => {
   await expect(log(page).getByRole("button", { name: "Show the first 40 lines" })).toBeVisible();
 });
 
+test("showing_all_lines_keeps_them_in_a_box_of_their_own", async ({ page }) => {
+  // Found by looking (Task 14): "Show all" made the page 50,000 lines long, so the window went to line 50,000 and
+  // the button that puts them away was at the far end of them.
+  await runOf(page, "run-long-output");
+  await log(page).getByRole("button", { name: "Show all 50,000 lines" }).click();
+  const output = log(page).getByRole("region", { name: "What it printed" });
+  await expect(output).toContainText("line 50000 of the output");
+  await expect(log(page).getByRole("button", { name: "Show the first 40 lines" })).toBeInViewport();
+  // The page grows by less than a window; the lines scroll in their own box, from its first line.
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2 * 800);
+  expect(await output.evaluate((e) => e.scrollTop)).toBe(0);
+});
+
 test("closing_the_window_during_a_run_asks_first", async ({ page }) => {
   await runOf(page, "run-stopping");
   await expect(log(page)).toContainText("rm -rf build");

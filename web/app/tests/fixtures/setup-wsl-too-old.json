@@ -28,7 +28,11 @@
     "key_saved": false,
     "opens_steplet_files": "off",
     "ready": false,
-    "wsl_fix": "wsl --update",
+    "wsl_fix": {
+      "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+      "command": "wsl --update",
+      "then": "Then press Check again."
+    },
     "install": "none"
   },
   "setup_lines": [],
@@ -58,7 +62,11 @@
       "key_saved": true,
       "opens_steplet_files": "off",
       "ready": false,
-      "wsl_fix": "wsl --update",
+      "wsl_fix": {
+        "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+        "command": "wsl --update",
+        "then": "Then press Check again."
+      },
       "install": "none"
     },
     "key_forgotten": {
@@ -85,7 +93,11 @@
       "key_saved": false,
       "opens_steplet_files": "off",
       "ready": false,
-      "wsl_fix": "wsl --update",
+      "wsl_fix": {
+        "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+        "command": "wsl --update",
+        "then": "Then press Check again."
+      },
       "install": "none"
     },
     "switch_on": {
@@ -112,7 +124,11 @@
       "key_saved": false,
       "opens_steplet_files": "on",
       "ready": false,
-      "wsl_fix": "wsl --update",
+      "wsl_fix": {
+        "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+        "command": "wsl --update",
+        "then": "Then press Check again."
+      },
       "install": "none"
     },
     "switch_off": {
@@ -139,7 +155,11 @@
       "key_saved": false,
       "opens_steplet_files": "off",
       "ready": false,
-      "wsl_fix": "wsl --update",
+      "wsl_fix": {
+        "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+        "command": "wsl --update",
+        "then": "Then press Check again."
+      },
       "install": "none"
     },
     "removed": {
@@ -166,7 +186,11 @@
       "key_saved": false,
       "opens_steplet_files": "off",
       "ready": false,
-      "wsl_fix": "wsl --update",
+      "wsl_fix": {
+        "why": "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a terminal opened as administrator, type:",
+        "command": "wsl --update",
+        "then": "Then press Check again."
+      },
       "install": "none"
     }
   },

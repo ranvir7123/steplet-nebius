@@ -13,9 +13,11 @@ export interface Timing {
   installEnds: boolean;
   /** Whether the first answer to a question fails on its way to Rust, as a broken channel to the window would. */
   answerFails: boolean;
+  /** Milliseconds a run takes to stop after Stop, before what it did after the stop arrives. */
+  stopping: number;
 }
 
-const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true, answerFails: false };
+const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true, answerFails: false, stopping: 0 };
 
 const special: Record<string, Partial<Timing>> = {
   "open-reading": { open: null },
@@ -25,6 +27,8 @@ const special: Record<string, Partial<Timing>> = {
   "ask-answer-fails": { answerFails: true },
   // Rows that keep coming for a few seconds, so the receiver can scroll up while they do.
   "run-40-commands": { step: 40 },
+  // A run that takes a moment to stop, as a real one does, so "Stopping…" can be seen.
+  "run-stopping": { stopping: 1500 },
 };
 
 /** The timing of the scenario `name`. */

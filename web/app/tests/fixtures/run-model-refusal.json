@@ -434,6 +434,7 @@
         "id": "toolu_01",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -496,6 +497,8 @@
               "words": "Allowed by Steplet's checker"
             },
             "exit_code": 0,
+            "ended": "Exit code 0",
+            "failed": false,
             "output": [
               {
                 "kind": "text",

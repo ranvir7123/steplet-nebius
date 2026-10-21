@@ -120,7 +120,7 @@ test("a_link_in_the_file_never_looks_like_a_link", async ({ page }) => {
 test("a_file_that_cannot_be_read_says_why", async ({ page }) => {
   await show(page, "open-could-not-read");
   await page.locator("input[type=file]").setInputFiles(EXAMPLE);
-  await expect(page.getByRole("alert")).toHaveText("Steplet could not read this file: Windows says access is denied.");
+  await expect(page.getByRole("alert")).toHaveText("Steplet could not read this file. Windows says: Access is denied.");
 });
 
 test("a_changed_key_leads_the_identity_line", async ({ page }) => {
@@ -154,4 +154,13 @@ test("opening_makes_no_network_request", async ({ page, baseURL }) => {
   await expect(page.getByRole("heading", { name: "From the file" })).toBeVisible();
   expect(requests.length).toBeGreaterThan(0);
   expect(requests.filter((u) => !u.startsWith(baseURL!))).toEqual([]);
+});
+
+test("an_address_lines_up_with_the_text_it_belongs_to", async ({ page }) => {
+  // Found by looking (Task 14): the "address" box sat 4 pixels right of the column it starts.
+  await show(page, "preview-amber");
+  const panel = page.locator("[data-from-file-panel]");
+  const label = await panel.getByText("Repository", { exact: true }).boundingBox();
+  const chip = await panel.locator(".real").first().boundingBox();
+  expect(Math.abs(chip!.x - label!.x)).toBeLessThanOrEqual(1);
 });

@@ -17,7 +17,7 @@
 
 {#snippet parts(list: Part[])}{#each list as p, i (i)}{#if p.kind === "text"}{p.text}{:else}{@render badge(p.codepoint)}{/if}{/each}{/snippet}
 
-<span class="file-text" class:block data-from-file>{#each text as s, i (i)}{#if s.kind === "text"}{s.text}{:else if s.kind === "invisible"}{@render badge(s.codepoint)}{:else}<span class="file-link">{#if s.shown}{@render parts(s.shown)}{/if}<span class="real" title="Where this link really goes: {plain(s.real)}"><span class="real-label">{s.shown ? "goes to" : "address"}</span>{@render parts(s.real)}</span></span>{/if}{/each}</span>
+<span class="file-text" class:block data-from-file>{#each text as s, i (i)}{#if s.kind === "text"}{s.text}{:else if s.kind === "invisible"}{@render badge(s.codepoint)}{:else}<span class="file-link">{#if s.shown}{@render parts(s.shown)}{/if}<span class="real" class:after={!!s.shown} title="Where this link really goes: {plain(s.real)}"><span class="real-label">{s.shown ? "goes to" : "address"}</span>{@render parts(s.real)}</span></span>{/if}{/each}</span>
 
 <style>
   .file-text {
@@ -44,7 +44,6 @@
 
   .real {
     display: inline-block;
-    margin-left: 4px;
     padding: 0 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -52,6 +51,11 @@
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 18px;
+  }
+
+  /* Space from the link's shown text only: an address that starts a line stays in line with the text under it. */
+  .after {
+    margin-left: 4px;
   }
 
   .real-label {

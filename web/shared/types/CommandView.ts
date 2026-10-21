@@ -6,7 +6,16 @@ export type CommandView = { tool: Array<Seg>, command: Array<Seg>, check: CheckV
 /**
  * From Claude Code's own marks (H13); `None` when there is none to show.
  */
-exit_code: number | null, output: Array<Seg>, lines: number, 
+exit_code: number | null, 
+/**
+ * How the call ended, in Steplet's words: its exit code, "Exit code not known", or "It did not run" when Steplet
+ * or the receiver refused it first.
+ */
+ended: string, 
+/**
+ * It ran and ended with an exit code other than 0: the screens make it stand out.
+ */
+failed: boolean, output: Array<Seg>, lines: number, 
 /**
  * Steplet was already stopping the run: the result was cut short or refused by the stop.
  */

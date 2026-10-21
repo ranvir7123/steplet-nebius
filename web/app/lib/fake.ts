@@ -129,11 +129,13 @@ export const backend: Backend = {
     return true;
   },
   async stopRun() {
-    void emit((await fixture()).after_stop);
+    const f = await fixture();
+    void wait(t.stopping).then(() => emit(f.after_stop));
   },
   async stopAndClose() {
     // A page cannot close its own browser window: the stand-in only stops.
-    void emit((await fixture()).after_stop);
+    const f = await fixture();
+    void wait(t.stopping).then(() => emit(f.after_stop));
   },
   async saveReport() {
     const f = await fixture();

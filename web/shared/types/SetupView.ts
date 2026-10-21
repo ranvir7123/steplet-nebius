@@ -2,6 +2,7 @@
 import type { LineView } from "./LineView";
 import type { Offer } from "./Offer";
 import type { Switch } from "./Switch";
+import type { WslFix } from "./WslFix";
 
 export type SetupView = { wsl: LineView, linux: LineView, tools: LineView, gate: LineView, key_saved: boolean, opens_steplet_files: Switch, 
 /**
@@ -9,10 +10,10 @@ export type SetupView = { wsl: LineView, linux: LineView, tools: LineView, gate:
  */
 ready: boolean, 
 /**
- * When Windows' Linux feature is missing or too old: the command the receiver types in a terminal opened as
- * administrator. Steplet never runs it.
+ * When Windows' Linux feature is missing or too old: what to do about it, with the command the receiver types
+ * in a terminal opened as administrator. Steplet never runs it.
  */
-wsl_fix: string | null, 
+wsl_fix: WslFix | null, 
 /**
  * Whether Setup offers to install Steplet's Linux, or to finish setting it up.
  */

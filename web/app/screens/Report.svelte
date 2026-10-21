@@ -109,7 +109,7 @@
             </div>
             <div class="call-facts">
               <span class="check {checkIcon(c.check)}"><Icon kind={checkIcon(c.check)} />{c.check.words}</span>
-              <span class="exit">{c.exit_code !== null ? `Exit code ${c.exit_code}` : "Exit code not known"}</span>
+              <span class="exit" class:failed={c.failed}>{c.ended}</span>
             </div>
             {#if c.after_stop}
               <p class="muted">Steplet was already stopping the run: this was cut short or refused by the stop.</p>
@@ -430,6 +430,12 @@
   .exit {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* An exit code other than 0, from Rust's `failed`. */
+  .exit.failed {
+    color: var(--red-fg);
+    font-weight: 600;
   }
 
   .output,

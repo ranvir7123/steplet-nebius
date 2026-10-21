@@ -239,6 +239,8 @@
               "words": "Allowed by Steplet's checker"
             },
             "exit_code": 1,
+            "ended": "Exit code 1",
+            "failed": true,
             "output": [
               {
                 "kind": "text",

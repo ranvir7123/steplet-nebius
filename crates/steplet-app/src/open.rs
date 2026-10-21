@@ -31,11 +31,12 @@ pub static PINS_UNREADABLE: Rule = Rule {
 /// The first `MAX_READ` bytes of the file at `path`. A refusal is in Steplet's words with Windows' reason, and never
 /// names the file (its name could be made to look like Steplet's own words).
 pub fn read_file(path: &Path) -> Result<Vec<u8>, String> {
-    let file = std::fs::File::open(path).map_err(|e| format!("Steplet could not open this file. Windows says: {e}"))?;
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("Steplet could not open this file. {}", crate::views::windows_says(e)))?;
     let mut raw = Vec::new();
     file.take(MAX_READ)
         .read_to_end(&mut raw)
-        .map_err(|e| format!("Steplet could not read this file. Windows says: {e}"))?;
+        .map_err(|e| format!("Steplet could not read this file. {}", crate::views::windows_says(e)))?;
     Ok(raw)
 }
 

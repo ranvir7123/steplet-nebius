@@ -231,8 +231,9 @@ impl Run {
         let input = json!({ "command": command });
         self.events.push(Event::ToolUse { id: id.clone(), name: "Bash".into(), input: input.clone() });
         let refused = "the file does not ask for this command, so Steplet refused it";
-        let (allowed, check) = match self.policy.check(&Action::Command(command)) {
-            Decision::Allow => (true, (Check::Allowed, None)),
+        // What the gate tells the agent when it refuses: the checker's reason, or the receiver's no (ask.rs).
+        let (allowed, check, why) = match self.policy.check(&Action::Command(command)) {
+            Decision::Allow => (true, (Check::Allowed, None), ""),
             Decision::Ask { .. } => {
                 let reply = if yes { Reply::Yes { fingerprint: "f".into() } } else { Reply::No };
                 self.answers.push(Answer { call: id.clone(), tool: "Bash".into(), what: command.into(), reply });
@@ -241,16 +242,17 @@ impl Run {
                 } else {
                     (Check::RefusedWhenAsked { how: NotYes::SaidNo }, None)
                 };
-                (yes, check)
+                (yes, check, "the receiver said no")
             }
-            Decision::Deny { .. } => (false, (Check::Refused, Some(refused.to_string()))),
+            Decision::Deny { .. } => (false, (Check::Refused, Some(refused.to_string())), refused),
         };
         self.checks.insert(id.clone(), check);
         let answer = if allowed {
             GateAnswer::Allow { updated_input: input.clone() }
         } else {
-            GateAnswer::Deny { message: refused.into() }
+            GateAnswer::Deny { message: why.into() }
         };
+        let why = why.strip_suffix(", so Steplet refused it").unwrap_or(why);
         self.requests.push(Asked::Decision {
             client: client(),
             request: GateRequest { run_token: "t".into(), tool_name: "Bash".into(), input, tool_use_id: id.clone() },
@@ -259,7 +261,7 @@ impl Run {
             delivered: true,
         });
         let (is_error, text) = match (allowed, exit) {
-            (false, _) => (true, "Steplet refused this: the file does not ask for this command".to_string()),
+            (false, _) => (true, format!("Steplet refused this: {why}")),
             (true, 0) => (false, output.to_string()),
             (true, n) => (true, format!("Exit code {n}\n{output}")),
         };
@@ -438,7 +440,10 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert(
         "open-could-not-read",
         Fixture {
-            open_error: Some("Steplet could not read this file: Windows says access is denied.".into()),
+            open_error: Some(format!(
+                "Steplet could not read this file. {}",
+                steplet_app::views::windows_says("Access is denied. (os error 5)")
+            )),
             ..fixture("open")
         },
     );
@@ -556,10 +561,10 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert(
         "setup-switch-fails",
         Fixture {
-            switch_error: Some(
-                "Steplet could not change what opens .steplet files. Windows says: Access is denied. (os error 5)"
-                    .into(),
-            ),
+            switch_error: Some(format!(
+                "Steplet could not change what opens .steplet files. {}",
+                steplet_app::views::windows_says("Access is denied. (os error 5)")
+            )),
             ..setup(all_ready(), true, Switch::Off)
         },
     );
@@ -822,7 +827,10 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert(
         "report-save-failed",
         Fixture {
-            save_error: Some("Steplet could not save the report: Windows says the disk is full.".into()),
+            save_error: Some(format!(
+                "Steplet could not save the report. {}",
+                steplet_app::views::windows_says("There is not enough space on the disk. (os error 112)")
+            )),
             ..report_screen(finished_report)
         },
     );

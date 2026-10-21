@@ -74,3 +74,12 @@ test("leaving_setup_during_an_install_keeps_it_going", async ({ page }) => {
   await expect(page.getByRole("log").locator("[data-from-file]")).toHaveCount(lines);
   await expect(page.getByRole("button", { name: /Install Steplet/ })).toHaveCount(0);
 });
+
+test("wsl_too_old_says_to_update_it", async ({ page }) => {
+  // Found by looking (Task 14): the help said the feature "has to be on", though it is on and only too old.
+  await setupOf(page, "setup-wsl-too-old");
+  await expect(page.locator("code", { hasText: "wsl --update" })).toBeVisible();
+  await expect(page.getByText(/too old/)).toBeVisible();
+  await expect(page.getByText("Then press Check again.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/has to be on/)).toHaveCount(0);
+});

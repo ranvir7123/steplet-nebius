@@ -11,7 +11,7 @@ The commands, each with its check, its exit code and everything it printed
      What it asked for:
      | wc -l README
      Steplet's check: Allowed by Steplet's checker
-     Exit code: 0
+     Exit code 0
      What it printed (1 line):
      | 1 README
   2. Tool:
@@ -19,14 +19,14 @@ The commands, each with its check, its exit code and everything it printed
      What it asked for:
      | touch asked.txt
      Steplet's check: You allowed this exact request
-     Exit code: 0
+     Exit code 0
      What it printed: nothing
   3. Tool:
      | Bash
      What it asked for:
      | rm -rf build
      Steplet's check: Refused by Steplet's checker
-     Exit code: not known
+     It did not run
      What it printed (1 line):
      | Steplet refused this: the file does not ask for this command
 

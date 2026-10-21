@@ -3637,3 +3637,220 @@ Minor points left for later (the reviewer's, graded by what a receiver would mee
 - Inside a "| " line, text from the run can imitate the file's own markers ("[goes to …]", "[U+200B]"). It still cannot reach Steplet's own lines.
 - Tests that could be stronger: `faults_are_in_words` searches run.rs's text; the save test writes to a fixed place under target; `PrepareError` with empty or very long details; the switch through `prepare`; the real `save_report` command.
 - A path holding a broken UTF-16 character would be saved under a slightly different name.
+
+## Task 14: every screen in every state, looked at and fixed
+
+`web/app/tests/screens.spec.ts` reaches 70 states the way a receiver does, in light and dark, at 1100 and 560 pixels wide. That makes 280 pictures in `docs/screens/phase-4/`, named `<screen>-<state>-<light|dark>-<1100|560>.png`.
+
+Each state also fails the test if:
+- text is cut off (Task 10's check);
+- the page scrolls sideways;
+- a control shows no focus ring when tabbed to;
+- the page makes any request outside its own server.
+
+Every picture was looked at. What was wrong was fixed, test first, and then all 280 were taken again.
+
+### Changes from the plan, recorded here
+
+- **70 states, not only section 8's.** The extras are every other saved scenario:
+  - preview: imitation, unsigned under a known name, not runnable with a changed key;
+  - setup: too old, could not look, start over, switch fails;
+  - run: the Stop and Close questions, stopped, long output open;
+  - ask: the long command, an answer that failed;
+  - report: the model refusal.
+
+  The table below has one line per state, naming its four pictures. When one of the four differed, the line says so.
+- **A page the log has scrolled to its newest row is pictured as the window shows it.** A whole-page picture of it drew the bar that stays at the top of the window halfway down the page.
+- **The mouse leaves the page before each picture.** It had rested on a button from the click before, which made the button look darker.
+- **The stand-in backend takes 1.5 s to stop** (`run-stopping` only), so "Stopping…" can be pictured. The two run tests using it wait that much longer.
+- **The command.** The plan's `npm --prefix web test -- screens` became `npx --offline playwright test --config playwright.reuse.config.ts --project=screens screens.spec`. Two reasons: the leftover server on port 4180, and the word "screens" also matches the project's name.
+- **Size.** The pictures take about 30 MB. Saving 40 of them again with the image library's lossless squeezing made them bigger (2,819 KB became 2,891 KB), so they stay as Playwright writes them.
+
+### The test can fail
+
+Each check was given a fault of its own, one at a time, in `web/shared/base.css`. The file was then put back, byte for byte:
+
+```
+planted: button:focus-visible { outline: none; }
+    Error: controls without a focus ring
+  1 failed
+planted: main { min-width: 700px; }
+    Error: sideways scroll
+  1 failed
+planted: h1 { overflow: hidden; height: 4px; }
+    Error: text cut off
+  1 failed
+planted: body { background-image: url(https://example.com/steplet-planted.png); }
+    Error: requests that leave the page's server
+  1 failed
+base.css restored, identical
+```
+
+### What the looking found, each fixed test first
+
+1. **"Show all 50,000 lines" threw the window to line 50,000.** The page grew to 900,485 pixels, and the button that puts the lines away was at their far end.
+   - Now every line scrolls in a box of its own, 24 lines tall, with the button right under it.
+   - First tried: the button above the output. Rejected: when the log follows its newest row, that button sits out of view.
+   - Test: `showing_all_lines_keeps_them_in_a_box_of_their_own`.
+2. **The "address" box sat 4 pixels right of the column it starts.** Its gap now comes only after a link's shown text. Test: `an_address_lines_up_with_the_text_it_belongs_to`.
+3. **Setup said Windows' Linux feature "has to be on" when it is only too old.** It also asked for a restart that an update does not need. The help's words now come from Rust (`WslFix { why, command, then }`). Tests:
+   - `the_wsl_help_says_whether_it_is_missing_or_too_old`;
+   - `wsl_too_old_says_to_update_it`.
+4. **Windows' error words ended in a code** ("Access is denied. (os error 5)"). Every "Windows says:" now goes through `views::windows_says`, which drops the code number. The saved scenarios use it too, so they read exactly as the app does. Test: `windows_errors_read_without_their_code_number`.
+5. **A failed command looked like one that passed, and a refused one said "Exit code not known".** Rust now says how each command ended:
+   - `CommandView.ended`: "Exit code 2", "Exit code not known", or "It did not run";
+   - `CommandView.failed` and `EventView::Result.failed`: an exit code other than 0, drawn in red, semibold, in the report and the live log.
+
+   The saved file says "It did not run" too. Tests:
+   - `each_command_says_how_it_ended`;
+   - `the_live_log_marks_a_failed_command`;
+   - `a_failed_command_stands_out_and_a_refused_one_did_not_run`;
+   - `report_text_has_every_section_in_order`, against new expected text.
+6. **After "you said no", the scripted runs told the agent "the file does not ask for this command".** They now use the gate's real words, "the receiver said no" (`ask.rs`). This was a fixture change only.
+
+The tests failed first:
+
+```
+> npx --offline playwright test --config playwright.reuse.config.ts --project=screens run.spec --grep "box_of_their_own"
+  x  1 [screens] › app\tests\run.spec.ts:139:1 › showing_all_lines_keeps_them_in_a_box_of_their_own (922ms)
+    Error: expect(received).toBeLessThan(expected)
+    Expected: < 1600
+    Received:   900485
+  1 failed
+> npx --offline playwright test --config playwright.reuse.config.ts --project=screens --grep "lines_up_with|too_old_says|failed_command_stands"
+  x  2 [screens] › app\tests\preview.spec.ts:159:1 › an_address_lines_up_with_the_text_it_belongs_to (412ms)
+  x  1 [screens] › app\tests\report.spec.ts:97:1 › a_failed_command_stands_out_and_a_refused_one_did_not_run (736ms)
+  x  3 [screens] › app\tests\setup.spec.ts:78:1 › wsl_too_old_says_to_update_it (5.4s)
+    Error: expect(received).toBeLessThanOrEqual(expected)
+    > 165 |   expect(Math.abs(chip!.x - label!.x)).toBeLessThanOrEqual(1);
+    Error: expect(received).not.toBe(expected) // Object.is equality
+    > 105 |   expect(failed).not.toBe(passed);
+> cargo test -p steplet-app --offline -j 2 --test views
+      1 error[E0432]: unresolved import `steplet_app::views::windows_says`
+      2 error[E0609]: no field `command` on type `std::string::String`
+      1 error[E0609]: no field `ended` on type `&CommandView`
+      1 error[E0609]: no field `failed` on type `&CommandView`
+      2 error[E0609]: no field `then` on type `std::string::String`
+      5 error[E0609]: no field `why` on type `std::string::String`
+error[E0026]: variant `steplet_app::views::EventView::Result` does not have a field named `failed`
+> cargo test -p steplet-app --offline -j 2 --test save
+test report_text_has_every_section_in_order ... FAILED
+test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+### The pictures, one line per state
+
+| The four pictures (light and dark, 1100 and 560 wide) | What was wrong, and what changed |
+|---|---|
+| `open-could-not-read-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The message now reads "Steplet could not read this file. Windows says: Access is denied.", the app's own form, without Windows' code number. |
+| `open-crash-cleared-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `open-empty-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `open-reading-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the button dims while Steplet reads). |
+| `preview-amber-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-blocked-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). The dark banner is light pink with dark text, the light one's inverse, as designed. |
+| `preview-green-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-header-unreadable-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the advice shows in the finding and again under "This file cannot run", which says why there is no Run). |
+| `preview-id-key-changed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-id-known-as-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-id-new-key-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-id-same-key-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-id-unsigned-known-name-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-id-unsigned-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-imitation-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). Everything that imitates Steplet stays inside "From the file". |
+| `preview-longest-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). The 25 command findings repeat one title: readable, but a grouped list would be shorter (left for later). |
+| `preview-not-runnable-host-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-not-runnable-key-changed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-not-runnable-no-repo-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). |
+| `preview-red-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box under Repository sat 4 px right of its column: now in line (all previews with a repository). The "goes to" box keeps its gap after the link's text. |
+| `chooser-needs-setup-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `chooser-ready-15-sites-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the sites wrap in 4 columns, 2 when narrow). |
+| `chooser-ready-no-sites-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `chooser-wsl-missing-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-all-ready-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-could-not-look-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-install-failed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The address box in what setup printed was indented 4 px: now in line. |
+| `setup-installing-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-key-saved-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-nothing-done-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-start-over-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The wrapped address box in what setup printed was indented 4 px: now in line. |
+| `setup-switch-broken-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `setup-switch-fails-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The error ended in "(os error 5)", a code that means nothing to a receiver: now "Windows says: Access is denied." |
+| `setup-wsl-missing-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (its words now come from Rust, unchanged). |
+| `setup-wsl-too-old-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | It said Windows' Linux feature "has to be on" and to restart Windows, though the feature is on and only too old. Now Rust's words: "... is too old for Steplet ... type: wsl --update. Then press Check again." |
+| `prepare-commit-missing-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `prepare-fetch-failed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (git's own words, with the address it names shown as an address). |
+| `prepare-fetching-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The "address" box after Fetching sat 4 px right of its column: now in line. |
+| `prepare-ready-removed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the address fix above applies). |
+| `run-40-commands-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Now pictured as the window shows it, at the newest row; right as it is. |
+| `run-busy-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The whole-page picture drew the "Running" bar in the middle of the page (the log follows its newest row): it now shows the window as the receiver sees it. After "you said no", the scripted run told the agent "the file does not ask for this command": it now says "the receiver said no", as the real gate does. |
+| `run-close-question-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Now pictured as the window shows it; right as it is. |
+| `run-long-command-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the 300-character command wraps in its column). |
+| `run-long-output-closed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `run-long-output-open-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | "Show all 50,000 lines" made the page 900,485 px tall, the window jumped to line 50,000, and the button that puts the lines away was at their far end. Now every line scrolls in a 24-line box of its own, with the button right under it. |
+| `run-model-refusal-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `run-started-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `run-stop-question-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Now pictured as the window shows it (the bar had been drawn mid-page); right as it is. |
+| `run-stopped-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `run-stopping-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the stand-in now takes 1.5 s to stop, so "Stopping�" can be seen; Stop is greyed). |
+| `run-tripwire-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | "See the report" looked darker: the mouse rested on it from the previous click. The mouse now leaves the page before each picture. |
+| `run-wrong-key-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (one row counts the tries). |
+| `ask-10-seconds-left-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the countdown reads "No answer in 0:09 means no."). |
+| `ask-2-more-waiting-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `ask-answer-fails-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The No button looked darker: a hover, as above. Right as it is otherwise. |
+| `ask-command-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (No is first and primary; Yes waits a second). |
+| `ask-file-write-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the 200-line file scrolls in its own box). |
+| `ask-long-command-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `ask-web-address-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `ask-withdrawn-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the question closes with "Taken back: the run was stopping."). |
+| `report-40-commands-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `report-faults-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `report-finished-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `report-forged-result-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | "Exit code 1" now in red; the output's forged "exit 0" stays inside the output. |
+| `report-interrupted-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | The command refused after "no" said "Exit code not known": now "It did not run". What Steplet refused now says "the receiver said no". |
+| `report-model-refusal-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is (the refusal shows at the top and again under The models; a reviewer's minor point). |
+| `report-save-failed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Windows' words without the code number: "There is not enough space on the disk." |
+| `report-saved-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+| `report-test-failed-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | "Exit code 1" was the same grey as "Exit code 0": a failed command now shows its exit code in red, semibold (Rust's `failed`). |
+| `report-tripwire-light-1100`, `-light-560`, `-dark-1100`, `-dark-560` | Right as it is. |
+
+70 states, 280 pictures.
+
+### The tests pass
+
+```
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens screens.spec --workers=4
+  280 passed (4.7m)
+exit 0
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens --workers=4
+  ok 319 [screens] › app\tests\screens.spec.ts:360:7 › report-save-failed-dark-560 (1.0s)
+  319 passed (4.5m)
+screens exit 0
+> npm --prefix web run build; cargo test --workspace --offline -j 1 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+save: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+session: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+views: test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+fixtures: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+   (68 "test result: ok" lines in all, none failed: 347 passed, 42 ignored)
+tests exit 0
+> npm --prefix web run check
+1792544620732 COMPLETED 158 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.68s
+clippy exit 0
+```
+
+The first two runs of the Rust tests did not get as far as testing. One stopped on the antivirus "invalid metadata" fault (`error[E0786]: found invalid metadata files for crate 'serde'`). The other stopped because the computer ran out of memory: `memory allocation of 2097152 bytes failed`, with 56.8 of 61.3 GB in use and 44 open Claude windows holding 21.8 GB of it. Built one job at a time (`-j 1`), all of them passed. The two Windows-registry tests (Z4) were skipped, as before.
+
+### What this task did not verify
+
+- **The real window.** Every picture comes from the screens build in Playwright's Chromium (the engine inside WebView2), with the stand-in backend replaying data saved from Rust. The real window's pictures come in Task 15.
+- **Windows' own display settings.** High-contrast mode and text scaling (125 %, 150 %) were not pictured.
+- **Focus order.** The focus-ring check tabs through every control, but the order of the stops was not judged by eye.
+- **Screen readers.** None was tried.
+- **The 24-line box of a long output.** Scrolling it with the mouse wheel and the keyboard (it takes focus) was tried only in Chromium.
+- **`windows_says`.** It was tested with made-up strings. It drops the " (os error N)" part, which Rust itself adds, so Windows set to another language ends the same way. That was not tried.
+- **The scenarios are scripted.** The refusal, the switch, "the receiver said no" and the failed test are made from scripted events run through Steplet's own Rust code, not from a real run.

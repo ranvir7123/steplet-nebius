@@ -294,6 +294,7 @@
         "id": "toolu_01",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -354,6 +355,7 @@
         "id": "toolu_02",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -426,10 +428,11 @@
         "id": "toolu_03",
         "is_error": true,
         "exit_code": null,
+        "failed": false,
         "output": [
           {
             "kind": "text",
-            "text": "Steplet refused this: the file does not ask for this command"
+            "text": "Steplet refused this: the receiver said no"
           }
         ],
         "lines": 1
@@ -486,6 +489,7 @@
         "id": "toolu_04",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",

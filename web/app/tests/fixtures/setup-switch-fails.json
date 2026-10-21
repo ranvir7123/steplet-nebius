@@ -178,6 +178,6 @@
   },
   "saved_to": null,
   "save_error": null,
-  "switch_error": "Steplet could not change what opens .steplet files. Windows says: Access is denied. (os error 5)",
+  "switch_error": "Steplet could not change what opens .steplet files. Windows says: Access is denied.",
   "allowed_switch": []
 }

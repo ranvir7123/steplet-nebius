@@ -93,3 +93,17 @@ test("saving_says_where_or_why_not", async ({ page }) => {
   await page.getByRole("button", { name: "Save report…" }).click();
   await expect(page.getByRole("alert")).toHaveText(saved("report-save-failed").save_error!);
 });
+
+test("a_failed_command_stands_out_and_a_refused_one_did_not_run", async ({ page }) => {
+  // Found by looking (Task 14): "Exit code 1" looked just like "Exit code 0", and a command refused before it ran
+  // said "Exit code not known".
+  const commands = () => sections(page).filter({ has: page.getByRole("heading", { name: "The commands" }) });
+  await reportScreen(page, "report-finished");
+  const passed = await commands().getByText("Exit code 0", { exact: true }).evaluate((e) => getComputedStyle(e).color);
+  await reportScreen(page, "report-test-failed");
+  const failed = await commands().getByText("Exit code 1", { exact: true }).evaluate((e) => getComputedStyle(e).color);
+  expect(failed).not.toBe(passed);
+  await reportScreen(page, "report-interrupted");
+  await expect(commands().getByText("It did not run", { exact: true })).toBeVisible();
+  await expect(commands().getByText("Exit code not known")).toHaveCount(0);
+});

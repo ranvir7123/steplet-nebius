@@ -180,10 +180,7 @@ fn command(out: &mut Text, n: usize, c: &CommandView) {
     out.line("     What it asked for:");
     out.quoted("     ", &c.command);
     out.line(&format!("     Steplet's check: {}", c.check.words));
-    match c.exit_code {
-        Some(code) => out.line(&format!("     Exit code: {code}")),
-        None => out.line("     Exit code: not known"),
-    }
+    out.line(&format!("     {}", c.ended));
     if c.after_stop {
         out.line("     Steplet was already stopping the run: this was cut short or refused by the stop.");
     }

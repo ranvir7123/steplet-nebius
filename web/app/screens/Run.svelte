@@ -48,6 +48,7 @@
   interface Result {
     is_error: boolean;
     exit_code: number | null;
+    failed: boolean;
     output: Shown;
     lines: number;
   }
@@ -98,7 +99,7 @@
         break;
       }
       case "result": {
-        const result = { is_error: e.is_error, exit_code: e.exit_code, output: e.output, lines: e.lines };
+        const result = { is_error: e.is_error, exit_code: e.exit_code, failed: e.failed, output: e.output, lines: e.lines };
         const row = callRow(e.id);
         if (row) row.result = result;
         else rows.push({ kind: "call", id: e.id, tool: [], what: [], check: null, reason: null, result, all: false });
@@ -398,14 +399,17 @@
               {/if}
               {#if r.reason}<span class="reason">Steplet's reason: {r.reason}</span>{/if}
               {#if r.result && !refusedBeforeRunning(r.check)}
-                <span class="exit">
+                <span class="exit" class:failed={r.result.failed}>
                   {#if r.result.exit_code !== null}Exit code {r.result.exit_code}{:else if r.result.is_error}Ended with an error{:else}Done{/if}
                 </span>
               {/if}
             </div>
             {#if r.result && r.result.lines > 0}
               {@const result = r.result}
-              <section class="output" aria-label="What it printed">
+              <!-- Every line, once asked for, scrolls in a box of its own: the log stays short, and the button that
+                   puts them away again stays right under them. -->
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <section class="output" class:all={r.all} aria-label="What it printed" tabindex={r.all ? 0 : undefined}>
                 <FileText text={r.all ? result.output : firstLines(result.output, SHOWN_LINES)} block />
               </section>
               {#if result.lines > SHOWN_LINES}
@@ -720,10 +724,13 @@
   .reason,
   .exit {
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
-  .exit {
-    font-variant-numeric: tabular-nums;
+  /* An exit code other than 0, from Rust's `failed`. */
+  .exit.failed {
+    color: var(--red-fg);
+    font-weight: 600;
   }
 
   .output,
@@ -736,6 +743,12 @@
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 18px;
+  }
+
+  /* Every line of a long output: 24 lines tall, scrolling on its own. */
+  .output.all {
+    max-height: calc(24 * 18px + 2 * var(--space-2));
+    overflow-y: auto;
   }
 
   .more {

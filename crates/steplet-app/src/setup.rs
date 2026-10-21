@@ -25,7 +25,10 @@ pub fn gate_program() -> Result<Vec<u8>, String> {
         .map(|p| p.with_file_name(GATE_FILE))
         .ok_or("Windows did not say where Steplet's own program is, so Steplet cannot find its gate program.")?;
     std::fs::read(&path).map_err(|e| {
-        format!("Steplet could not read its gate program ({GATE_FILE}, next to Steplet). Windows says: {e}")
+        format!(
+            "Steplet could not read its gate program ({GATE_FILE}, next to Steplet). {}",
+            crate::views::windows_says(e)
+        )
     })
 }
 
@@ -86,7 +89,10 @@ pub fn ready_for_run(state: &State) -> Result<crate::session::Ready, String> {
         Ok(Some(key)) => key,
         Ok(None) => return Err("Steplet needs your Anthropic key. Add it in Setup.".into()),
         Err(e) => {
-            return Err(format!("Steplet could not read your key from Windows' Credential Manager. Windows says: {e}"));
+            return Err(format!(
+                "Steplet could not read your key from Windows' Credential Manager. {}",
+                crate::views::windows_says(e)
+            ));
         }
     };
     Ok(crate::session::Ready {

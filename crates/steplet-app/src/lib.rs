@@ -188,7 +188,8 @@ fn save_report(state: tauri::State<AppState>, window: tauri::WebviewWindow) -> R
     let report = state.session.last_report().ok_or("There is no report to save yet.")?;
     let owner = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
     let Some(path) = save::ask_where(owner, &save::Stamp::now()) else { return Ok(None) };
-    save::write_report(&path, &report).map_err(|e| format!("Steplet could not save the report. Windows says: {e}"))?;
+    save::write_report(&path, &report)
+        .map_err(|e| format!("Steplet could not save the report. {}", views::windows_says(e)))?;
     Ok(Some(path.display().to_string()))
 }
 
@@ -246,8 +247,9 @@ fn save_key(state: tauri::State<AppState>, key: String) -> Result<views::SetupVi
 
 #[tauri::command(async)]
 fn forget_key(state: tauri::State<AppState>) -> Result<views::SetupView, String> {
-    key::forget(key::TARGET)
-        .map_err(|e| format!("Steplet could not remove the key from Windows' Credential Manager. Windows says: {e}"))?;
+    key::forget(key::TARGET).map_err(|e| {
+        format!("Steplet could not remove the key from Windows' Credential Manager. {}", views::windows_says(e))
+    })?;
     Ok(state.setup_view())
 }
 
@@ -260,7 +262,7 @@ fn set_opens_steplet_files(state: tauri::State<AppState>, on: bool) -> Result<vi
     } else {
         register::turn_off(register::EXT, register::PROG_ID)
     };
-    changed.map_err(|e| format!("Steplet could not change what opens .steplet files. Windows says: {e}"))?;
+    changed.map_err(|e| format!("Steplet could not change what opens .steplet files. {}", views::windows_says(e)))?;
     Ok(state.setup_view())
 }
 

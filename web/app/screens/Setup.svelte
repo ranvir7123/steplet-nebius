@@ -139,12 +139,9 @@
 
       {#if view.wsl_fix}
         <div class="todo">
-          <p>
-            Windows' Linux feature has to be on before Steplet can set up its own Linux. Steplet does not turn it on for
-            you. In a terminal opened as administrator, type:
-          </p>
-          <p><code class="command">{view.wsl_fix}</code></p>
-          <p>Then restart Windows, and press Check again.</p>
+          <p>{view.wsl_fix.why}</p>
+          <p><code class="command">{view.wsl_fix.command}</code></p>
+          <p>{view.wsl_fix.then}</p>
           <button class="link" type="button" onclick={() => backend.openHelp("wsl")}>Microsoft's page about it</button>
         </div>
       {/if}

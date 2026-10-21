@@ -275,6 +275,7 @@
         "id": "toolu_01",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -335,6 +336,7 @@
         "id": "toolu_02",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -395,6 +397,7 @@
         "id": "toolu_03",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -455,6 +458,7 @@
         "id": "toolu_04",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -515,6 +519,7 @@
         "id": "toolu_05",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -575,6 +580,7 @@
         "id": "toolu_06",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -635,6 +641,7 @@
         "id": "toolu_07",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -695,6 +702,7 @@
         "id": "toolu_08",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -755,6 +763,7 @@
         "id": "toolu_09",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -815,6 +824,7 @@
         "id": "toolu_10",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -875,6 +885,7 @@
         "id": "toolu_11",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -935,6 +946,7 @@
         "id": "toolu_12",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -995,6 +1007,7 @@
         "id": "toolu_13",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1055,6 +1068,7 @@
         "id": "toolu_14",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1115,6 +1129,7 @@
         "id": "toolu_15",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1175,6 +1190,7 @@
         "id": "toolu_16",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1235,6 +1251,7 @@
         "id": "toolu_17",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1295,6 +1312,7 @@
         "id": "toolu_18",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1355,6 +1373,7 @@
         "id": "toolu_19",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1415,6 +1434,7 @@
         "id": "toolu_20",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1475,6 +1495,7 @@
         "id": "toolu_21",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1535,6 +1556,7 @@
         "id": "toolu_22",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1595,6 +1617,7 @@
         "id": "toolu_23",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1655,6 +1678,7 @@
         "id": "toolu_24",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1715,6 +1739,7 @@
         "id": "toolu_25",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1775,6 +1800,7 @@
         "id": "toolu_26",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1835,6 +1861,7 @@
         "id": "toolu_27",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1895,6 +1922,7 @@
         "id": "toolu_28",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -1955,6 +1983,7 @@
         "id": "toolu_29",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2015,6 +2044,7 @@
         "id": "toolu_30",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2075,6 +2105,7 @@
         "id": "toolu_31",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2135,6 +2166,7 @@
         "id": "toolu_32",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2195,6 +2227,7 @@
         "id": "toolu_33",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2255,6 +2288,7 @@
         "id": "toolu_34",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2315,6 +2349,7 @@
         "id": "toolu_35",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2375,6 +2410,7 @@
         "id": "toolu_36",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2435,6 +2471,7 @@
         "id": "toolu_37",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2495,6 +2532,7 @@
         "id": "toolu_38",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2555,6 +2593,7 @@
         "id": "toolu_39",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",
@@ -2615,6 +2654,7 @@
         "id": "toolu_40",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [
           {
             "kind": "text",

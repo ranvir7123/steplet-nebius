@@ -275,6 +275,7 @@
         "id": "toolu_01",
         "is_error": false,
         "exit_code": 0,
+        "failed": false,
         "output": [],
         "lines": 0
       }

@@ -260,6 +260,8 @@
               "words": "Allowed by Steplet's checker"
             },
             "exit_code": 0,
+            "ended": "Exit code 0",
+            "failed": false,
             "output": [
               {
                 "kind": "text",
@@ -301,6 +303,8 @@
               "words": "Ran without asking Steplet: Steplet stopped the run"
             },
             "exit_code": 0,
+            "ended": "Exit code 0",
+            "failed": false,
             "output": [],
             "lines": 0,
             "after_stop": false

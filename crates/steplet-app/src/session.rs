@@ -243,7 +243,7 @@ impl Session {
         };
         let marker = Marker { run_id: run_id.clone(), distro_id: ready.distro_id.clone() };
         write_marker(&self.places.marker, &marker).map_err(|e| {
-            format!("Steplet could not note that a run is starting, so it did not start it. Windows says: {e}")
+            format!("Steplet could not note that a run is starting, so it did not start it. {}", views::windows_says(e))
         })?;
 
         let relay = Mutex::new(Relay::new(views::Limits { ask: ASK_LIMIT, run: RUN_LIMIT }));

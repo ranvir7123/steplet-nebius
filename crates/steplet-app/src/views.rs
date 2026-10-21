@@ -459,11 +459,19 @@ pub struct SetupView {
     pub opens_steplet_files: Switch,
     /// Everything a run needs is there (the switch is not needed to run).
     pub ready: bool,
-    /// When Windows' Linux feature is missing or too old: the command the receiver types in a terminal opened as
-    /// administrator. Steplet never runs it.
-    pub wsl_fix: Option<String>,
+    /// When Windows' Linux feature is missing or too old: what to do about it, with the command the receiver types
+    /// in a terminal opened as administrator. Steplet never runs it.
+    pub wsl_fix: Option<WslFix>,
     /// Whether Setup offers to install Steplet's Linux, or to finish setting it up.
     pub install: Offer,
+}
+
+/// What to do about Windows' Linux feature, in Steplet's words.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct WslFix {
+    pub why: String,
+    pub command: String,
+    pub then: String,
 }
 
 /// What the Setup screen's one button offers.
@@ -556,9 +564,21 @@ pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Sw
         said(LineStatus::Missing, "The gate program for this Steplet is not in its Linux yet.".into())
     };
     let ready = [&wsl, &linux, &tools, &gate].iter().all(|l| l.status == LineStatus::Ready) && key_saved;
+    let fix =
+        |why: &str, command: &str, then: &str| WslFix { why: why.into(), command: command.into(), then: then.into() };
     let wsl_fix = match state.wsl {
-        Wsl::Missing => Some("wsl --install --no-distribution".to_string()),
-        Wsl::TooOld { .. } => Some("wsl --update".to_string()),
+        Wsl::Missing => Some(fix(
+            "Windows' Linux feature has to be on before Steplet can set up its own Linux. Steplet does not turn it on \
+             for you. In a terminal opened as administrator, type:",
+            "wsl --install --no-distribution",
+            "Then restart Windows, and press Check again.",
+        )),
+        Wsl::TooOld { .. } => Some(fix(
+            "Windows' Linux feature on this computer is too old for Steplet. Steplet does not update it for you. In a \
+             terminal opened as administrator, type:",
+            "wsl --update",
+            "Then press Check again.",
+        )),
         Wsl::Ready { .. } => None,
     };
     let install = if !seen {
@@ -593,8 +613,9 @@ pub enum EventView {
     AgentSays { text: Shown },
     /// A tool call the agent made. `what` is its command, path or address; `fields` its whole request.
     Call { id: String, tool: Shown, what: Shown, fields: Vec<FieldView> },
-    /// A tool call's result. `exit_code` from Claude Code's own marks (H13), never from the output.
-    Result { id: String, is_error: bool, exit_code: Option<i32>, output: Shown, lines: u32 },
+    /// A tool call's result. `exit_code` from Claude Code's own marks (H13), never from the output; `failed`: it
+    /// ended with an exit code other than 0, which the log makes stand out.
+    Result { id: String, is_error: bool, exit_code: Option<i32>, failed: bool, output: Shown, lines: u32 },
     /// Steplet's record of a call that did not ask the gate; `harmless` means a harmless read and the run went on.
     Skipped { id: String, tool: Shown, what: Shown, harmless: bool },
     /// A model refused (E1); `to` is the model Claude Code then used, if it switched.
@@ -620,13 +641,17 @@ pub fn event_view(e: &Event, call: Option<(&str, &Value)>) -> Option<EventView> 
             what: shown(&call_what(name, input)),
             fields: fields(input),
         },
-        Event::ToolResult { id, is_error, text, plain_end } => EventView::Result {
-            id: id.clone(),
-            is_error: *is_error,
-            exit_code: call.and_then(|(tool, input)| exit_code_of(tool, input, *is_error, *plain_end, text)),
-            output: shown(text),
-            lines: text.lines().count() as u32,
-        },
+        Event::ToolResult { id, is_error, text, plain_end } => {
+            let exit_code = call.and_then(|(tool, input)| exit_code_of(tool, input, *is_error, *plain_end, text));
+            EventView::Result {
+                id: id.clone(),
+                is_error: *is_error,
+                exit_code,
+                failed: exit_code.is_some_and(|code| code != 0),
+                output: shown(text),
+                lines: text.lines().count() as u32,
+            }
+        }
         Event::SkippedGate { id, tool, what, harmless } => {
             EventView::Skipped { id: id.clone(), tool: line(tool), what: shown(what), harmless: *harmless }
         }
@@ -852,6 +877,16 @@ pub struct FailureView {
     pub detail: Option<Shown>,
 }
 
+/// "Windows says: …" with what Windows said, without the code number Rust adds to it ("(os error 5)").
+pub fn windows_says(said: impl std::fmt::Display) -> String {
+    let said = said.to_string();
+    let words = match said.rfind(" (os error ") {
+        Some(at) if said.ends_with(')') => &said[..at],
+        _ => &said,
+    };
+    format!("Windows says: {words}")
+}
+
 pub fn failure(reason: &str, detail: Option<&str>) -> FailureView {
     FailureView { reason: reason.into(), detail: detail.map(shown) }
 }
@@ -891,7 +926,8 @@ pub fn run_failure(e: &RunError) -> (String, FailureView) {
             starting,
             failure(
                 &format!(
-                    "Windows would not let Steplet make sure that only one file runs at a time, so nothing ran. Windows says: {why}"
+                    "Windows would not let Steplet make sure that only one file runs at a time, so nothing ran. {}",
+                    windows_says(why)
                 ),
                 None,
             ),
@@ -903,7 +939,8 @@ pub fn run_failure(e: &RunError) -> (String, FailureView) {
             starting,
             failure(
                 &format!(
-                    "Windows gave Steplet no random numbers for the run's secret, so nothing ran. Windows says: {why}"
+                    "Windows gave Steplet no random numbers for the run's secret, so nothing ran. {}",
+                    windows_says(why)
                 ),
                 None,
             ),
@@ -1053,6 +1090,11 @@ pub struct CommandView {
     pub check: CheckView,
     /// From Claude Code's own marks (H13); `None` when there is none to show.
     pub exit_code: Option<i32>,
+    /// How the call ended, in Steplet's words: its exit code, "Exit code not known", or "It did not run" when Steplet
+    /// or the receiver refused it first.
+    pub ended: String,
+    /// It ran and ended with an exit code other than 0: the screens make it stand out.
+    pub failed: bool,
     pub output: Shown,
     pub lines: u32,
     /// Steplet was already stopping the run: the result was cut short or refused by the stop.
@@ -1167,11 +1209,19 @@ pub fn report_view(r: &Report) -> ReportView {
 }
 
 fn command_view(c: &ReportCommand) -> CommandView {
+    let refused_first = matches!(c.check, Check::Refused | Check::RefusedWhenAsked { .. } | Check::TurnedAway);
+    let ended = match c.exit_code {
+        Some(code) => format!("Exit code {code}"),
+        None if refused_first => "It did not run".into(),
+        None => "Exit code not known".into(),
+    };
     CommandView {
         tool: line(&c.tool),
         command: shown(&c.command),
         check: check_view(&c.check),
         exit_code: c.exit_code,
+        ended,
+        failed: c.exit_code.is_some_and(|code| code != 0),
         output: shown(&c.output),
         lines: c.output.lines().count() as u32,
         after_stop: c.after_stop,

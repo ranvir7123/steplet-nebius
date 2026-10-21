@@ -337,7 +337,7 @@ fn setup_says_what_to_do_next() {
     let ready = || Wsl::Ready { version: "2.6.3.0".into() };
     let next = |s: State| {
         let v = setup_view(&s, true, Switch::Off);
-        (v.wsl_fix, v.install)
+        (v.wsl_fix.map(|f| f.command), v.install)
     };
     // Windows' own feature: Steplet shows the command to type, and offers no install of its own Linux yet.
     assert_eq!(
@@ -475,4 +475,100 @@ fn another_model_is_offered_only_after_a_model_refused() {
     let mut stopped = outcome(vec![refusal, ended("refusal")]);
     stopped.stopped_by_you = true;
     assert!(!offers(stopped));
+}
+
+/// Found by looking (Task 14): Windows' own words reach the screen without the code number Rust adds to them.
+#[test]
+fn windows_errors_read_without_their_code_number() {
+    use steplet_app::views::windows_says;
+    assert_eq!(windows_says("Access is denied. (os error 5)"), "Windows says: Access is denied.");
+    assert_eq!(windows_says("The disk is full."), "Windows says: The disk is full.");
+    assert_eq!(windows_says("a (os error 5) in the middle"), "Windows says: a (os error 5) in the middle");
+}
+
+/// Found by looking (Task 14): the help for Windows' Linux feature says what is wrong with it, missing or too old.
+#[test]
+fn the_wsl_help_says_whether_it_is_missing_or_too_old() {
+    let fix = |wsl| setup_view(&trouble_state(None, wsl, false), false, Switch::Off).wsl_fix.expect("a fix");
+    let missing = fix(Wsl::Missing);
+    assert_eq!(missing.command, "wsl --install --no-distribution");
+    assert!(missing.why.starts_with("Windows' Linux feature has to be on"), "{}", missing.why);
+    assert_eq!(missing.then, "Then restart Windows, and press Check again.");
+    let old = fix(Wsl::TooOld { version: "2.0.9.0".into() });
+    assert_eq!(old.command, "wsl --update");
+    assert!(old.why.contains("too old") && !old.why.contains("has to be on"), "{}", old.why);
+    assert_eq!(old.then, "Then press Check again.");
+    assert!(setup_view(&trouble_state(None, ready(), false), false, Switch::Off).wsl_fix.is_none());
+}
+
+/// Found by looking (Task 14): a command that failed stands out from one that passed, and a command refused before it
+/// ran says so instead of "Exit code not known".
+#[test]
+fn each_command_says_how_it_ended() {
+    let ended = |events: Vec<Event>, requests| {
+        let o = RunOutcome { requests, ..outcome(events) };
+        let c = &report_view(&build_report(&o, Some(&[]), Trust::NotRecorded, &[])).commands[0];
+        (c.ended.clone(), c.failed)
+    };
+    let bash =
+        |command: &str| Event::ToolUse { id: "u1".into(), name: "Bash".into(), input: json!({ "command": command }) };
+    let result = |is_error: bool, text: &str| Event::ToolResult {
+        id: "u1".into(),
+        is_error,
+        text: text.into(),
+        plain_end: !is_error,
+    };
+    let decided = |answer| {
+        vec![steplet_run::Asked::Decision {
+            client: client(),
+            request: steplet_run::GateRequest {
+                run_token: "t".into(),
+                tool_name: "Bash".into(),
+                input: json!({ "command": "make test" }),
+                tool_use_id: "u1".into(),
+            },
+            answer,
+            took: std::time::Duration::from_millis(5),
+            delivered: true,
+        }]
+    };
+    let allow = || decided(steplet_run::GateAnswer::Allow { updated_input: json!({ "command": "make test" }) });
+    assert_eq!(ended(vec![bash("make test"), result(false, "ok\n")], allow()), ("Exit code 0".into(), false));
+    assert_eq!(
+        ended(vec![bash("make test"), result(true, "Exit code 2\nfailed\n")], allow()),
+        ("Exit code 2".into(), true)
+    );
+    let deny = decided(steplet_run::GateAnswer::Deny { message: "the file does not ask for this command".into() });
+    assert_eq!(
+        ended(vec![bash("make test"), result(true, "Steplet refused this")], deny),
+        ("It did not run".into(), false)
+    );
+}
+
+fn client() -> steplet_run::Client {
+    steplet_run::Client {
+        pid: 1,
+        program: "steplet-gate.exe".into(),
+        user: "S-1-5-21-0".into(),
+        logon_session: 1,
+        integrity: 8192,
+        restricted: false,
+        app_container: false,
+        identify_only: true,
+    }
+}
+
+/// The live log makes a failed command stand out too, from the same exit code.
+#[test]
+fn the_live_log_marks_a_failed_command() {
+    let input = json!({ "command": "make test" });
+    let failed = |is_error: bool, text: &str| {
+        let e = Event::ToolResult { id: "u1".into(), is_error, text: text.into(), plain_end: !is_error };
+        match event_view(&e, Some(("Bash", &input))) {
+            Some(steplet_app::views::EventView::Result { failed, .. }) => failed,
+            other => panic!("not a result: {other:?}"),
+        }
+    };
+    assert!(failed(true, "Exit code 2\nfailed\n"));
+    assert!(!failed(false, "ok\n"));
 }

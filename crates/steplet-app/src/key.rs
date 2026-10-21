@@ -56,7 +56,10 @@ pub fn save(target: &str, key: &str) -> Result<(), String> {
     if saved {
         Ok(())
     } else {
-        Err(format!("Steplet could not save the key in Windows' Credential Manager. Windows says: {why}"))
+        Err(format!(
+            "Steplet could not save the key in Windows' Credential Manager. {}",
+            crate::views::windows_says(why)
+        ))
     }
 }
 
