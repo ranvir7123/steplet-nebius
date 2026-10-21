@@ -324,6 +324,7 @@
           "text": "The run ended before the agent finished.",
           "icon": "amber"
         },
+        "offers_model_switch": false,
         "completed": false,
         "stopped_by_you": false,
         "commands": [],

@@ -72,6 +72,19 @@ test("a_refusal_offers_run_again_allowing_another_model", async ({ page }) => {
   expect(again.models.length).toBeGreaterThanOrEqual(2);
 });
 
+test("run_again_after_allowing_another_model_is_a_plain_run", async ({ page }) => {
+  await reportScreen(page, "run-model-refusal");
+  const f = saved("run-model-refusal");
+  const refused = reportOf(f).end_words.title;
+  const switched = reportOf({ ...f, progress: f.allowed_switch }).end_words.title;
+  expect(switched).not.toBe(refused);
+  await page.getByRole("button", { name: "Run again, allowing another model" }).click();
+  await expect(page.getByRole("region", { name: switched })).toBeVisible();
+  // The live log's own "Run again" does not carry the switch over: the model refuses again.
+  await page.getByRole("button", { name: "Run again", exact: true }).click();
+  await expect(page.getByRole("region", { name: refused })).toBeVisible();
+});
+
 test("saving_says_where_or_why_not", async ({ page }) => {
   await reportScreen(page, "report-saved");
   await page.getByRole("button", { name: "Save report…" }).click();

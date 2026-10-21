@@ -217,6 +217,7 @@
           "text": "The run finished.",
           "icon": "green"
         },
+        "offers_model_switch": false,
         "completed": true,
         "stopped_by_you": false,
         "commands": [

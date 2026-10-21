@@ -102,8 +102,8 @@ fn wait_until(what: &str, done: impl Fn() -> bool) {
     }
 }
 
-fn empty_report() -> Report {
-    let o = RunOutcome {
+fn empty_outcome() -> RunOutcome {
+    RunOutcome {
         events: Vec::new(),
         requests: Vec::new(),
         stopped_by: None,
@@ -112,8 +112,11 @@ fn empty_report() -> Report {
         faults: Vec::new(),
         stopped_by_you: false,
         answers: Vec::new(),
-    };
-    build_report(&o, Some(&[]), Trust::NotRecorded, &[])
+    }
+}
+
+fn empty_report() -> Report {
+    build_report(&empty_outcome(), Some(&[]), Trust::NotRecorded, &[])
 }
 
 /// A stand-in run that ends at once.
@@ -637,24 +640,65 @@ fn progress_reaches_the_screen_in_the_order_it_was_made() {
     assert_eq!(kinds, ["question 1", "waiting 1", "closed 1", "question 2", "waiting 0", "closed 2", "finished"]);
 }
 
-/// Task 13 (E1): "Run again, allowing another model" reaches the run, and a plain Run never allows it.
+/// A run whose model refused, and Claude Code did not switch: the report Steplet offers another model after.
+fn refused_report() -> Report {
+    let o = RunOutcome {
+        events: vec![
+            steplet_run::Event::ModelSwitch {
+                from: "claude-opus-5".into(),
+                to: None,
+                category: "cyber".into(),
+                explanation: "This request looks like it could be used to harm a computer system.".into(),
+            },
+            steplet_run::Event::Result {
+                subtype: "success".into(),
+                is_error: false,
+                stop_reason: "refusal".into(),
+                models: vec!["claude-opus-5".into()],
+                text: "I can't help with that.".into(),
+            },
+        ],
+        ..empty_outcome()
+    };
+    build_report(&o, Some(&[]), Trust::NotRecorded, &[])
+}
+
+/// Task 13 (E1): "Run again, allowing another model" reaches the run only right after a model refused this file's
+/// run in this window. Any other start never allows it, whatever the page asks for.
 #[test]
-fn allowing_another_model_reaches_the_run_only_when_asked() {
+fn another_model_is_allowed_only_right_after_a_model_refused_this_file() {
     let _one = alone();
     let dir = scratch("allow-switch");
     let raw = read("examples/run-tests.steplet");
+    let other = read("corpus/ordinary/pytest-minimal.steplet");
     let seen: Arc<Mutex<Vec<bool>>> = Arc::default();
-    let keep = seen.clone();
+    let refuse = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (keep, refusing) = (seen.clone(), refuse.clone());
     let run: RunFn =
         Arc::new(move |_: &RunLock, req: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| {
             keep.lock().unwrap().push(req.allow_model_switch);
-            Ok(empty_report())
+            Ok(if refusing.load(std::sync::atomic::Ordering::SeqCst) { refused_report() } else { empty_report() })
         });
     let s = session(run, NOW, &dir);
-    for allow in [false, true] {
+    let start = |raw: &[u8], allow: bool| {
         let screen = Arc::new(Seen::default());
-        s.start(&raw, &sha(&raw), None, allow, ready(), screen.clone()).unwrap();
-        wait_until("the run's end", || screen.ended() && !s.running());
-    }
-    assert_eq!(*seen.lock().unwrap(), [false, true]);
+        let started = s.start(raw, &sha(raw), None, allow, ready(), screen.clone());
+        if started.is_ok() {
+            wait_until("the run's end", || screen.ended() && !s.running());
+        }
+        started
+    };
+    const NOT_NOW: &str = "Steplet lets Claude Code switch models only right after a model refused this file's run.";
+    // No model has refused yet.
+    assert_eq!(start(&raw, true), Err(NOT_NOW.into()));
+    assert_eq!(start(&raw, false), Ok(()));
+    // A model refuses this file's run: another model may be allowed now, for this file only.
+    refuse.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(start(&raw, false), Ok(()));
+    refuse.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(start(&other, true), Err(NOT_NOW.into()));
+    assert_eq!(start(&raw, true), Ok(()));
+    // That run finished without a refusal: the next start may not switch again.
+    assert_eq!(start(&raw, true), Err(NOT_NOW.into()));
+    assert_eq!(*seen.lock().unwrap(), [false, false, true]);
 }

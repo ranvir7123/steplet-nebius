@@ -1103,6 +1103,8 @@ fn end_words(end: &EndView) -> EndWords {
 pub struct ReportView {
     pub end: EndView,
     pub end_words: EndWords,
+    /// "Run again, allowing another model" is on offer (E1): a model refused, and the run did not finish.
+    pub offers_model_switch: bool,
     pub completed: bool,
     pub stopped_by_you: bool,
     pub commands: Vec<CommandView>,
@@ -1142,6 +1144,7 @@ pub fn report_view(r: &Report) -> ReportView {
     };
     ReportView {
         end_words: end_words(&end),
+        offers_model_switch: matches!(end, EndView::ModelRefused),
         end,
         completed: r.completed,
         stopped_by_you: r.stopped_by_you,

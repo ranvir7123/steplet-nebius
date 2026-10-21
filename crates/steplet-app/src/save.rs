@@ -1,7 +1,9 @@
 //! The report as a plain text file (Task 13, S4): every section in the report's order, the outcome first and "The
-//! agent says" last. Text that is not Steplet's own (commands, what they printed, what the agent says, model names)
-//! is set off with "| " when it takes lines of its own, and every character that shows nothing is written as its
-//! code, so the file hides nothing. The name Steplet offers comes from the time only, never from the file.
+//! agent says" last. Every piece of text the screens draw as file text (commands, what they printed, model names,
+//! changed files, what the agent says) goes on lines of its own, each set off with "| ", and Steplet's own lines
+//! never start so: text from the run can never read as Steplet's words. Every character that shows nothing is
+//! written as its code, so the file hides nothing. The name Steplet offers comes from the time only, never from the
+//! file.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -41,6 +43,11 @@ pub fn default_name(at: &Stamp) -> String {
 pub fn report_text(r: &ReportView) -> String {
     let mut out = Text::default();
     out.line("Steplet report");
+    out.line("");
+    out.line(
+        "A line with \"|\" in front can hold text from the file or the run. Steplet's own words never have \"|\" in \
+         front.",
+    );
 
     out.heading("How the run ended");
     out.line(&format!("  {}. {}", r.end_words.title, r.end_words.text));
@@ -64,7 +71,10 @@ pub fn report_text(r: &ReportView) -> String {
         out.line("  Steplet asked you nothing.");
     }
     for a in &r.answers {
-        out.inline("  - ", &[&a.tool[..], &[text(": ")], &a.what[..]].concat());
+        out.line("  - Tool:");
+        out.quoted("    ", &a.tool);
+        out.line("    What it asked for:");
+        out.quoted("    ", &a.what);
         out.line(&format!("    {}", a.reply));
     }
 
@@ -72,27 +82,21 @@ pub fn report_text(r: &ReportView) -> String {
     if r.models.is_empty() {
         out.line("  None recorded.");
     } else {
-        let mut used: Shown = vec![text("Used: ")];
-        for (i, m) in r.models.iter().enumerate() {
-            if i > 0 {
-                used.push(text(", "));
-            }
-            used.extend(m.iter().cloned());
+        out.line("  Used:");
+        for m in &r.models {
+            out.item("  ", m);
         }
-        out.inline("  ", &used);
     }
     for refusal in &r.refusals {
-        let said = [
-            &refusal.model[..],
-            &[text(" refused. The kind of request it refused: ")],
-            &refusal.category,
-            &[text(".")],
-        ]
-        .concat();
-        out.inline("  - ", &said);
+        out.line("  A model refused:");
+        out.item("  ", &refusal.model);
+        out.line("    The kind of request it refused:");
+        out.quoted("    ", &refusal.category);
+        out.line("    What the model said:");
         out.quoted("    ", &refusal.explanation);
         if let Some(to) = &refusal.switched_to {
-            out.inline("    ", &[&[text("Claude Code went on with ")], &to[..], &[text(".")]].concat());
+            out.line("    Claude Code went on with:");
+            out.quoted("    ", to);
         }
     }
 
@@ -171,7 +175,10 @@ pub fn ask_where(owner: isize, at: &Stamp) -> Option<PathBuf> {
 }
 
 fn command(out: &mut Text, n: usize, c: &CommandView) {
-    out.inline(&format!("  {n}. "), &[&c.tool[..], &[text(": ")], &c.command[..]].concat());
+    out.line(&format!("  {n}. Tool:"));
+    out.quoted("     ", &c.tool);
+    out.line("     What it asked for:");
+    out.quoted("     ", &c.command);
     out.line(&format!("     Steplet's check: {}", c.check.words));
     match c.exit_code {
         Some(code) => out.line(&format!("     Exit code: {code}")),
@@ -198,12 +205,8 @@ fn list(out: &mut Text, items: &[Shown], none: &str) {
         out.line(&format!("  {none}"));
     }
     for item in items {
-        out.inline("  - ", item);
+        out.item("  ", item);
     }
-}
-
-fn text(t: &str) -> Seg {
-    Seg::Text { text: t.into() }
 }
 
 /// The report's text, built line by line.
@@ -221,24 +224,20 @@ impl Text {
         self.line(h);
     }
 
-    /// `s` after `lead` on one line; if it holds line breaks of its own, its lines go under it, each set off.
-    fn inline(&mut self, lead: &str, s: &[Seg]) {
-        let t = plain(s);
-        match t.split_once('\n') {
-            None => self.line(&format!("{lead}{t}")),
-            Some(_) => {
-                self.line(lead.trim_end());
-                let indent = " ".repeat(lead.len());
-                self.quoted(&indent, s);
-            }
-        }
-    }
-
     /// `s`, each of its lines set off with "| " after `indent`.
     fn quoted(&mut self, indent: &str, s: &[Seg]) {
+        self.set_off(&format!("{indent}| "), &format!("{indent}| "), s);
+    }
+
+    /// `s` as an item of a list: "- | " before its first line, its other lines set off under it.
+    fn item(&mut self, indent: &str, s: &[Seg]) {
+        self.set_off(&format!("{indent}- | "), &format!("{indent}  | "), s);
+    }
+
+    fn set_off(&mut self, first: &str, rest: &str, s: &[Seg]) {
         let t = plain(s);
-        for l in t.strip_suffix('\n').unwrap_or(&t).split('\n') {
-            self.line(format!("{indent}| {l}").trim_end());
+        for (i, l) in t.strip_suffix('\n').unwrap_or(&t).split('\n').enumerate() {
+            self.line(format!("{}{l}", if i == 0 { first } else { rest }).trim_end());
         }
     }
 }

@@ -411,8 +411,9 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                     Some(&how) => Check::RefusedWhenAsked { how },
                     None => Check::Refused,
                 },
-                // Turned away, and it did not run: a call that ran without a decision stays what it is.
-                (None, _) if turned_away.contains(id.as_str()) && result.is_none_or(|r| r.is_error) => {
+                // Turned away, and it did not run: a call that ran without a decision, or went past the gate, stays
+                // what it is.
+                (None, None) if turned_away.contains(id.as_str()) && result.is_none_or(|r| r.is_error) => {
                     Check::TurnedAway
                 }
                 (None, Some(&harmless)) => Check::NotAsked { harmless },

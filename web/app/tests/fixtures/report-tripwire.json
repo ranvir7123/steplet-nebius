@@ -238,6 +238,7 @@
           "text": "A command ran without asking Steplet, and it was not a harmless read, so Steplet stopped the run.",
           "icon": "red"
         },
+        "offers_model_switch": false,
         "completed": false,
         "stopped_by_you": false,
         "commands": [

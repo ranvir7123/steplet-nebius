@@ -1,45 +1,66 @@
 Steplet report
 
+A line with "|" in front can hold text from the file or the run. Steplet's own words never have "|" in front.
+
 How the run ended
   Finished. The run finished.
 
 The commands, each with its check, its exit code and everything it printed
-  1. Bash: wc -l README
+  1. Tool:
+     | Bash
+     What it asked for:
+     | wc -l README
      Steplet's check: Allowed by Steplet's checker
      Exit code: 0
      What it printed (1 line):
      | 1 README
-  2. Bash: touch asked.txt
+  2. Tool:
+     | Bash
+     What it asked for:
+     | touch asked.txt
      Steplet's check: You allowed this exact request
      Exit code: 0
      What it printed: nothing
-  3. Bash: rm -rf build
+  3. Tool:
+     | Bash
+     What it asked for:
+     | rm -rf build
      Steplet's check: Refused by Steplet's checker
      Exit code: not known
      What it printed (1 line):
      | Steplet refused this: the file does not ask for this command
 
 What Steplet refused
-  - Bash rm -rf build: the file does not ask for this command
+  - | Bash rm -rf build: the file does not ask for this command
 
 Your answers
-  - Bash: touch asked.txt
+  - Tool:
+    | Bash
+    What it asked for:
+    | touch asked.txt
     You said yes to this exact request.
 
 The models
-  Used: claude-opus-5, claude-sonnet-5
-  - claude-opus-5 refused. The kind of request it refused: cyber.
+  Used:
+  - | claude-opus-5
+  - | claude-sonnet-5
+  A model refused:
+  - | claude-opus-5
+    The kind of request it refused:
+    | cyber
+    What the model said:
     | This request looks like it could be used to harm a computer system.
-    Claude Code went on with claude-sonnet-5.
+    Claude Code went on with:
+    | claude-sonnet-5
 
 The files the run changed in its working copy (the copy is deleted now)
-  - ?? asked.txt
+  - | ?? asked.txt
 
 The trust check
   The run's settings mark no folder as trusted.
 
 What went wrong around the run
-  - Steplet could not read the run's config for the trust check: wsl.exe did not answer within 2 minutes.
+  - | Steplet could not read the run's config for the trust check: wsl.exe did not answer within 2 minutes.
 
 Steplet's notes
   - Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing.

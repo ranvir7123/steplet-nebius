@@ -274,6 +274,7 @@
           "text": "The model refused the task, so the run did not finish.",
           "icon": "amber"
         },
+        "offers_model_switch": true,
         "completed": false,
         "stopped_by_you": false,
         "commands": [],
@@ -473,6 +474,7 @@
           "text": "The run finished.",
           "icon": "green"
         },
+        "offers_model_switch": false,
         "completed": true,
         "stopped_by_you": false,
         "commands": [

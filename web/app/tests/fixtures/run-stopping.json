@@ -501,6 +501,7 @@
           "text": "You stopped the run. Its folder was reset, so you can run the file again.",
           "icon": "amber"
         },
+        "offers_model_switch": false,
         "completed": false,
         "stopped_by_you": true,
         "commands": [

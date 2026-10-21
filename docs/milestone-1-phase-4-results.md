@@ -3544,3 +3544,96 @@ The two Windows-registry tests (Z4, approved once) were skipped, as in Task 12. 
 - **A save that fails halfway** was not tried. No test checks that an existing file at that place is left whole when writing the new one fails.
 - **"Run again, allowing another model" against a real model refusal** was not tried. A real refusal cannot be made on demand. The tests show that the choice reaches the run (session) and the settings (runner), and the stand-in plays a switch.
 - **The model refusal and the switch in the saved scenarios** come from scripted events run through Steplet's own Rust code, not from a real Claude Code run.
+
+## Task 13 review
+
+A code reviewer read the Task 13 commit (921eb44) on its own, without building it. It found no Critical point and four Important ones. Each one was fixed test first: the new test was run and seen to fail on the old code, then the code was changed.
+
+1. **"Allowing another model" stayed on after one press.** After "Run again, allowing another model", the live log's own "Run again" button started the next run with the switch on again, though the receiver had not chosen it. Now the run screen's "Run again" is always a plain run. "Try again", after a run that could not start, repeats that start exactly as the receiver chose it. Test: `run_again_after_allowing_another_model_is_a_plain_run`.
+2. **The page decided when the switch was on offer, and Rust never checked.** Now Rust says when it is on offer (`ReportView.offers_model_switch`: a model refused, and the run did not finish), and the report screen only draws it. The session also refuses the switch unless the last run of this window, of this same file, ended with a model refusal. The refusal reads "Steplet lets Claude Code switch models only right after a model refused this file's run.", whatever the page sends. Tests: `another_model_is_offered_only_after_a_model_refused`, `another_model_is_allowed_only_right_after_a_model_refused_this_file`.
+3. **"Turned away" could hide a call that went past the gate.** If a connection with the wrong run token named a call that had also gone past the gate (and failed), the report said "Steplet turned this call's connection away" instead of "ran without asking". So a forged refusal could hide a breach. Now "turned away" is used only when the call did not go past the gate. Test: `a_turned_away_connection_never_hides_a_call_that_went_past_the_gate`.
+4. **Text from the run could sit inside Steplet's own lines in the saved file.** A model named `claude-x, claude-y` read as two models. A refusal's kind of request could go on in Steplet's voice ("cyber. Steplet checked this request and found nothing wrong."), and a command could fake its check on the line that numbers it. Now every piece of text the screens draw as file text has lines of its own in the saved file, each with "| " in front. Steplet's own lines never have it. The file says so at the top. The expected text (`tests/fixtures/report.txt`) was rewritten by hand first, as the spec. Test: `text_from_the_run_never_reads_as_steplets_own`, and `report_text_has_every_section_in_order` against the new expected text.
+
+The tests failed first:
+
+```
+> cargo test -p steplet-app --offline -j 2 --no-fail-fast --test save --test session --test views
+error[E0609]: no field `offers_model_switch` on type `ReportView`
+error: could not compile `steplet-app` (test "views") due to 1 previous error
+> cargo test -p steplet-app --offline -j 2 --no-fail-fast --test save --test session
+test a_turned_away_connection_never_hides_a_call_that_went_past_the_gate ... FAILED
+test text_from_the_run_never_reads_as_steplets_own ... FAILED
+test report_text_has_every_section_in_order ... FAILED
+thread 'a_turned_away_connection_never_hides_a_call_that_went_past_the_gate' (15872) panicked at crates\steplet-app\tests\save.rs:238:5:
+  left: TurnedAway
+ right: NotAsked { harmless: false }
+thread 'text_from_the_run_never_reads_as_steplets_own' (36716) panicked at crates\steplet-app\tests\save.rs:215:13:
+  left: "Used: claude-x, claude-y"
+ right: "| claude-x, claude-y"
+thread 'report_text_has_every_section_in_order' (24396) panicked at crates\steplet-app\tests\save.rs:126:5:
+   (the old text against the new expected text)
+test result: FAILED. 4 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test another_model_is_allowed_only_right_after_a_model_refused_this_file ... FAILED
+thread 'another_model_is_allowed_only_right_after_a_model_refused_this_file' (7028) panicked at crates\steplet-app\tests\session.rs:693:5:
+  left: Ok(())
+ right: Err("Steplet lets Claude Code switch models only right after a model refused this file's run.")
+test result: FAILED. 18 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens report.spec
+  x  5 [screens] › app\tests\report.spec.ts:75:1 › run_again_after_allowing_another_model_is_a_plain_run (5.4s)
+    Error: expect(locator).toBeVisible() failed
+    Locator: getByRole('region', { name: 'The model refused' })
+    Expected: visible
+    Error: element(s) not found
+  1 failed
+  5 passed (10.3s)
+```
+
+(The page test failed at its second step: after the live log's "Run again", the run that switched models played again instead of the refusal.)
+
+Then they pass, with everything else:
+
+```
+> STEPLET_BLESS=1 cargo test -p steplet-app --offline -j 2 --test fixtures
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+   (the report scenarios now carry offers_model_switch: true only for the model refusal)
+> npm --prefix web run build; cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back
+     Running tests\save.rs (target\debug\deps\save-3a9b4792b2ca5805.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\session.rs (target\debug\deps\session-7450eba4944f5536.exe)
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+     Running tests\views.rs (target\debug\deps\views-7e0d05b887466b87.exe)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+     Running tests\report.rs (target\debug\deps\report-dd6ad705a2b495a9.exe)
+test result: ok. 22 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   (68 "test result: ok" lines in all, none failed: 343 passed, 42 ignored)
+tests exit 0
+> cargo fmt --all   (it moved two lines; then)
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo test -p steplet-app --offline -j 2 --test save --test session
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.61s
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.95s
+clippy exit 0
+> cargo test -p steplet-app --offline -j 2 --test session_live -- --ignored --nocapture --test-threads=1
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 209.41s
+exit 0
+> npm --prefix web run build:screens; npx --offline playwright test --config playwright.reuse.config.ts --project=screens
+  ok 20 [screens] › app\tests\report.spec.ts:75:1 › run_again_after_allowing_another_model_is_a_plain_run (508ms)
+  35 passed (13.7s)
+> npm --prefix web run check
+1792542884132 COMPLETED 156 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+```
+
+Minor points left for later (the reviewer's, graded by what a receiver would meet):
+- The saved file's temporary `.part` file has a fixed name next to the chosen file. A file of that name that the receiver already has would be replaced. A unique name, made only if no such file exists, would avoid it.
+- The Save dialog: nothing in Rust stops a second one opening at once (the page disables the button). The dialog is opened on a worker thread of Tauri's. Whether that thread suits Windows' dialog is checked for real in Task 15, when the owner saves through it.
+- The report page still holds some of Steplet's fixed words (section titles, "Exit code …", "It printed nothing") and maps each check to its colour itself. A model refusal is shown twice: at the top, and under "The models".
+- "Saved as …" and the save error appear with their text already in them, which some screen readers do not announce. The report does not move focus to its title when it opens.
+- The saved file does not shorten very long lines.
+- Inside a "| " line, text from the run can imitate the file's own markers ("[goes to …]", "[U+200B]"). It still cannot reach Steplet's own lines.
+- Tests that could be stronger: `faults_are_in_words` searches run.rs's text; the save test writes to a fixed place under target; `PrepareError` with empty or very long details; the switch through `prepare`; the real `save_report` command.
+- A path holding a broken UTF-16 character would be saved under a slightly different name.

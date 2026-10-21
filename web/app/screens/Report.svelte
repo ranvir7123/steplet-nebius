@@ -50,7 +50,8 @@
         : c.kind === "not_judged"
           ? "amber"
           : "note";
-  const refused = $derived(report.end.kind === "model_refused" && report.refusals.length > 0);
+  // Rust says when another model is on offer (E1): a model refused, and the run did not finish.
+  const offersSwitch = $derived(report.offers_model_switch);
 </script>
 
 <article class="report" aria-label="The report">
@@ -61,7 +62,7 @@
     {#if report.end.kind === "stopped_by_steplet"}
       <div class="printed"><FileText text={report.end.about} block /></div>
     {/if}
-    {#if refused}
+    {#if offersSwitch}
       {#each report.refusals as r, i (i)}
         <div class="message warn">
           <p>
@@ -80,7 +81,7 @@
     {/if}
     <div class="actions">
       <button class="button primary" type="button" disabled={saving} onclick={save}>Save report…</button>
-      {#if refused}
+      {#if offersSwitch}
         <button class="button" type="button" onclick={() => onrun(true)}>Run again, allowing another model</button>
       {/if}
       <button class="button" type="button" onclick={() => onrun(false)}>Run again</button>

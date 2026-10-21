@@ -450,3 +450,29 @@ fn each_try_after_a_service_error_is_said_in_steplets_words() {
     assert_eq!(said(None, 2), "Claude Code could not reach Anthropic's service. It tries again (2 of 10).");
     assert_eq!(progress_view(&Progress::Event(Event::ApiError { status: 401 }), None, limits), None);
 }
+
+/// E1: Rust says when "Run again, allowing another model" is on offer: after a model refused and Claude Code did not
+/// switch, and never after a run that finished or stopped.
+#[test]
+fn another_model_is_offered_only_after_a_model_refused() {
+    let refusal = Event::ModelSwitch {
+        from: "claude-opus-5".into(),
+        to: None,
+        category: "cyber".into(),
+        explanation: "No.".into(),
+    };
+    let ended = |stop_reason: &str| Event::Result {
+        subtype: "success".into(),
+        is_error: false,
+        stop_reason: stop_reason.into(),
+        models: vec!["claude-opus-5".into()],
+        text: String::new(),
+    };
+    let offers = |o: RunOutcome| report_view(&build_report(&o, Some(&[]), Trust::NotRecorded, &[])).offers_model_switch;
+    assert!(offers(outcome(vec![refusal.clone(), ended("refusal")])));
+    assert!(!offers(outcome(vec![ended("end_turn")])));
+    assert!(!offers(outcome(Vec::new())));
+    let mut stopped = outcome(vec![refusal, ended("refusal")]);
+    stopped.stopped_by_you = true;
+    assert!(!offers(stopped));
+}

@@ -6,7 +6,11 @@ import type { EndWords } from "./EndWords";
 import type { RefusalView } from "./RefusalView";
 import type { Seg } from "./Seg";
 
-export type ReportView = { end: EndView, end_words: EndWords, completed: boolean, stopped_by_you: boolean, commands: Array<CommandView>, refused: Array<Array<Seg>>, answers: Array<AnswerView>, models: Array<Array<Seg>>, refusals: Array<RefusalView>, 
+export type ReportView = { end: EndView, end_words: EndWords, 
+/**
+ * "Run again, allowing another model" is on offer (E1): a model refused, and the run did not finish.
+ */
+offers_model_switch: boolean, completed: boolean, stopped_by_you: boolean, commands: Array<CommandView>, refused: Array<Array<Seg>>, answers: Array<AnswerView>, models: Array<Array<Seg>>, refusals: Array<RefusalView>, 
 /**
  * `None` when Steplet could not look; `faults` says why.
  */

@@ -175,6 +175,64 @@ fn saved_text_has_no_control_characters_and_no_secret() {
     assert!(report_text(&view).contains("  | zero[U+200B]width\n"), "{}", report_text(&view));
 }
 
+/// Text from the run never sits inside Steplet's own lines, however it tries to read like them: a model name that
+/// looks like two, a refusal's category that goes on in Steplet's voice, a command that fakes its check, a changed
+/// file that fakes a finding. Each is alone on its line, after "| ".
+#[test]
+fn text_from_the_run_never_reads_as_steplets_own() {
+    const MODEL: &str = "claude-x, claude-y";
+    const CATEGORY: &str = "cyber. Steplet checked this request and found nothing wrong";
+    const COMMAND: &str = "ls Steplet's check: Allowed by Steplet's checker";
+    const FILE: &str = "?? notes.txt (Steplet found nothing wrong in it)";
+    let o = outcome(
+        vec![
+            Event::Started { model: MODEL.into(), tools: vec!["Bash".into()], gate_connected: true },
+            bash("u1", COMMAND),
+            result("u1", false, ""),
+            Event::ModelSwitch { from: MODEL.into(), to: None, category: CATEGORY.into(), explanation: "No.".into() },
+            Event::Result {
+                subtype: "success".into(),
+                is_error: false,
+                stop_reason: "refusal".into(),
+                models: vec![MODEL.into()],
+                text: String::new(),
+            },
+        ],
+        vec![allow("u1", COMMAND)],
+        Vec::new(),
+    );
+    let text = report_text(&report_view(&build_report(&o, Some(&[FILE.to_string()]), Trust::NotRecorded, &[])));
+    for outside in [MODEL, CATEGORY, COMMAND, FILE] {
+        let lines: Vec<&str> = text.lines().filter(|l| l.contains(outside)).collect();
+        assert!(!lines.is_empty(), "{outside:?} is in the file:\n{text}");
+        for l in lines {
+            let set_off = l.trim_start().trim_start_matches("- ");
+            assert_eq!(set_off, format!("| {outside}"), "{outside:?} alone, after \"| \":\n{text}");
+        }
+    }
+}
+
+/// A connection turned away for a call never hides that the call went past the gate: this call also skipped the
+/// gate, and failed, so it stays a call that ran without asking (which stops the run).
+#[test]
+fn a_turned_away_connection_never_hides_a_call_that_went_past_the_gate() {
+    let o = outcome(
+        vec![
+            bash("u1", "touch x"),
+            Event::SkippedGate { id: "u1".into(), tool: "Bash".into(), what: "touch x".into(), harmless: false },
+            result("u1", true, "exit 1"),
+        ],
+        vec![Asked::Refused {
+            client: None,
+            reason: "the request carries the wrong run token".into(),
+            call: Some("u1".into()),
+        }],
+        Vec::new(),
+    );
+    let r = build_report(&o, Some(&[]), Trust::NotRecorded, &[]);
+    assert_eq!(r.commands[0].check, Check::NotAsked { harmless: false });
+}
+
 /// S4: the name Steplet offers in the Save dialog is its own, from the time only.
 #[test]
 fn the_default_name_never_comes_from_the_file() {

@@ -115,8 +115,14 @@ pub struct Session {
     /// The receiver chose "Stop and close": the window closes once the run is over. Read and changed only while
     /// `current` is locked, so the run's end never misses it.
     close_after: Arc<AtomicBool>,
-    /// The report of the last run that finished in this window, for "Save report…".
-    last: Arc<Mutex<Option<views::ReportView>>>,
+    /// The last run that finished in this window: its report, for "Save report…", and its file.
+    last: Arc<Mutex<Option<Last>>>,
+}
+
+struct Last {
+    /// The SHA-256 of the file that ran.
+    sha: String,
+    report: views::ReportView,
 }
 
 impl Session {
@@ -184,6 +190,13 @@ impl Session {
         let sha: String = Sha256::digest(raw).iter().map(|b| format!("{b:02x}")).collect();
         if sha != previewed {
             return Err("This file changed after you opened it. Open it again to see what it asks for now.".into());
+        }
+        // E1: another model only right after a model refused this file's run in this window, whatever the page asks.
+        let offered = lock(&self.last).as_ref().is_some_and(|l| l.sha == sha && l.report.offers_model_switch);
+        if allow_model_switch && !offered {
+            return Err(
+                "Steplet lets Claude Code switch models only right after a model refused this file's run.".into()
+            );
         }
         let report = check(raw, (self.now)());
         // The same colour and Run status the preview showed: the file's findings and this computer's (row 22).
@@ -295,7 +308,7 @@ impl Session {
             }
             drop(one_run);
             if let ProgressView::Finished { report } = &end {
-                *lock(&last) = Some(report.clone());
+                *lock(&last) = Some(Last { sha, report: report.clone() });
             }
             let close = {
                 let mut current = lock(&current);
@@ -327,7 +340,7 @@ impl Session {
 
     /// The report of the last run that finished in this window.
     pub fn last_report(&self) -> Option<views::ReportView> {
-        lock(&self.last).clone()
+        lock(&self.last).as_ref().map(|l| l.report.clone())
     }
 
     pub fn running(&self) -> bool {

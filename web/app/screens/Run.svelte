@@ -33,7 +33,7 @@
     view: PreviewView;
     /** The red file's sentence, for Rust to check again. */
     typed: string | null;
-    /** "Run again, allowing another model" (E1). */
+    /** "Run again, allowing another model" (E1): for this screen's first run only. */
     allowModelSwitch: boolean;
     onback: () => void;
     onopen: () => void;
@@ -182,7 +182,12 @@
     if (prepared && going) now = performance.now();
   }, 1000);
 
-  async function start() {
+  /** The receiver's choice for the last start: "Try again" repeats it; "Run again" never allows another model. */
+  let allowed = false;
+
+  /** Starts the run; `allow` only for "Run again, allowing another model" (E1), and Rust checks it again. */
+  async function start(allow: boolean) {
+    allowed = allow;
     rows = [];
     prepared = null;
     question = null;
@@ -193,7 +198,7 @@
     phase = "preparing";
     following = true;
     try {
-      await backend.startRun(view.sha256, typed, allowModelSwitch);
+      await backend.startRun(view.sha256, typed, allow);
     } catch (e) {
       // Rust refused to start: its own sentence (the file changed, expired, another run goes on, …).
       take({
@@ -208,7 +213,7 @@
     void (async () => {
       unlisten.push(await backend.onRunProgress(take));
       unlisten.push(await backend.onCloseAsked(() => (going ? (confirm = "close") : undefined)));
-      await start();
+      await start(allowModelSwitch);
     })();
     window.scrollTo(0, 0);
   });
@@ -454,7 +459,7 @@
       <p>{failed.failure.reason}</p>
       {#if failed.failure.detail}<div class="printed"><FileText text={failed.failure.detail} block /></div>{/if}
       <div class="actions">
-        <button class="button primary" type="button" onclick={start}>Try again</button>
+        <button class="button primary" type="button" onclick={() => start(allowed)}>Try again</button>
         <button class="button" type="button" onclick={onback}>Back</button>
       </div>
     </section>
@@ -474,7 +479,7 @@
         {@const r = report}
         <div class="actions">
           <button class="button primary" type="button" onclick={() => onreport(r)}>See the report</button>
-          <button class="button" type="button" onclick={start}>Run again</button>
+          <button class="button" type="button" onclick={() => start(false)}>Run again</button>
           <button class="button" type="button" onclick={onopen}>Open another file</button>
         </div>
       {/if}
