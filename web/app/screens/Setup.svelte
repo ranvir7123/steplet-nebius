@@ -246,6 +246,13 @@
       <p class="muted">
         Off until you turn it on. It is for your Windows user only, and turning it off removes Steplet's entries.
       </p>
+      {#if view.opens_steplet_files === "on"}
+        <!-- Measured in Task 15: Windows 11's "Select an app" box can leave Steplet out even with the switch on. -->
+        <p class="muted">
+          Windows may still ask which app to use the first time you double-click a .steplet file. If Steplet is not in
+          its list, choose "Choose an app on your PC" and pick Steplet's program, steplet.exe.
+        </p>
+      {/if}
       {#if view.opens_steplet_files === "broken"}
         <div class="message warn">
           <p>The switch is on, but Windows' setting for it is out of date: Steplet was moved or changed.</p>

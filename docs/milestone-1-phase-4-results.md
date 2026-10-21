@@ -4601,3 +4601,362 @@ exit 0
 ```
 
 The workspace has 350 passing tests, two more than Task 14's 348: `only_the_e2e_build_saves_without_the_dialog` and `any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words` (the third new one, `a_program_entry_steplet_did_not_make_is_left_alone`, is a registry test). The full picture run changed 31 pictures. Twenty are the Setup states with a saved key (the new hint, and the new sentence in `setup-switch-broken`). Ten others differed only in one digit of the run clock at the top (an 8 × 10 pixel spot), and one in 11 pixels by 1 step of 255. Those eleven were put back as they were, so the commit holds only the twenty that really changed.
+
+## Summary: phase 4
+
+Phase 4 built the desktop app, `steplet-app`, on top of phase 3's runner. A receiver can now:
+- open a `.steplet` file (double-click, drop, or "Open a file…") and read everything it asks for, with Run last;
+- choose the runner, and set up Steplet's own Linux, their Anthropic key and double-click opening in Setup;
+- watch the run live, answer the agent's yes-or-no questions, and stop it;
+- read the report and save it as a plain text file.
+
+Tasks 1 to 15 are done; this section is Task 16. Phase 3's paused Task 3 is still paused.
+
+### The done-means, one by one (milestone plan, phase 4)
+
+| Done means | Result | Where the output is |
+|---|---|---|
+| Screenshots of every screen in each state: empty, loading, error, a 300-character command, 25-item lists, a narrow window | **PASS.** 70 states, each in light and dark, at 1100 and 560 pixels wide: 280 pictures in `docs/screens/phase-4/`. They are drawn by Chromium (the engine inside WebView2) from data saved from real Rust output. The real window itself was pictured through its debugging port: the empty Open screen, a preview, Setup, and use case 1's screens | Task 14; Tasks 8, 10, 11 and 15 for the real window |
+| Each screenshot looked at and fixed until it is right | **PASS.** One line per state in Task 14's table; what was wrong was fixed test first and every picture taken again | Task 14 Steps 2 and 3; "Looking at the screens" in Tasks 10 to 13 |
+| A full use case 1 run, from double-click to saved report, on this laptop | **PASS, with one gap.** Your run by hand: a real double-click in File Explorer, the run, and the report saved through Windows' own Save dialog: "Finished", exit code 0. **The gap:** the double-click showed Windows 11's "Select an app" box, which leaves Steplet out although Windows names Steplet as the program for `.steplet`; you picked Steplet through the box's "Choose an app on your PC", "Just once". The driven run opened the file the way Windows opens a file with its own program (`Invoke-Item`) and went straight to Steplet | Task 15 Steps 4 and 5 |
+
+### Phase 4's list (milestone plan, section 6), one by one
+
+| Item | Result | Where |
+|---|---|---|
+| Tauri shell | **PASS.** Fixed title, locked-down page rules, no network from the window | Task 8 |
+| Per-user `.steplet` file association without admin rights | **PASS for what Steplet writes and removes** (three registry tests on made-up entries, run again in the checks below with your yes). **Gap:** Windows 11's "Select an app" box, above | Tasks 11 and 15 |
+| The `steplet://` scheme | **Moved to milestone 3** (J5, your choice when you approved the plan) | |
+| Screens: open, preview, run chooser, setup, prepare, run and live log, ask, report | **PASS** | Tasks 10 to 14 |
+| Sender pins, and the warning on a changed key | **PASS** | Tasks 7 and 10; `the_pins_are_written_when_run_starts_and_not_before` (Task 12) |
+| Checks again when Run is pressed (row 30): expiry, the file's bytes against the ones previewed, the exact command | **PASS.** `start_run_checks_the_file_again_now`, `start_run_refuses_bytes_that_changed`; each command is checked by `Policy::check` when the agent asks (phase 3, and Task 4) | Tasks 10 and 12 |
+| Copy rules: fixed window titles and dialog text | **PASS.** The title is always "Steplet"; the saved report's default name never holds the file's title; file text sits only in "From the file" panels | Tasks 8, 10 and 13 |
+
+### The lines on screen, one by one (plan section 8)
+
+| Line on screen | Result | Test, and where its output is |
+|---|---|---|
+| The chooser's six lines | **PASS** | each line names its tests; `every_promise_names_tests_that_exist` (Task 5; the checks below) |
+| Prepare: "Steplet tells the agent not to load agent settings" | **PASS** | `the_strip_step_lists_what_it_removed`, `use_case_1_report_shows_the_test_command_s_real_exit_code_and_no_trust` (Linux tests, the checks below) |
+| Ask: "Yes allows this exact request for this run", "No answer in 5:00 means no" | **PASS** with the scripted model; no real person answered a question in a real run (Task 15's run asked none) | `a_yes_allows_exactly_the_request_shown`, `a_request_that_differs_by_one_character_asks_again`, `no_answer_within_the_limit_is_a_no` (Task 4; the checks below) |
+| "Interrupted; the folder was reset; run again?" | **PASS** | `stop_signal_stops_the_run_and_the_report_says_you_stopped_it`, the screen test `stop_asks_first_and_then_says_interrupted`, `stop_ends_a_run_mid_command_and_leaves_nothing_running` (Linux) |
+| Report: every model used, and refusals | **PASS** | phase 3's report tests; Task 13's model refusal; Task 14's "model refusal" state |
+| Report and live log are safe to read | **PASS** | `each_event_reaches_the_screen_cleaned_and_in_order`, `saved_text_has_no_control_characters_and_no_secret`, `no_view_holds_the_key`; the raw logs hide the key and the run's token (J6, Task 3) |
+| Codex: "Not available for files that run code on this computer" | **PASS** | the screen test `codex_is_shown_unavailable_with_its_reason` (stays until phase 7) |
+
+The plan's Review Focus, each with its test: a question while you are in another window, or two at once (`a_question_flashes_the_taskbar_and_waits_its_turn`, `two_questions_at_once_each_get_their_own_answer`); a second file while one runs (`a_second_run_cannot_start_while_one_is_running`, `run_is_refused_while_another_window_runs`); 50,000 lines of output (the screen test `a_50000_line_output_keeps_the_log_responsive`); closing or a crash during a run (`closing_during_a_run_asks_first`, `a_run_left_by_a_crash_is_cleared_at_start`); file text that imitates Steplet (`a_newline_inside_one_entry_shows_as_a_badge`, the screen test `text_that_imitates_steplet_stays_in_its_panel`). All pass in the checks below.
+
+### Changes from the plan
+
+Each task's section lists its own. The main ones (rows J10 to J26 in `docs/decisions.md`):
+- **Each run gets its own temporary folder** under `/tmp` (J10, your choice on 18 Oct): Task 5 found that a file's declared web sites never worked for the programs a task runs.
+- **Setup starts WSL from Windows' own folder, with Windows' usual folder names** (J11); a plain install had left a stray folder where Steplet was started.
+- **The window sends nothing to the internet** (J13): Task 8 measured that leaving the app's page reached a web site before Steplet's check could cancel it.
+- **Each run starts the gate from a fresh copy of its own** (J15): Windows began refusing the gate's usual path, for no reason found.
+- **Words that say who decided:** "Refused: you said no" (J17); a wrong key's message after Claude Code's own three minutes of tries (J16); any Anthropic error that ends a run, in Steplet's words with its number (J21).
+- **The report:** one click away from the end of the live log (J18), and in the saved file every piece of outside text sits on its own "| " lines (J19).
+- **Double-click opening** also lists Steplet in the type's "open with" list and gives it a program entry of its own (J4), and never touches an entry another program made.
+- **More states pictured than section 8 lists** (70), and more screen tests than the plan named in Tasks 10 to 13.
+- **Six build-time packages under 14 days old** were replaced by older copies already on this laptop (J14); three packages were downloaded for J7, with your yes.
+- **Your run by hand used the finished (release) build,** to rule out the kind of program as the reason the "Select an app" box left Steplet out.
+- **Your first test key was refused** (it belongs to no Anthropic workspace); a workspace key was used (J22).
+- **From the final review:** Setup no longer changes Steplet's Linux while a file runs in another window (J25), and the switch, when on, says what to do if Windows still asks which app to use (J26).
+
+### What phase 4 did not verify (plan section 9, brought up to date)
+
+- **One laptop:** one Windows 11 Home, one WebView2, WSL 2.6.3, Claude Code 2.1.220. Another Windows, Windows 10, another WebView2 version, high contrast or display scaling were not tried.
+- **Two real-model runs, both of use case 1, both on the same day** (Task 15: the driven one and yours by hand), plus the first try refused with error 400. No real run asked a question, failed a test, printed a long output or met a model refusal; all of those use the scripted model.
+- **How real receivers use the screens.** Only you tried them.
+- **An installed app.** The program runs from the build folder; an installer, code signing and SmartScreen's warning (row 45) were not tried.
+- **Screen readers.** Keyboard use and focus rings are checked; spoken labels are written but not heard.
+- **The real window in dark mode,** and most screens in the real window: the state pictures come from Chromium.
+- **Windows' "Select an app" box** leaves Steplet out, and why is not known (Task 15): it needs Microsoft's Process Monitor, or a try after signing out or restarting Windows.
+- **A minimised Steplet window ignores a close,** and a later close can leave Steplet running with no window (seen three times with the test build: twice in Task 15, once in this task's checks). Closing a minimised window from the taskbar takes the same path in Windows. The cause is not found (below); whether the finished build does the same is not known.
+- **Two questions at once in a real run.** The second keeps the five minutes it got when the agent asked, so it can show with little time left (the final review, below).
+- **A second real install of Steplet's Linux** with Task 6's fix (the stray folder); the test install (Z3) ran once, before the fix.
+- **The Windows side of the network** (3.7 point 3) and **Task 3 of phase 3** (the agent's own file tools against links out of the copy), both still open.
+- **WebView2's debugging port** (test builds only) during a test: it listens on 127.0.0.1 only, for the length of the test; whether another program could reach it then was not tried.
+- **Claude Code versions after 2.1.220:** their stream, their behaviour after a yes, their rule merging, and their exit-code marks.
+- **A key not bound to an Anthropic workspace** is refused (J22); Setup does not say so yet.
+- **The Anthropic terms question (P1)** is unchanged.
+- **What the fence cannot report:** a blocked attempt stays invisible to Steplet (phase 0 S6); the report says so.
+- **The minor review points left for later,** each in its task's section and in the ledger.
+
+### Checks
+
+Every check of the plan's Task 16 Step 1 ran twice on 21 Oct 2026: first on Task 15's code (6a3e481), then again on the final code, after the final review's two fixes below. Each check's whole output is in its own file in the build record's folder (`t16-<check>.txt` for the first run, `t16-final-<check>.txt` for the second).
+
+**The first run** (6a3e481, with your yes for the three registry tests, which write and remove made-up entries only):
+
+```
+> cargo test --workspace --offline -j 2 --no-fail-fast
+   (68 "test result:" lines, none failed: 353 passed, 42 ignored)
+exit 0 (139 s)
+> (afterwards) reg query for the test's made-up entries
+.steplet-test: not there
+Steplet.TestFile: not there
+Steplet.OtherTestFile: not there
+Applications\register-*.exe, Applications\steplet-made-up-test.exe: not there
+> cargo test -p steplet-run -p steplet-app --offline -j 2 --no-fail-fast -- --ignored --nocapture --test-threads=1 --skip install_makes_a_ready_linux_from_nothing
+tests\session_live.rs   test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 198.77s
+tests\ask_live.rs       test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.02s
+tests\contain.rs        test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 79.16s
+tests\gate.rs           test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 25.63s
+tests\launch.rs         test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 66.95s
+tests\prepare.rs        test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 18.99s
+tests\report.rs         test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 23 filtered out; finished in 20.19s
+tests\setup.rs          test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 22.81s
+tests\tripwires.rs      test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.98s
+exit 101 (541 s)
+> npm --prefix web run check --offline
+1792597666452 COMPLETED 159 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+exit 0 (4 s)
+> npm --prefix web run build:screens --offline; npm --prefix web test -- --workers=4 --grep-invert real-app     (the real window: a fresh e2e build started from Windows' own folder)
+  ok  45 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (185ms)
+  ok  48 [real] › app\tests\real-open.spec.ts:25:1 › the real window opens a file and shows what it asks for (317ms)
+  ok  52 [real] › app\tests\real-open.spec.ts:50:1 › the real window's Setup looks at this computer (1.6s)
+  ok  60 [real] › app\tests\real-open.spec.ts:73:1 › the real window reaches nothing outside the app (3.1s)
+  326 passed (4.5m)
+exit 0 (270 s)
+```
+
+Format and both lint runs passed in this run too, and so did the e2e build's save tests (their files). In the Linux-only run, the 25 other test programs have no Linux-only tests ("0 passed; 0 failed" each, left out above). The one failure:
+
+```
+test a_scripted_run_streams_its_events_in_order ...
+thread 'a_scripted_run_streams_its_events_in_order' (36232) panicked at crates\steplet-run\tests\support\mod.rs:188:9:
+the scripted model did not start
+```
+
+The stand-in model (a small test server inside Steplet's Linux) did not answer on its port within 20 seconds. It was never seen before. The same test program, run again on its own straight away, passed every test, in the same order:
+
+```
+> cargo test -p steplet-run --offline -j 2 --test launch -- --ignored --nocapture --test-threads=1   (its built test program, run directly)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 55.07s
+exit 0
+```
+
+So 41 of the 42 Linux-only tests ran (the 42nd is the test install of a second Linux, Z3, which Task 6 ran once), and all 41 passed, one of them on the second try. The cause of that one failure is not known; it is in "What phase 4 did not verify" above.
+
+The 14-day rule (F12), on the lock files, which did not change after this run. `lock_ages.py` counts from its own date, 11 Oct; `ages_today.py` counts its output again from today:
+
+```
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py Cargo.lock
+444 crates.io packages in the lock file; 17 under 14 days old; 0 yanked
+> python -I ages_today.py t16-lock-ages-root.txt
+444 packages read; on 2026-10-21: 0 under 14 days old; 0 yanked
+> python -I C:\Users\RANVIR\.claude\handoffs\2026-10-11-1606-steplet-tools\lock_ages.py crates\steplet-core\fuzz\Cargo.lock
+40 crates.io packages in the lock file; 0 under 14 days old; 0 yanked
+> python -I ages_today.py t16-lock-ages-fuzz.txt
+40 packages read; on 2026-10-21: 0 under 14 days old; 0 yanked
+> python -I web\scripts\npm_ages.py web\package-lock.json
+88 npm packages in the lock file; 0 under 14 days old; 0 withdrawn or deprecated
+```
+
+(The last line of each; every package's line is in its file.) `spikes/Cargo.lock`, the throwaway phase 0 programs' lock file, was not checked, as in phase 3.
+
+**The second run, on the final code:**
+
+```
+> rustc --version; cargo --version; node --version; npm --version
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+v24.15.0
+11.12.1
+> cargo fmt --all -- --check
+exit 0 (0 s)
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.79s
+exit 0 (7 s)
+> cargo clippy -p steplet-app --all-targets --offline -j 2 --features e2e -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.94s
+exit 0 (5 s)
+> cargo test --workspace --offline -j 2 --no-fail-fast -- --skip file_type_switch_round_trip --skip turning_off_gives_the_file_type_back --skip a_program_entry_steplet_did_not_make_is_left_alone
+   (68 "test result:" lines, none failed: 351 passed, 42 ignored, 3 filtered out)
+exit 0 (166 s)
+> cargo test -p steplet-app --offline -j 2 --features e2e --test save --test shell
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+> cargo test -p steplet-app --offline -j 2 --no-fail-fast -- --ignored --nocapture --test-threads=1
+tests\session_live.rs   test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 207.15s
+exit 0 (241 s)
+> npm --prefix web run check --offline
+1792599992884 COMPLETED 159 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+exit 0 (4 s)
+> npm --prefix web run build:screens --offline; (in web) npx --offline playwright test --config playwright.reuse.config.ts --workers=4 --grep-invert real-app     (a fresh e2e build again)
+  ok  47 [real] › app\tests\real-open.spec.ts:6:1 › the real window opens on the empty Open screen (186ms)
+  ok  49 [real] › app\tests\real-open.spec.ts:25:1 › the real window opens a file and shows what it asks for (311ms)
+  ok  52 [real] › app\tests\real-open.spec.ts:50:1 › the real window's Setup looks at this computer (1.0s)
+  ok  58 [real] › app\tests\real-open.spec.ts:73:1 › the real window reaches nothing outside the app (3.0s)
+  326 passed (4.4m)
+exit 0 (266 s)
+```
+
+What the second run left out, and why:
+- **The three registry tests** (the 3 "filtered out"): they ran in the first run with your yes, and the switch's code did not change after it. The workspace's 351 passing tests are Task 15's 350 plus the final review's new test.
+- **The Linux-only tests of `steplet-run`**: nothing in `steplet-run` changed after the first run; only `steplet-app`'s Linux tests ran again.
+- **The lock files' ages**: no lock file changed (`git diff --quiet HEAD -- Cargo.lock crates/steplet-core/fuzz/Cargo.lock web/package-lock.json`).
+- **Task 15's real-model run** (`real-app.spec.ts`, left out of both screen runs with `--grep-invert real-app`): it runs a file on your key and points the switch at the test build; it ran in Task 15 with your yes, and none of the code it drives changed after it except Setup's new sentence.
+
+The screen run changes some pictures every time without a real change: one digit of the run clock at the top (an 8 × 10 pixel spot) or 1 step of 255 in a few pixels. Those were put back as they were (10 in the first run, 13 in the second), and `real-preview-light.png` too (only font smoothing). The commit holds the 4 `setup-all-ready-*` pictures (the new sentence) and `real-setup-light.png`: the real window's Setup today, with your key saved and the switch on, which this test build rightly calls out of date because the switch points at the finished build you used in Task 15.
+
+### The final review, and what changed
+
+A code-reviewer agent read the whole branch since `main` (`26b59b8..6a3e481`, read-only, on the most capable model), looking for problems between the tasks that each task's own review could not see. It read the app's Rust code, the runner's ask, live and lock parts and the changes to the run and the report, the core's changes, and parts of the screens; it did not read the tests, some of the runner's files, or most screens (it says so). It found nothing safety-critical. Re-graded by what a receiver would get:
+
+- **Important, fixed: Setup could change Steplet's Linux while a file runs in another window.** Each double-clicked file opens a Steplet program of its own (S9), and Setup's "only one change at a time" guard was per window. So a second window's "Start over" could remove Steplet's Linux under the first window's run, and "Finish setting up" could set it up again under it. Now Setup holds the same Windows lock that every run takes: Setup waits while any window runs a file, and no file starts while Setup works. Both say "Another Steplet window is running a file or setting up Steplet's Linux. Wait until it has finished." (J25). The test (`setup_waits_while_another_window_runs_a_file`) failed first, on the old code:
+
+```
+> cargo test -p steplet-app --offline -j 2 --test setup     (the old setup.rs)
+test a_crashed_install_does_not_block_the_next_one ... ok
+test setup_waits_while_another_window_runs_a_file ... FAILED
+test a_second_install_while_one_runs_is_refused ... ok
+thread 'setup_waits_while_another_window_runs_a_file' (17532) panicked at crates\steplet-app\tests\setup.rs:62:36:
+Setup changed Steplet's Linux while a file ran
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+  and then passed, with the run tests that check the same words:
+
+```
+> cargo test -p steplet-app --offline -j 2 --test setup --test session
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+- **Important, fixed as words: the switch said nothing about Windows' "Select an app" box.** With the switch on, Setup now says: "Windows may still ask which app to use the first time you double-click a .steplet file. If Steplet is not in its list, choose "Choose an app on your PC" and pick Steplet's program, steplet.exe." (J26). The screen test failed first (`setup-all-ready-light-1100 shows /^Windows may still ask which app to use the first time/` ... `Error: element(s) not found`), then all 48 Setup states passed, and the 4 changed pictures were looked at, light and dark, normal and narrow.
+- **Important, not fixed: a minimised Steplet window ignores a close, and a later close can leave Steplet running with no window.** It happened once more in this task's first check run (the test build was started minimised by Windows, from a script). A debugger agent looked at that program while it was stuck: its window was answering messages; a second close removed the window, and the program stayed, with its window machinery torn down and its main thread waiting inside Windows. The window kit's own code (tao and Tauri) has no special case for minimised windows on the close path. Why the first close is ignored is still not known, and naming the exact wait needs a debugging program (WinDbg), which is not on this laptop: a download, so your yes first. It is offered as its own follow-up.
+- **Kept, and recorded as a limit: a question that waits behind another keeps the five minutes it got when the agent asked.** If two questions arrive at once and you spend more than four minutes on the first, the second shows with little time left, and the report says "no answer in time" for it. It cannot simply be given more time: Steplet's gate waits at most 5 minutes 15 seconds for every decision (S1). It fails safe (a refusal).
+- **Kept as minor: the 50,000-line test runs against the stand-in, not the real window.** What reaches the real window is bounded by Claude Code itself, which shortens long command output (Task 12's ruling).
+- **Minor, left for later** (in the build record): a tripwire that fires after you press Stop shows as its command's red row, but the report's ending still says "Interrupted by you"; the sender is pinned just before the run's marker is written, so a failed marker write leaves the pin changed; turning the switch off removes a "Steplet.File" entry without checking that Steplet made it; one finding about the senders file keeps Windows' raw "(os error N)".
+
+### Every ruling made while building, and every minor point left for later
+
+These are the build record's own lines, copied as written (the record itself is a scratch file outside git). Each ruling is a call made without asking you, with what it costs if it was wrong. They are technical; the main ones are in plain words above and in `docs/decisions.md`.
+
+The 94 rulings, in the order they were made:
+
+```
+- Pre-flight Ruling: rules in rules.rs are `pub const X: &Rule = &rule(...)`, plan section 6 says `pub static KEY_CHANGED: Rule` — follow the file's own form (`pub const KEY_CHANGED: &Rule`) — cost if wrong: a one-word change.
+- Pre-flight Ruling: docs/rules.md is generated from `rules::RULES` by tests/rules_doc.rs ("do not edit it by hand"); T1's "reason line under cap.outside-path" has no place there, so T1 leaves rules.md as generated and the J1 reason is recorded in decisions.md at T16; T7's new section is added through the generator (rules_doc.rs writes MACHINE_RULES too) — cost if wrong: one doc line missing until T16.
+Task 1: Ruling: the plan's contain test put the Claude-Code-refused write first, but H11 stops the run at such a refusal, so later calls would never run — that write goes last and the test asserts the stop (SkippedGate) — cost if wrong: none, the same three facts are checked.
+Task 1: Ruling: docs/rules.md is generated (rules_doc.rs) and holds no checker reasons — not edited; J1 recorded at T16 in decisions.md — cost if wrong: one doc line.
+Task 1: Ruling: the Task 2 settings comparison test gets the new deny rule appended to the old file's list (comment says why) — cost if wrong: none.
+Task 1 review: Ruling: keep rule id cap.outside-path for the J1 refusal (plan section 6 names it; the id is not shown anywhere today) — cost if wrong: a later screen showing the id would need its own words.
+Task 2: Ruling: prepare.sh entries are both named (`prepare …`, `strip <copy>`), since "strip" is a valid run id — cost if wrong: none.
+Task 2: Ruling: `removed_files(stdout)` is public (like `changed_files`), counts only the 5 known names once, in order — cost if wrong: one more public function.
+Task 2: Ruling: prepare checks the "ready at <commit>" line; empty never list says "Never: nothing listed.", empty body "The sender's notes: none." — cost if wrong: wording.
+Task 2 security: Ruling: sender body stays exact in task_text (it is the sender's task; safety rests on gate and fence, not the prompt) — cost if wrong: an agent misled by a body that imitates Steplet's headings still meets the checker on every action.
+Task 3: Ruling: watch_run gets `live` and `secrets` (the token is made inside the run) and launch gets `hide` for J6 — cost if wrong: two more parameters.
+Task 3: Ruling: Live/Progress hold only what Task 3 uses; Task 4 adds answers, ask_limit, Asking, Answered — cost if wrong: none.
+Task 3: Ruling: RunError::Lock(io::Error) when Windows will not make the lock (not Busy, which would be untrue) — cost if wrong: one variant.
+Task 3: Ruling: Stop during prepare → agent never starts, report stopped_by_you; a tripwire after the user's Stop is recorded but does not stop twice — cost if wrong: report wording.
+Task 4: Ruling: Asker::new takes secrets (question is cleaned; token made in run) — cost: one parameter.
+Task 4: Ruling: Answer has `call` (tool call id) so the report can mark AllowedByYou — cost: one field.
+Task 4: Ruling: stop_now sets live.stop so Steplet's own stops withdraw open questions; stopped_by_you unaffected (stopped_at already set) — test a_tripwire_takes_back_every_open_question (written with the change, shown failing with the line removed) — cost if wrong: none.
+Task 4: Ruling: fingerprint sorts JSON keys itself (feature unification could turn on preserve_order) — cost: none.
+Task 4: Ruling: decide.rs split into check() + no_one_to_ask(); one checker still Policy::check — cost: none.
+Task 4 review: Ruling: late answer after the gate's own deadline (read >15 s) kept as a known limit — the request comes from Steplet's own gate program at once — cost if wrong: a report showing Yes on a refused call.
+Task 5: Ruling: promise line 2 worded "unless you say yes to that exact address" (ask screen exists) and also cites a_yes_allows_exactly_the_request_shown — cost if wrong: wording.
+Task 5: Ruling: the plan's global "only settings change is Task 1's" superseded by the owner's decision A (layout, not settings JSON) — recorded for T16 decisions.md.
+Task 6: Ruling: setup's wsl.exe calls get Windows' folder variables (SystemDrive, ProgramData, ALLUSERSPROFILE, APPDATA, LOCALAPPDATA, USERPROFILE, TEMP, TMP) and start in System32 — measured: wsl --install alone left a `%SystemDrive%` cache folder in its start folder (no SystemDrive); an install place that is not a full path is refused — cost if wrong: the fix is not yet seen in a real install (needs a second 1-2 GB install).
+Task 6: Ruling: WSL adds a Windows Terminal profile and a Start-menu folder per Linux (steplet's since 13 Oct); unregister removes the profile, not the empty folder — Setup (T11) says so before Install; not suppressed (needs Steplet's own image, H3 launch item) — cost if wrong: owner may want them stopped.
+Task 6: Ruling: look.sh checks python3-venv too (setup.sh installs it) + test look_checks_every_package_setup_installs — cost: none.
+Task 7: Ruling: sender names compared ignoring capitals and runs of spaces (lowercase + split_whitespace), so "ana lee" cannot dodge id.key-changed — checked by planting exact comparison (2 tests fail) — cost if wrong: two senders differing only in case/spacing get a red warning.
+Task 7: Ruling: Finding line None, detail names both keys in Steplet's words, quote = sender name (file text) — cost: none.
+Task 6 review: Ruling: State gains `trouble: Option<String>` (beyond plan section 6) — the Setup screen must tell "could not look" from "missing" — cost if wrong: one field.
+Task 6 review: Ruling: step limits 90/30/2/10 minutes — a slow line beyond 90 min for 1-2 GB fails with a clear message and "Try again" resumes — cost if wrong: a very slow connection cannot install.
+Task 8: Ruling: a navigation's request reaches the internet before Tauri's on_navigation cancels it (measured: example.com answered 200) — WebView2 starts with --proxy-server=http://127.0.0.1:47 --proxy-bypass-list=<-loopback> (closed local port, no local exception); tests the_web_view_sends_nothing_to_the_network and real "the real window reaches nothing outside the app" (fresh addresses each try: a cached copy answered once) RED->GREEN, also RED on a build without the proxy — cost if wrong: anything that later needs the web view to reach the network needs its own exception (none planned: help links open in the browser from Rust, S11).
+Task 8: Ruling: lock_ages.py counts from its fixed date 11 Oct; recounted from today (ages_today.py) — six toml-family crates under 14 days on 21 Oct moved to older cached versions: toml 1.1.4, toml_parser 1.1.3, toml_writer 1.1.2, toml_datetime 1.1.1, serde_spanned 1.1.1, toml_edit 0.25.15 — cost if wrong: older build-time TOML readers.
+Task 8: Ruling: web/dist must exist before cargo builds steplet-app (Tauri embeds it); every check runs `npm --prefix web run build` first — cost: a fresh checkout's cargo test fails with Tauri's own clear message until then.
+Task 8: Ruling: devtools off outside the e2e build; COMMANDS in src/commands.rs, included by build.rs into Tauri's AppManifest so each call is checked against capabilities/main.json; identifier dev.steplet.desktop (WebView2 data in %LOCALAPPDATA%\dev.steplet.desktop) — cost: none / none / a later rename moves WebView2's data folder.
+Task 8: Ruling: @types/node not in the npm cache -> web/app/tests/node.d.ts declares fileURLToPath only (no Z6 download) — cost: tests may use only declared Node functions.
+Task 8: Ruling: beyond the plan: web/shared/base.css; contrast.mjs also checks focus ring and control borders at 3:1 (WCAG 1.4.11) and has --list; no-raw-html.mjs also refuses createContextualFragment, setHTMLUnsafe, parseHTMLUnsafe, srcdoc; svelte-check --fail-on-warnings — cost: none.
+Task 9: Ruling: Seg::Link carries Part pieces (text or badge), not plain strings as section 6 sketched — the core's link pieces can hold invisible characters — cost if wrong: FileText draws two piece kinds.
+Task 9: Ruling: FindingView.detail stays Option<String> (Steplet's words: the core's contract, checked in rules.rs — dates, fixed place names, famous hosts) not Shown; quote is Shown — cost if wrong: a detail drawn as Steplet's words would need to move to file style.
+Task 9: Ruling: two segmenters: line() for one entry of a list (a line break becomes a U+000A badge) and shown() for blocks (body, output, agent words, commands, faults) — cost if wrong: a multi-line command shows its breaks.
+Task 9: Ruling: EntryView adds each header entry's line number (findings name lines); RepositoryView is a struct, not a tuple — cost: none.
+Task 9: Ruling: RunStatus::NotRunnable's reason names only Steplet's host list (views::not_fetched_from_here, views::NO_REPOSITORY), never the file's host (file text) — cost: the receiver reads the host in the file's panel.
+Task 9: Ruling: preview(raw, core report, Here{identity, findings, not_runnable}); run_status = worst of file and here findings (row 22), outcome = the core's own; Task 10's open.rs fills Here — cost: none.
+Task 9: Ruling: the screen types are compared (and written with STEPLET_BLESS=1) by the_screen_types_are_current instead of written on every cargo test + git diff (stricter; works before the files are tracked); line endings normalised (autocrlf) — cost: none.
+Task 9: Ruling: steplet-run exposes exit_code_of (H13, now one place for the report and the live log) and call_what — behaviour unchanged (plain 114/114; report --ignored run) — cost: two more public functions.
+Task 9: Ruling: live per-call checks are not in ProgressView yet: the gate's decisions are not progress today; Task 12 adds them (and re-blesses run fixtures) — cost: run fixtures change at Task 12.
+Task 9: Ruling: Fixture has fields beyond the plan (open_error, note, setup_error, after_stop, replies, saved_to, save_error); scenarios.ts holds timing only; Backend gains startNote (command start_note, Task 12's crash note); screens reach the backend via Svelte context "backend" from main.ts; ids are TS numbers (u64 question ids sent as u32) — cost: none.
+Task 9 gate: Ruling: each run starts the gate from its own root-owned copy /opt/steplet/gate/runs/<run id>.<16 hex>.exe (gate_for_run, sha-checked), used for settings and the service's client check; discard.sh removes "<id>.*.exe" (run ids hold no "."); support::serve_gate does the same; the dying-gate test kills "<id>.*" — test each_run_starts_the_gate_from_a_path_of_its_own (RED: unresolved import) and the two report tests RED->GREEN — cost if wrong: one 395 KB copy per run; H8 to be updated at T16 (per-run copy, not only per-build name).
+Task 10: Ruling: no open_path command — a page cannot learn a dropped or picked file's path; "Open a file…" = the page's file picker + openBytes of the first 262,145 bytes; a double-clicked file is read in Rust (initial_preview) — cost if wrong: none (no screen has a path to send).
+Task 10: Ruling: PINS_UNREADABLE is an app-level Rule (here.pins-unreadable, amber); same_sender pub in core, fetchable pub in runner (one rule each, behaviour unchanged); pins keep the first spelling with the same key, a new key replaces the pin (S5); record refuses on an unreadable file and never overwrites it — cost if wrong: wording / two public functions.
+Task 10: Ruling: found by looking at 72 screenshots and fixed test-first: (1) file links had Steplet's own .link style -> class file-link, a_link_in_the_file_never_looks_like_a_link; (2) the stand-in rejected with Error objects while Tauri rejects with Rust's Err string -> strings (open_error, save_error), a_file_that_cannot_be_read_says_why; (3) a changed key's identity line began "sender unknown" -> PreviewView.key_changed (Rust) + red first line, a_changed_key_leads_the_identity_line (Rust and screen); plus layout: six even count boxes + "Expires" line, "line N" gutter, one "From the file" label. 10 screen tests instead of the plan's 7 — cost if wrong: none.
+Task 10: Ruling: fixtures build previews through open::preview_file (the app's own path) instead of a copy; AppState::show truncates to MAX_READ so the bytes kept are the bytes previewed; crates/steplet-app/permissions/ in .gitignore — cost: none.
+Task 10 review: Ruling: pins::record writes .part, sync_all, then renames (removes .part on failure) — no test can make a power cut, so no RED; the existing no-leftover test passes — cost if wrong: an empty senders.json after a power cut at Run start, then a permanent amber warning until the file is deleted by hand.
+Task 11: Ruling: setup_remove command for "Start over" (not in the plan's list), SetupChanges.removed; Rust decides wsl_fix and install (Offer None/Install/Finish), the screen only draws — cost if wrong: one command / two fields.
+Task 11: Ruling: setup lines lose terminal CSI codes and keep the last \r drawing (views::setup_line); setup failures in words (views::setup_failure); CHECK_WORDS for steplet_run::setup::CHECKS (now pub); trouble said once; no decision codes in Steplet's words (Codex's "(D1)" removed) — each test-first — cost if wrong: wording.
+Task 11: Ruling: key::save trims, refuses empty/inner whitespace or control/over 512 chars in Steplet's words; key::load -> io::Result<Option<ApiKey>>; steplet_run::ApiKey::is(text) for tests — cost if wrong: a key with an inner space is refused.
+Task 11: Ruling: the gate program is steplet-gate.exe next to Steplet's own program; Linux disk in %LOCALAPPDATA%\Steplet\wsl; WSL-waiting commands are Tauri async (thread pool), one install/remove at a time; help = fixed list of two (ShellExecuteW, windows-sys feature Win32_UI_WindowsAndMessaging, no download); start argument = first non-flag — cost if wrong: Task 15 must build steplet-gate next to steplet.exe.
+Task 11: Ruling: 6 screen tests instead of 5 (+a_runner_that_is_not_set_up_sends_you_to_setup) and a real-window Setup test — cost: none.
+Task 12: Ruling: RunFn is Arc<dyn Fn> (plan said fn pointer) so tests pass a scripted run; questions queue in Rust (Relay) and the screen gets Waiting{count}; Progress::Checked carries each gate decision to the screen; QuestionView.holds words per tool; PreviewView.red_sentence from Rust; RunLock taken briefly at start for pins::record then released (run_live takes it itself); a crashed run thread keeps its marker so the next start clears it; run fixtures go through Relay and carry the chooser — cost if wrong: one extra lock take per run.
+Task 12: Ruling: Progress::Prepared carries limit_ms (views::Limits {ask, run} into progress_view and Relay) so the screen shows "elapsed of 30:00" without its own copy — cost if wrong: one field.
+Task 12: Ruling: Check::RefusedWhenAsked { how: NotYes::{SaidNo, NoAnswer, TakenBack} } in the runner (live Checked and the report), reason None; app words "Refused: you said no" etc., kind refused_by_you — found by looking at the run screen ("Refused by Steplet's checker … the receiver said no") — tests each_decision_reaches_the_screen_as_its_check, answers_and_allowed_by_you_show_in_the_report, a_refusal_after_asking_says_how_it_ended, ask_live no_answer_refuses_it updated — cost if wrong: Task 13's report words build on it.
+Task 12: Ruling: check_view NotAsked{harmless:false} kind "ran_without_asking" (red on screen) — a_call_that_ran_without_asking_is_not_marked_as_a_harmless_read RED->GREEN — cost: none.
+Task 12: Ruling: Relay emits Checked(NotAsked) for a SkippedGate, so a call that never asked the gate gets its check row like the rest — cost: none.
+Task 12: Ruling: run start uses views::run_status (file + this computer's findings, pins::load_at) — found by an automated security review (a known sender with another key, red here, could start without the sentence) — a_known_sender_with_another_key_needs_the_sentence_too RED on the planted old start ->GREEN — cost: none.
+Task 12: Ruling: wrong key MEASURED (Claude Code 2.1.220, scripted model 401): 10 system/api_retry lines (error_status 401, authentication_failed) over 186 s, a synthetic assistant message "Invalid API key · Fix external API key", result is_error true subtype success api_error_status 401. Runner: Event::ApiRetry, Event::ApiError (before Result); report fault KEY_REFUSED "Anthropic did not accept the key. Change it in Setup."; live log one Retry row counting the tries (EventView::Retry, Steplet's words). fake_model.py answers a non-matching key with 401 — tests a_key_anthropic_refuses_is_read_from_the_stream, a_key_anthropic_refuses_is_a_fault_in_words, each_try_after_a_service_error_is_said_in_steplets_words, a_wrong_key_shows_each_try_and_says_so, session_live a_wrong_key_says_so — cost if wrong: Steplet does not stop at the first 401, so a wrong key still takes ~3 min.
+Task 12: Ruling: screen extras — header hidden and drops ignored while a file runs (one run at a time); Escape never answers a question or the Stop question; long request fields scroll in their own 240 px box; 8 screen tests (+closing_the_window_during_a_run_asks_first via the stand-in's "steplet-stand-in-close" page event, +a_wrong_key_shows_each_try_and_says_so); fixtures ask-long-command (346 chars) and run-40-commands (40 ms steps); plan's "npm test -- run" matches every file (path holds runFile): use run.spec — cost: none.
+Task 12 review: Ruling: finding 6 (no cap on output sent to the window) re-graded Minor — a run has at most 40 turns and Claude Code shortens long command output itself; the stand-in drew 50,000 lines quickly — cost if wrong: a huge Read result could make the real window slow (Task 15 runs the real window).
+Task 12 review: Ruling: RunFn now takes &RunLock (the session's), Session::new(run, discard, now, places), clear_leftover is a method — cost: none.
+Task 13: Ruling: the outcome's words come from Rust (ReportView.end_words {title, text, icon}; views::end_words), shared by the live log's end, the report screen and the saved file; end.ts keeps only colour to icon — cost if wrong: one field.
+Task 13: Ruling: the report opens from "See the report" on the run screen's end panel, not in place of the log — cost: one click.
+Task 13: Ruling: Asked::Refused gets call: Option<String> (only once the request is from the run's own gate program: wrong token or unreadable request); Check::TurnedAway "Steplet turned this call's connection away" only when the call did not run (result none or is_error) — a_call_turned_away_is_labelled_as_such — cost if wrong: a refused connection whose call then ran keeps its own label (never hides a breach).
+Task 13: Ruling: PrepareError implements Display (one sentence ending in "."), run.rs faults use {e}; third fault reworded "Steplet could not remove the run's folders: …" — faults_are_in_words — cost: none.
+Task 13: Ruling: the saved file keeps tabs; hidden characters already removed by the runner's cleaning, so the test also plants a Seg::Invisible by hand — saved_text_has_no_control_characters_and_no_secret — cost: none.
+Task 13: Ruling: GetLocalTime for the default name (windows-sys feature Win32_System_SystemInformation, no download, lock file unchanged); save_report command async (Save dialog on the thread pool, owner = the window's handle) — cost: none.
+Task 13: Ruling: E1 "Run again, allowing another model" reaches the run: start_run allowModelSwitch -> RunRequest.allow_model_switch -> settings switchModelsOnFlag — switch_models_only_when_the_receiver_allowed_it, allowing_another_model_reaches_the_run_only_when_asked — cost if wrong: settings_json gained a fourth argument.
+Task 13: Ruling: 5 screen tests (+saving_says_where_or_why_not); report scenarios carry the chooser; run-model-refusal has Fixture.allowed_switch (D7: lists both models); found by looking: the model refusal's outcome names the model, kind of request and explanation above the switch button — cost: none.
+Task 13 review: Ruling: "Try again" after a run that could not start repeats that start's own choice (allow or not); Rust checks it again — cost if wrong: a retry with the switch allowed, only ever right after a refusal of that same file.
+Task 13 review: Ruling: the saved file's layout changed to put every outside piece on "| " lines (longer file, unambiguous) — cost: a longer file.
+Task 14: Ruling: 71 states (section 8's 56 plus the extras the saved scenarios hold: imitation, unsigned-known-name, not-runnable-key-changed, wsl-too-old, could-not-look, start-over, switch-fails, stop/close questions, stopped, long-output open, ask long-command/answer-fails, report model-refusal) x light/dark x 1100/560 = 280 pictures; the results list one line per state naming its four pictures, with a separate note for any picture that differs — cost: none.
+Task 14: Ruling: a page the log scrolled to its newest row is pictured as the window shows it (a whole-page picture draws the sticky bar mid-page); the mouse is moved off the page before each picture (a hover had darkened a button) — cost: those pictures show one window, not the whole page.
+Task 14: Ruling: stand-in Timing.stopping (run-stopping 1500 ms) so "Stopping…" can be pictured — cost: two run tests wait 1.5 s more.
+Task 14 review: Ruling: a link box that wraps to a new line after text keeps its 4 px gap at the line start (an inline box cannot tell it starts a line) — cost: 4 px indent in that rare case.
+Task 15: Ruling: sender "Sample Sender" — a new name, so no pin from earlier tests (Ana Lee) turns it red, and the owner's own name is never pinned to a throwaway key — cost if wrong: a rename and re-sign.
+Task 15: Ruling: expires 2027-10-20 (the plan named no date; the core allows at most 365 days ahead, 2027-10-31 was refused) — cost: re-sign after 20 Oct 2027.
+Task 15: Ruling: never lines "Do not change any file.", "Do not install anything.", "Do not use the network." added (use case 1 needs none of these) — cost: none.
+Task 15: Ruling: STEPLET_SAVE_TO is a folder (not a file): the e2e build saves there under the name the Save dialog offers (save::e2e_place; Stamp::now and default_name then run for real) — only_the_e2e_build_saves_without_the_dialog (RED: compile, then a planted 'if false &&' made it fail; restored identical), the_e2e_build_saves_in_the_tests_folder_under_the_offered_name — cost: none.
+Task 15: Ruling: web/playwright.reuse.config.ts copied from the 88af2b worktree (scratch, not committed): Playwright's vite preview on 4180 outlives a run on Windows (pid 688 from this session's first run), and a second run then exits with 0xC0000409 — cost: none (real tests do not use the server).
+Task 15: Ruling: pictures named real-uc1-<screen>-<theme>.png, not real-<screen>-<theme>.png, so Task 10/11's real-preview and real-setup pictures stay as they were — cost: none.
+Task 15: FINDING fixed: the report said 'What went wrong around the run: Nothing' for that 400 (only 401 was a fault). Ruling: any Anthropic error status on the run's last result (ApiError then Result is_error) is a fault in Steplet's words: 401 as before; other N -> "Anthropic refused the run's request with error N, so the agent could not go on. Claude Code passed on Anthropic's reason under \"The agent says\"." (Anthropic's text stays file text) — any_error_from_anthropic_that_ends_the_run_is_a_fault_in_words RED (left: []) -> GREEN; report tests 23 passed — cost if wrong: one sentence.
+Task 15: release build 4m 41s (target\release\steplet.exe 17:35:25, PE subsystem 2 windowed; gate sha256 FF6B9F9BA107F654...). Ruling: Step 5 uses the release build (no e2e, as the plan's 'normal build', and what a receiver gets) — cost if wrong: the debug build's own double-click stays unproven. Started pid 20944 for the owner.
+Task 15: owner pressed Point it at this Steplet (release 18:10:05); registry now: Applications\steplet.exe {DefaultIcon, shell\open\command (release exe), SupportedTypes .steplet}, .steplet\OpenWithProgids Steplet.File, Steplet.File Steplet.Application=steplet.exe. Double-click 18:13: box still without Steplet (Cursor, VS, Notepad, Opera, VS Code, WMP, Word; scrolled). Ruling: stop guessing; record as open (needs Process Monitor or a sign-out/restart test, follow-up); hand run goes through the box's 'Choose an app on your PC' -> target\release\steplet.exe -> Just once (no lasting Windows change) — cost if wrong: Step 5's double-click has one extra choice in it.
+Task 16: start (BASE 6a3e481). Owner's yes (21 Oct) for the registry tests in the full run. Ruling: the full checks use -j 2 as Tasks 13 to 15 did (fewer parallel jobs; the antivirus holds fewer new programs) — cost: none, same tests. Ruling: npm test runs the screens and the real window's real-open tests against a fresh e2e build, leaving out real-app.spec.ts (--grep-invert real-app): it is a real-model run on the owner's key and repoints the switch to the debug build; Task 15 ran it with the owner's yes — cost if wrong: Task 15's real run is not repeated on the final code (no code it touches changed after it).
+Final: Ruling: (2) a question queued behind another keeps the 5:00 it was given when the agent asked; not fixed — the gate's own deadline is 5 min 15 s for every decision (S1), so a hidden question cannot be given more time without per-question gate deadlines; it fails safe (a refusal), and needs two questions at once and over four minutes on the first — cost if wrong: in that case the second question shows with little time, and the report says 'no answer in time' for a question the receiver saw only briefly or not at all.
+Final: Ruling: (4) the windowless leftover process is not fixed in Task 16 — its cause is unknown (seen twice, test build only, after a script sent a close message to a minimised window; a person's close was not tried), so a fix now would be a guess; it stays in STATUS's risks and in 'What phase 4 did not verify', and is offered as its own follow-up — cost if wrong: a receiver can be left with an invisible Steplet using memory until Windows restarts or it is ended in Task Manager.
+Final: Ruling: (5) kept Minor (Task 12's ruling stands) — the real path's outputs are bounded by Claude Code itself (it shortens long command output, and a run has at most 40 turns); the screen keeps showing the first 40 lines — cost if wrong: a very large Read result could make the real window slow.
+Final: Ruling: (4) stays not fixed after a look (debugger agent on the live pid 164, which had ignored CloseMainWindow while minimised): a WM_CLOSE sent with SendMessageTimeout destroyed the window and the process stayed (24 threads waiting, tao's event-loop window gone, main thread waiting in user32); tao and Tauri sources show no minimised check on the close path; the first close's being ignored is unexplained; a symbolised stack needs a debugger (WinDbg/cdb: a download, the owner's yes) — offered as its own follow-up; pid 164 ended by pid — cost if wrong: as above.
+```
+
+The 19 lines of minor points left for later (several lines hold more than one point):
+
+```
+Task 1 review: minor (deferred): relative path with secret name now cap.outside-path not block.secret-path (both deny).
+Task 3 review: minor (deferred): raw log misses disguised key forms; Local\ lock per session; ACCESS_DENIED from another account -> Lock not Busy; Stop at the moment of natural end counts as yours.
+Task 4 review: minor (deferred): by_you keyed by call id only.
+Task 6 review: minor (deferred): escape characters in setup lines (T11 screen); network paths accepted as install place; setup.sh fstab line keeps || true.
+Task 7 review: minor (deferred): duplicate spellings listed in KeyKnownAs; two pins per name make either key SameKey (T10 must keep one pin per comparable name, S5); MACHINE_RULES not in tests/rules.rs shared checks.
+Task 8 review: minor (deferred): unused deps declared until Tasks 9-11; release start-up failure silent (note for T16 not-verified); CSP pinned in config not as served; no-raw-html case/line/extension gaps, <iframe/<svelte:element/DOMParser; contrast pairs hand-written (T10-14 add pairs they use); npm_ages aliased names; dead buttons until T10/T11; no compile_error for e2e in release.
+Task 9 review: minor (deferred): EventView ids never drawn (T12); identity NewKey when header unreadable; preview() tidy-ups; q.id as u32; bless deletes all *.ts in web/shared/types; openBytes Array.from (T10 cuts first); call_what wrapper; setup missing names cryptic (T11).
+Task 10 review: minor (deferred): words(e) shows Tauri's own refusal strings as-is; initialPreview vs drop answer order; args_os().nth(1) takes a flag as a path (T11); Setup link dead (T11); not-runnable red banner still says "you will type a sentence first" (T14); opening_makes_no_network_request checks the page only; AppState::show cut and pins 1 MiB limit untested.
+Task 11 review: minor (deferred): no Start over when look has trouble; key copies not wiped / CredReadW failure shown as no key; CHECK_WORDS versions hard-coded; unterminated ESC [ drops rest of line.
+Task 12 review: minor (deferred): Stop/Close questions lack aria-describedby and Escape = Keep running; role=log announces every row; rows found by linear search; pin written before marker/runner start; run id per second+pid can repeat within a second; real-window close-asked path and Stop during Preparing untested in the real window.
+Task 13 review: minor (deferred): fixed .part name can replace a receiver's file of that name; no Rust guard against two Save dialogs, dialog on a Tauri worker thread (Task 15 checks the real dialog); page keeps some fixed words and the check-to-colour map, refusal shown twice; live regions inserted already filled, no focus to the title; no line-length cap in the saved file; "[goes to …]"/"[U+…]" can be imitated inside a "| " line; weak tests (include_str search, fixed path, PrepareError edges, prepare path of the switch, real save_report); lossy UTF-16 path conversion.
+Task 14 review: minor (deferred): settled() ignores digit-only and colour changes (proof texts cover the pictures); Tab stays inside an open question so only its controls are ring-checked there; clipped() misses text behind a sideways scroll bar; every output box is named "What it printed"; request check compares by prefix (port 41800 would pass); scrolled read once before the mouse moves; the 25 identical command findings could be grouped; ask-withdrawn scenario keeps running after "the run was stopping".
+Task 15: minor (deferred): the changed-files list shows git's porcelain mark '??' (untracked) before each path, which a receiver cannot read (runner's list, phase 3 format).
+Task 15 review: minor (deferred): S3 state says Off while Steplet's OpenWithProgids value and program entry stay when another program took the type; S4 no test for a turn_on that fails midway; S6 no 401-without-Result case (the stream never emits ApiError without its Result); S5 a run with two Results is not handled specially (not seen); e2e_place reads STEPLET_SAVE_TO in every build (returns None outside e2e); has_value is pub for the tests.
+Final: re-graded: (1) Important stands (a receiver's double-click opens a second window, S9; its Setup can destroy the first window's run); (3) Important stands, narrowed to the words (Setup's On says nothing of the box, so a receiver who double-clicks is stuck); (2), (4), (5) rulings below; (6) to (9) minor (deferred); (10) no change needed (never added to git).
+Final: minor (deferred): (6) a tripwire that fires after the receiver's Stop is recorded as its command's 'Ran without asking Steplet' row, but the report's ending still says 'Interrupted by you'.
+Final: minor (deferred): (7) the sender is pinned before the run's marker is written; if that write fails the run never starts but the pin already changed.
+Final: minor (deferred): (8) turning the switch off deletes a 'Steplet.File' entry without checking that Steplet made it.
+Final: minor (deferred): (9) the 'here.pins-unreadable' finding's detail keeps Windows' raw '(os error N)' instead of going through windows_says.
+```

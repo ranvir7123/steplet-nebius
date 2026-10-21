@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use steplet_run::setup::{self as run_setup, LINUX, State};
+use steplet_run::{RunError, RunLock};
 
 use crate::key;
 use crate::register;
@@ -102,13 +103,15 @@ pub fn ready_for_run(state: &State) -> Result<crate::session::Ready, String> {
     })
 }
 
-/// One install or removal of Steplet's Linux at a time. The mark that one is going on is cleared however the work
-/// ends, a crash of the work included, so a crash never blocks the next try.
+/// One install or removal of Steplet's Linux at a time, and never while a file runs: each double-clicked file opens
+/// in a Steplet program of its own (S9), so the work also holds Windows' one-run lock, which every window's run takes.
+/// The mark that one is going on is cleared however the work ends, a crash of the work included, so a crash never
+/// blocks the next try.
 #[derive(Debug, Default)]
 pub struct OneAtATime(AtomicBool);
 
 impl OneAtATime {
-    /// Runs `work`, or refuses at once while another one runs.
+    /// Runs `work`, or refuses at once while another one runs, here or in another window, or a file runs.
     pub fn run<T>(&self, work: impl FnOnce() -> Result<T, FailureView>) -> Result<T, FailureView> {
         if self.0.swap(true, Ordering::SeqCst) {
             return Err(views::failure("Steplet is already changing its Linux. Wait for that to finish.", None));
@@ -120,6 +123,17 @@ impl OneAtATime {
             }
         }
         let _clear = Clear(&self.0);
+        let _no_run = RunLock::take().map_err(|e| match e {
+            RunError::Lock(why) => views::failure(
+                &format!(
+                    "Windows would not let Steplet make sure that no file runs while it changes its Linux, so \
+                     nothing changed. {}",
+                    views::windows_says(why)
+                ),
+                None,
+            ),
+            _ => views::failure(views::ANOTHER_WINDOW, None),
+        })?;
         work()
     }
 }

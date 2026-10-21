@@ -352,11 +352,18 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "chooser-ready-15-sites": { shows: ["docs-15.example.org"] },
   "chooser-needs-setup": { shows: ["Steplet's own Linux or your key is not ready yet."] },
   "chooser-wsl-missing": { shows: ["Steplet's own Linux or your key is not ready yet."] },
-  "setup-nothing-done": { shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux"] },
+  "setup-nothing-done": {
+    shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux"],
+    hides: [/^Windows may still ask which app to use/],
+  },
   "setup-wsl-missing": { shows: ["wsl --install --no-distribution"] },
   "setup-wsl-too-old": { shows: ["wsl --update"] },
   "setup-could-not-look": { shows: [/^Steplet could not look at its own Linux/] },
-  "setup-all-ready": { shows: [/^Its tools are there/, "Saved"], hides: [/^Missing$/] },
+  // With the switch on, Setup says what to do if Windows' "Select an app" box leaves Steplet out (Task 15, final review).
+  "setup-all-ready": {
+    shows: [/^Its tools are there/, "Saved", /^Windows may still ask which app to use the first time/],
+    hides: [/^Missing$/],
+  },
   "setup-key-saved": { shows: [/^Missing in Steplet's Linux: Claude Code/, "Saved"] },
   "setup-switch-broken": { shows: [/Windows' setting for it is out of date/] },
   "setup-installing": { shows: ["Steplet is changing its Linux. This can take several minutes…"] },

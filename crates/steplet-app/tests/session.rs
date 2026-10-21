@@ -11,7 +11,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use steplet_app::pins::{self, Pins};
 use steplet_app::session::{DiscardFn, Places, Ready, RunFn, Screen, Session};
-use steplet_app::views::{ProgressView, RED_SENTENCE};
+use steplet_app::views::{ANOTHER_WINDOW, ProgressView, RED_SENTENCE};
 use steplet_core::policy::Policy;
 use steplet_run::{
     ApiKey, Asker, GateAnswer, GateRequest, Live, Report, RunError, RunLock, RunOutcome, RunPaths, RunRequest,
@@ -217,7 +217,7 @@ fn run_is_refused_while_another_window_runs() {
     let raw = read("examples/run-tests.steplet");
     let _other_window = RunLock::take().expect("no run here yet");
     let refused = session(quick(), NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
-    assert_eq!(refused, Err("Another Steplet window is running a file. Finish or stop it first.".to_string()));
+    assert_eq!(refused, Err(ANOTHER_WINDOW.to_string()));
 }
 
 #[test]
@@ -368,7 +368,7 @@ fn a_run_that_cannot_start_says_why_in_words() {
     wait_until("the run's end", || screen.ended());
     let sent = screen.sent.lock().unwrap();
     let Some(ProgressView::Failed { failure, .. }) = sent.last() else { panic!("{sent:?}") };
-    assert_eq!(failure.reason, "Another Steplet window is running a file. Finish or stop it first.");
+    assert_eq!(failure.reason, ANOTHER_WINDOW);
     assert!(!failure.reason.contains("Busy") && !failure.reason.contains('{'), "words, not code");
 }
 

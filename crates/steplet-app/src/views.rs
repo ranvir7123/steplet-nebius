@@ -235,6 +235,11 @@ pub const RED_SENTENCE: &str = "I understand the risks and want to run this file
 /// Why a file with no repository cannot run (in Steplet's words only).
 pub const NO_REPOSITORY: &str = "This file names no repository, so Steplet has nothing to fetch and run.";
 
+/// Why a run, or a change to Steplet's Linux in Setup, cannot start now: another Steplet window holds the one-run
+/// lock for one of the two.
+pub const ANOTHER_WINDOW: &str =
+    "Another Steplet window is running a file or setting up Steplet's Linux. Wait until it has finished.";
+
 /// Why a file whose repository is on another host cannot run (H9). It names Steplet's own list and never the file's
 /// host: that is file text, shown in the file's own panel.
 pub fn not_fetched_from_here() -> String {
@@ -939,9 +944,7 @@ pub fn run_failure(e: &RunError) -> (String, FailureView) {
             };
             (stage, f)
         }
-        RunError::Busy => {
-            (starting, failure("Another Steplet window is running a file. Finish or stop it first.", None))
-        }
+        RunError::Busy => (starting, failure(ANOTHER_WINDOW, None)),
         RunError::Lock(why) => (
             starting,
             failure(
