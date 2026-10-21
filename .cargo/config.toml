@@ -1,0 +1,3 @@
+# The attack suite's one command (phase 5): `cargo suite list | scripted | live`. Offline, like every cargo command here.
+[alias]
+suite = "run -p steplet-suite --offline --"

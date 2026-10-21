@@ -156,6 +156,68 @@ pub fn listener(distro: &str, port: u16, log: &str) -> Helper {
     }
 }
 
+/// Ends a test whose case could not even start (no network, a helper that did not start): the attack suite (phase 5)
+/// shows its case as "did not run", never as blocked, and does not pass. The line it prints is the one the suite reads.
+pub fn did_not_run(why: &str) -> ! {
+    println!("suite: did not run: {why}");
+    panic!("did not run: {why}")
+}
+
+/// Steplet's one-run lock, for a test on Steplet's Linux that does not go through `run` (which takes it itself), so it
+/// never empties `/work` under a Steplet window's run or another test's. While someone else holds it, the test did not
+/// run.
+pub fn hold_linux() -> steplet_run::RunLock {
+    match steplet_run::RunLock::take() {
+        Ok(lock) => lock,
+        Err(steplet_run::RunError::Busy) => did_not_run("Steplet's Linux is in use by another run"),
+        Err(e) => panic!("Steplet's one-run lock: {e:?}"),
+    }
+}
+
+/// What a case left in Steplet's Linux, for the attack suite's look after each case (phase 5), one line each: `left
+/// <path>` for anything in `/work`, the runs folder or the per-run gate copies, anything in Steplet's own folder but its
+/// runs folder, and `steplet-*` in `/tmp` and `/var/tmp`; `test-file <path>` for each file of `/opt/steplet-test` (most
+/// are these helpers, kept on purpose); `program <pid> <command>` for anything the steplet account runs, and any
+/// listener or scripted model still running; `marker <path>` for any file holding a marker's word. Changes nothing.
+pub fn after_case_look(distro: &str) -> String {
+    root_sh(
+        distro,
+        "find /work /var/lib/steplet/runs /opt/steplet/gate/runs -mindepth 1 -maxdepth 1 -printf 'left %p\\n' 2> /dev/null
+find /var/lib/steplet -mindepth 1 -maxdepth 1 ! -name runs -printf 'left %p\\n'
+find /tmp /var/tmp -mindepth 1 -maxdepth 1 -name 'steplet-*' -printf 'left %p\\n'
+find /opt/steplet-test -mindepth 1 -maxdepth 1 -printf 'test-file %p\\n' 2> /dev/null
+pgrep -a -u steplet | sed 's/^/program /'
+pgrep -a -f 'listener[.]py|fake_model[.]py' | sed 's/^/program /'
+grep -rlsF -- steplet-marker- /var/lib/steplet /tmp /var/tmp /work /home | sed 's/^/marker /'
+true",
+    )
+}
+
+/// A marker (phase 5): a small file root puts in Steplet's Linux, holding a made-up word, readable by the steplet
+/// account, so a test can tell whether anything read or changed it. Removed when dropped, whether the test passed or
+/// failed.
+pub struct Marker {
+    pub path: String,
+    pub word: String,
+    distro: String,
+}
+
+impl Drop for Marker {
+    fn drop(&mut self) {
+        let _ = wsl::run(&self.distro, "root", &["/usr/bin/rm", "-f", "--", &self.path], b"");
+    }
+}
+
+/// Puts a marker holding `word` at `path`. The word is made up and starts with `steplet-marker-`, which is how the
+/// suite's look after a case finds a marker left behind.
+pub fn marker(distro: &str, path: &str, word: &str) -> Marker {
+    let made_up =
+        word.strip_prefix("steplet-marker-").is_some_and(|w| w.bytes().all(|b| b.is_ascii_lowercase() || b == b'-'));
+    assert!(made_up, "a marker holds a made-up word starting with steplet-marker-: {word:?}");
+    install(distro, format!("{word}\n").as_bytes(), path, "644");
+    Marker { path: path.into(), word: word.into(), distro: distro.into() }
+}
+
 /// The scripted model, inside Steplet's Linux as root on `127.0.0.1:<port>`, following `script` (JSON).
 pub fn scripted_model(distro: &str, name: &str, script: &str, port: u16) -> Helper {
     install(distro, include_bytes!("fake_model.py"), "/opt/steplet-test/fake_model.py", "644");

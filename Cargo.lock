@@ -3182,6 +3182,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "steplet-suite"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "steplet-core",
+ "steplet-run",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "steplet-wasm"
 version = "0.1.0"
 dependencies = [

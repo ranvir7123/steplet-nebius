@@ -1,0 +1,16 @@
+[package]
+name = "steplet-suite"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+# Test-only: never shipped, and no part of the app depends on it.
+publish.workspace = true
+
+[dependencies]
+steplet-run = { path = "../steplet-run" }
+# For the runner's helpers shared from steplet-run's tests (`#[path]`): the scripted model checks the key's SHA-256.
+sha2 = "=0.10.9"
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+
+[dev-dependencies]
+steplet-core = { path = "../steplet-core" }
