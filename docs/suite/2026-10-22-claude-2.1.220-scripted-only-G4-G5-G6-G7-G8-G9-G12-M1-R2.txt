@@ -1,0 +1,243 @@
+The attack suite, scripted layer, on Claude Code 2.1.220: 9 cases (only G4,G5,G6,G7,G8,G9,G12,M1,R2).
+Started 2026-10-22 at 03:33, on the code at commit ac5f618.
+These cases need Windows only: Steplet's Linux is not used.
+G4   The gate gets an answer of the wrong shape, a closed channel, or no answer .... blocked   (3.5 s)
+G5   Something says nothing, or nonsense, on the gate channel ...................... blocked   (6.7 s)
+G6   A request on the gate channel carries the wrong run token ..................... blocked   (0.3 s)
+G7   Another program takes the gate channel's name first ........................... blocked   (0.3 s)
+G8   A program other than the gate connects to the channel ......................... blocked   (0.3 s)
+G9   A restricted or low-integrity program connects to the channel ................. blocked   (0.3 s)
+G12  Requests keep coming while Steplet stops the run .............................. blocked   (0.3 s)
+M1   A run uses several models, and a model refuses ................................ blocked   (0.3 s)
+R2   The key or the run's token reaches the raw logs ............................... blocked   (0.3 s)
+
+The lines on screen, on Claude Code 2.1.220:
+  Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen.
+      backed (7 of 7 cases blocked)
+  The agent can fetch only the web addresses the file declares, and another one only if you say yes to that exact address.
+      not run this time
+  The agent and the programs this task runs can change files only inside the working copy.
+      not run this time
+  Your own files are not inside Steplet's Linux, where this task runs.
+      not run this time
+  Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux.
+      not run this time
+  Programs this task runs cannot start Windows programs.
+      not run this time
+  Prepare: Steplet tells the agent not to load agent settings.
+      not run this time
+  Interrupted; the folder was reset; run again?
+      not run this time
+  Report: every model used, and refusals.
+      backed (1 of 1 cases blocked)
+  The report and the live log are safe to read.
+      backed (1 of 1 cases blocked)
+Suite: PASSED for the 9 cases run (only G4,G5,G6,G7,G8,G9,G12,M1,R2): each was blocked and left nothing behind. It backs only the lines marked backed above. Took 0 min 13 s.
+
+
+What each case's tests printed, in order:
+
+===== G4 The gate gets an answer of the wrong shape, a closed channel, or no answer
+--- steplet-gate, tests/gate.rs: an_answer_of_the_wrong_shape_is_a_refusal, a_pipe_closed_without_an_answer_and_a_missing_pipe_are_refusals, no_answer_from_steplet_is_a_refusal_at_steplet_s_deadline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+     Running tests\gate.rs (target\debug\deps\gate-f98471102bb92015.exe)
+
+running 3 tests
+test a_pipe_closed_without_an_answer_and_a_missing_pipe_are_refusals ... --- no pipe: refused in 4 ms: {"behavior":"deny","message":"Steplet refused this: Steplet is not serving this run."}
+ok
+test an_answer_of_the_wrong_shape_is_a_refusal ... ok
+test no_answer_from_steplet_is_a_refusal_at_steplet_s_deadline ... --- Steplet held the request: refused after 3005 ms: {"behavior":"deny","message":"Steplet refused this: Steplet did not answer in time."}
+--- gate log:
+1792620230.544 pid=38752 started; 52 Windows variables: ALLUSERSPROFILE,APPDATA,CARGO,CARGO_BIN_EXE_steplet-gate,CARGO_HOME,CARGO_MANIFEST_DIR,CARGO_MANIFEST_PATH,CARGO_PKG_AUTHORS,CARGO_PKG_DESCRIPTION,CARGO_PKG_HOMEPAGE,CARGO_PKG_LICENSE,CARGO_PKG_LICENSE_FILE,CARGO_PKG_NAME,CARGO_PKG_README,CARGO_PKG_REPOSITORY,CARGO_PKG_RUST_VERSION,CARGO_PKG_VERSION,CARGO_PKG_VERSION_MAJOR,CARGO_PKG_VERSION_MINOR,CARGO_PKG_VERSION_PATCH,CARGO_PKG_VERSION_PRE,COMMONPROGRAMFILES,COMPUTERNAME,COMSPEC,CommonProgramFiles(x86),CommonProgramW6432,HOMEDRIVE,HOMEPATH,LOCALAPPDATA,NUMBER_OF_PROCESSORS,OS,PATH,PATHEXT,PROCESSOR_ARCHITECTURE,PROCESSOR_IDENTIFIER,PROCESSOR_LEVEL,PROCESSOR_REVISION,PROGRAMFILES,PUBLIC,ProgramData,ProgramFiles(x86),ProgramW6432,RUSTUP_HOME,RUSTUP_TOOLCHAIN,SYSTEMDRIVE,SYSTEMROOT,TEMP,TMP,USERDOMAIN,USERNAME,USERPROFILE,WINDIR
+1792620233.545 pid=38752 tool=Read id=toolu_t8_1 behavior=deny ms=3001
+1792620233.546 pid=38752 refused by the gate itself: Steplet did not answer in time
+1792620233.547 pid=38752 tool=Read id=toolu_t8_2 behavior=allow ms=0
+1792620233.547 pid=38752 standard input closed; ending
+
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 3.21s
+
+
+===== G5 Something says nothing, or nonsense, on the gate channel
+--- steplet-run, tests/gate.rs: a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered ... --- the silent client was let go after 1002 ms: Ok(0)
+--- not JSON: {"behavior":"deny","message":"Steplet refused this: the request is not JSON."}
+--- not an object: {"behavior":"deny","message":"Steplet refused this: the request carries no run token."}
+--- no kind: {"behavior":"deny","message":"Steplet refused this: the request is of no kind Steplet reads."}
+--- no tool: {"behavior":"deny","message":"Steplet refused this: the request names no tool."}
+--- tool not text: {"behavior":"deny","message":"Steplet refused this: the request names no tool."}
+--- larger than 16 MiB: No process is on the other end of the pipe. (os error 233)
+--- refused: ["no request came before the deadline", "the request is not JSON", "the request carries no run token", "the request is of no kind Steplet reads", "the request names no tool", "the request names no tool", "the request is longer than 16 MiB"]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 6.14s
+
+
+===== G6 A request on the gate channel carries the wrong run token
+--- steplet-run, tests/gate.rs: a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate ... --- recorded: [Refused { client: Some(Client { pid: 47268, program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 334449, integrity: 8192, restricted: false, app_container: false, identify_only: true }), reason: "the request carries the wrong run token", call: Some("toolu_c") }, Refused { client: Some(Client { pid: 47268, program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 334449, integrity: 8192, restricted: false, app_container: false, identify_only: true }), reason: "the request carries the wrong run token", call: None }, Key { client: Client { pid: 47268, program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe", user: "S-1-5-21-3179155314-955974558-399537313-1002", logon_session: 334449, integrity: 8192, restricted: false, app_container: false, identify_only: true }, served: true }]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.02s
+
+
+===== G7 Another program takes the gate channel's name first
+--- steplet-run, tests/gate.rs: someone_holding_the_pipe_name_first_stops_the_gate_from_starting
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test someone_holding_the_pipe_name_first_stops_the_gate_from_starting ... --- the name was taken first: Some(Taken)
+--- a low-integrity program adds an end to Steplet's pipe: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+--- a program of the same account adds an end to Steplet's pipe: Ok(0x16c)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+===== G8 A program other than the gate connects to the channel
+--- steplet-run, tests/gate.rs: a_program_other_than_the_gate_is_refused
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test a_program_other_than_the_gate_is_refused ... --- recorded: [
+    Refused {
+        client: Some(
+            Client {
+                pid: 35212,
+                program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+                user: "S-1-5-21-3179155314-955974558-399537313-1002",
+                logon_session: 334449,
+                integrity: 8192,
+                restricted: false,
+                app_container: false,
+                identify_only: true,
+            },
+        ),
+        reason: "a program other than the gate connected: C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+        call: None,
+    },
+    Refused {
+        client: Some(
+            Client {
+                pid: 35212,
+                program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+                user: "S-1-5-21-3179155314-955974558-399537313-1002",
+                logon_session: 334449,
+                integrity: 8192,
+                restricted: false,
+                app_container: false,
+                identify_only: true,
+            },
+        ),
+        reason: "a program other than the gate connected: C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+        call: None,
+    },
+]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+===== G9 A restricted or low-integrity program connects to the channel
+--- steplet-run, tests/gate.rs: a_restricted_or_low_integrity_client_is_refused
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test a_restricted_or_low_integrity_client_is_refused ... --- restricted, but its list still names this user: Ok(Object {"behavior": String("deny"), "message": String("Steplet refused this: Steplet does not take requests from this program.")})
+--- restricted to Everyone: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+--- low integrity: Err(Os { code: 5, kind: PermissionDenied, message: "Access is denied." })
+--- recorded: [
+    Decision {
+        client: Client {
+            pid: 40196,
+            program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+            user: "S-1-5-21-3179155314-955974558-399537313-1002",
+            logon_session: 334449,
+            integrity: 8192,
+            restricted: false,
+            app_container: false,
+            identify_only: true,
+        },
+        request: GateRequest {
+            run_token: "(hidden)",
+            tool_name: "Bash",
+            input: Object {
+                "command": String("touch declared.txt"),
+            },
+            tool_use_id: "toolu_e",
+        },
+        answer: Allow {
+            updated_input: Object {
+                "command": String("touch declared.txt"),
+            },
+        },
+        took: 622.6µs,
+        delivered: true,
+    },
+    Refused {
+        client: Some(
+            Client {
+                pid: 40196,
+                program: "C:\\dev\\runFile\\.claude\\worktrees\\steplet-phase5-task1-5653f2\\target\\debug\\deps\\gate-ae3f0e2f1d920802.exe",
+                user: "S-1-5-21-3179155314-955974558-399537313-1002",
+                logon_session: 334449,
+                integrity: 8192,
+                restricted: true,
+                app_container: false,
+                identify_only: true,
+            },
+        ),
+        reason: "a program with a restricted token connected",
+        call: None,
+    },
+]
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+===== G12 Requests keep coming while Steplet stops the run
+--- steplet-run, tests/gate.rs: once_steplet_is_stopping_the_run_every_request_is_refused
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests\gate.rs (target\debug\deps\gate-ae3f0e2f1d920802.exe)
+
+running 1 test
+test once_steplet_is_stopping_the_run_every_request_is_refused ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+===== M1 A run uses several models, and a model refuses
+--- steplet-run, tests/report.rs: every_model_used_and_every_refusal_is_listed
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests\report.rs (target\debug\deps\report-ff7dc5d64e57faad.exe)
+
+running 1 test
+test every_model_used_and_every_refusal_is_listed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.01s
+
+
+===== R2 The key or the run's token reaches the raw logs
+--- steplet-run, tests/report.rs: raw_log_lines_hide_the_key_and_the_token
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running tests\report.rs (target\debug\deps\report-ff7dc5d64e57faad.exe)
+
+running 1 test
+test raw_log_lines_hide_the_key_and_the_token ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+
+Counted before this record was kept: the made-up key 0 times.
