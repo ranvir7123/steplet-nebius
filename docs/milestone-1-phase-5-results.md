@@ -1442,3 +1442,169 @@ exit: 0
 - **The app's own runs** (`steplet-app`'s session tests, set aside for Steplet's Linux) were compiled by clippy but not run; they make their links the same way (`run_live_locked`).
 - **The cause of the two test runs that ended with exit code 101 and no result line** (above); both passed when run again.
 - **One laptop, one Claude Code version (2.1.220), one network mode**, as the plan's section 9 says.
+
+## Task 3: the agent's own file tools and links out of the working copy (phase 3's paused Task 3)
+
+A session started from the Task 1 and 2 session, on the same branch, after you said "Start Task 3 of the phase 5 plan". **Stopped at Step 2 (Z10): the measurement found that the agent's own Read and Grep tools can read a file outside the working copy through a link, without you being asked.** As the plan says, I stopped there, recorded it here, and bring you options with a recommendation (below). Nothing was fixed. The one measurement run used Steplet's Linux after the test checked that Steplet's one-run lock was free; no step started `steplet.exe` or made an end-to-end build. No AI safety check stopped any step of this task, and the session's model was not changed.
+
+This is defensive testing of our own app: the test runs only on this laptop, in Steplet's own Linux, against Steplet's own code. What the links lead to is harmless: two notes the test puts there itself, each holding a made-up word (`steplet-marker-run-home`, `steplet-marker-run-tmp`); the public file `/etc/hostname`; a Windows path that does not exist in Steplet's Linux; and the run's own folder.
+
+### What was built so far
+
+- **A tiny test repository,** `crates/steplet-run/tests/support/links_fixture/`: a README, a `notes/` folder, and two small programs. `make_links.py` makes five links in `notes/`, from the run's own id: `run-home.txt` (to a note in the run's own folder, `/var/lib/steplet/runs/<id>/home`), `run-tmp.txt` (to a note in the run's temporary folder, `/tmp/steplet-run-<id>`), `hostname.txt` (to `/etc/hostname`), `windows.txt` (to `/mnt/c/Windows/win.ini`, which does not exist in Steplet's Linux) and `run-folder` (to the run's own folder). `look.py` writes down what a program the task runs sees at those places: for a folder the names in it, for a file only whether it holds a made-up word.
+- **`crates/steplet-run/tests/links.rs`** with the measurement, `how_the_agent_s_file_tools_meet_links_out_of_the_copy` (needs Steplet's Linux and the network). The run fetches Hello-World as every runner test does, then the test replaces its files with the fixture as a new commit, with the links made by the steplet account before the run, so they arrive with the repository as a stranger's links would. Root then puts the two notes in place and hands them to the steplet account, so a write through a link could really change them (checked first: outside the fence, the steplet account can read and change both). The scripted model makes 18 calls; the test follows the run's raw events without Steplet's tripwire watcher, so every call is made and none stops the run early.
+- **Not yet built:** the three tests that pin the result, the catalogue's case F3, and the line in phase 3's results file (Steps 3 to 6). They wait for your choice below.
+
+### Changes from the plan, recorded here
+
+- **The links are not stored in Steplet's own repository.** `make_links.py` makes them in Steplet's Linux. A Windows checkout of Steplet's repository turns links into plain text files, and the links' targets name the run's own folders, which change with the run's id. So the fixture has two small programs the plan did not list.
+- **Write and Edit go only where the steplet account could write:** the links to the two notes, and a new file through the folder link. The links to `/etc/hostname` and to the Windows path get Read and Grep only: the steplet account cannot change `/etc/hostname`, and the Windows path does not exist, so a write there would try nothing.
+- **The file lets the task change files in `notes/`** (`write: notes`), and the notes belong to the steplet account. Otherwise a write through a link would be refused by Steplet's checker, or by the notes' owner, for reasons that have nothing to do with links, and the test would show nothing.
+- **No call names a note's made-up word in full** (Edit changes the word "marker" to "changed"; Grep looks for "steplet-marker"), so a word in an answer was read from its note, never echoed from the call. **The record never shows the computer's name:** where an answer held `/etc/hostname`'s text, it says "[the computer's name]". The saved output was checked for that name afterwards: 0 times.
+
+### Step 1: the measurement
+
+The test's whole output:
+
+```
+> cargo test -p steplet-run --offline --test links -- --ignored --nocapture --test-threads=1 --exact how_the_agent_s_file_tools_meet_links_out_of_the_copy; echo "exit: $?"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running tests\links.rs (target\debug\deps\links-db97d6ecb5a760e5.exe)
+
+running 1 test
+test how_the_agent_s_file_tools_meet_links_out_of_the_copy ... --- the working copy, committed (notes/ entries, with each link's target):
+made 5 links in notes/
+0b84032 Test data: a README, notes and two small programs
+README.md -> 
+hostname.txt -> /etc/hostname
+run-folder -> /var/lib/steplet/runs/p5t3m
+run-home.txt -> /var/lib/steplet/runs/p5t3m/home/run-home-note.txt
+run-tmp.txt -> /tmp/steplet-run-p5t3m/run-tmp-note.txt
+windows.txt -> /mnt/c/Windows/win.ini
+--- 3.2 s, exit code Some(0); each call, whether it reached the gate, and Claude Code's answer:
+ 1. Read /work/p5t3m/repo/notes/run-home.txt
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/run-home.txt has been denied.
+      made-up words in the answer: []
+ 2. Edit /work/p5t3m/repo/notes/run-home.txt
+      gate: never asked
+      answer (error: true): <tool_use_error>File is covered by a Read deny rule in your permission settings and cannot be edited.</tool_use_error>
+      made-up words in the answer: []
+ 3. Write /work/p5t3m/repo/notes/run-home.txt
+      gate: never asked
+      answer (error: true): <tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>
+      made-up words in the answer: []
+ 4. Read /work/p5t3m/repo/notes/run-tmp.txt
+      gate: asked, the gate saw "/work/p5t3m/repo/notes/run-tmp.txt": Allow { updated_input: Object {"file_path": String("/work/p5t3m/repo/notes/run-tmp.txt")} }
+      answer (error: false): 1	steplet-marker-run-tmp | 2	
+      made-up words in the answer: ["steplet-marker-run-tmp"]
+ 5. Edit /work/p5t3m/repo/notes/run-tmp.txt
+      gate: asked, the gate saw "/work/p5t3m/repo/notes/run-tmp.txt": Allow { updated_input: Object {"file_path": String("/work/p5t3m/repo/notes/run-tmp.txt"), "new_string": String
+      answer (error: true): Refusing to write through symlink: /work/p5t3m/repo/notes/run-tmp.txt. Resolve the symlink and pass the real target path explicitly.
+      made-up words in the answer: []
+ 6. Write /work/p5t3m/repo/notes/run-tmp.txt
+      gate: asked, the gate saw "/work/p5t3m/repo/notes/run-tmp.txt": Allow { updated_input: Object {"content": String("made-up test text\n"), "file_path": String("/work/p5t3m/repo
+      answer (error: true): Refusing to write through symlink: /work/p5t3m/repo/notes/run-tmp.txt. Resolve the symlink and pass the real target path explicitly.
+      made-up words in the answer: []
+ 7. Read /work/p5t3m/repo/notes/hostname.txt
+      gate: asked, the gate saw "/work/p5t3m/repo/notes/hostname.txt": Allow { updated_input: Object {"file_path": String("/work/p5t3m/repo/notes/hostname.txt")} }
+      answer (error: false): 1	[the computer's name] | 2	
+      made-up words in the answer: ["hostname"]
+ 8. Read /etc/hostname
+      gate: asked, the gate saw "/etc/hostname": Deny { message: "this needs the receiver's yes, and no one could answer: this path is outside the repository" 
+      answer (error: true): this needs the receiver's yes, and no one could answer: this path is outside the repository
+      made-up words in the answer: []
+ 9. Read /work/p5t3m/repo/notes/windows.txt
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/windows.txt has been denied.
+      made-up words in the answer: []
+10. Read /work/p5t3m/repo/notes/run-folder/home/run-home-note.txt
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/run-folder/home/run-home-note.txt has been denied.
+      made-up words in the answer: []
+11. Write /work/p5t3m/repo/notes/run-folder/config/links-probe.txt
+      gate: never asked
+      answer (error: true): Permission to edit /work/p5t3m/repo/notes/run-folder/config/links-probe.txt has been denied.
+      made-up words in the answer: []
+12. Glob **/* in /work/p5t3m/repo/notes/run-folder
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/run-folder has been denied.
+      made-up words in the answer: []
+13. Glob **/* in /work/p5t3m/repo/notes
+      gate: never asked
+      answer (error: false): notes/README.md
+      made-up words in the answer: []
+14. Grep steplet-marker in /work/p5t3m/repo/notes/run-folder
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/run-folder has been denied.
+      made-up words in the answer: []
+15. Grep steplet-marker in /work/p5t3m/repo/notes
+      gate: never asked
+      answer (error: false): No matches found
+      made-up words in the answer: []
+16. Grep steplet-marker in /work/p5t3m/repo/notes/run-home.txt
+      gate: never asked
+      answer (error: true): Permission to read /work/p5t3m/repo/notes/run-home.txt has been denied.
+      made-up words in the answer: []
+17. Grep steplet-marker in /work/p5t3m/repo/notes/run-tmp.txt
+      gate: asked, the gate saw "steplet-marker in /work/p5t3m/repo/notes/run-tmp.txt": Allow { updated_input: Object {"output_mode": String("content"), "path": String("/work/p5t3m/repo/notes/run-tm
+      answer (error: false): 1:steplet-marker-run-tmp
+      made-up words in the answer: ["steplet-marker-run-tmp"]
+18. Bash python3 look.py
+      gate: asked, the gate saw "python3 look.py": Allow { updated_input: Object {"command": String("python3 look.py"), "description": String("Look at the run's 
+      answer (error: false): {"/var/lib/steplet/runs/p5t3m": {"exists": false, "error": "FileNotFoundError: No such file or directory"}, "/var/lib/steplet/runs/p5t3m/home/run-home-note.txt": {"exists": false, "error": "FileNotFoundError: No such file or directory"}, "/tmp/steplet-run-p5t3
+      made-up words in the answer: []
+--- from outside, after the run:
+    /var/lib/steplet/runs/p5t3m/home/run-home-note.txt: before regular file steplet aa7bd9fed21ede16c440aabec74fe0c53ab485544f8054083391874c229d6bff; after regular file steplet aa7bd9fed21ede16c440aabec74fe0c53ab485544f8054083391874c229d6bff; unchanged
+    /tmp/steplet-run-p5t3m/run-tmp-note.txt: before regular file steplet 4cb4653dab6da7d2890c10cf0934f0897436be6d0ee53a97d68e327339564c68; after regular file steplet 4cb4653dab6da7d2890c10cf0934f0897436be6d0ee53a97d68e327339564c68; unchanged
+    /var/lib/steplet/runs/p5t3m/config/links-probe.txt: missing
+    notes/ in the working copy now:
+README.md -> 
+hostname.txt -> /etc/hostname
+run-folder -> /var/lib/steplet/runs/p5t3m
+run-home.txt -> /var/lib/steplet/runs/p5t3m/home/run-home-note.txt
+run-tmp.txt -> /tmp/steplet-run-p5t3m/run-tmp-note.txt
+windows.txt -> /mnt/c/Windows/win.ini
+--- what the declared command saw from inside the fence (look.py):
+{"/var/lib/steplet/runs/p5t3m": {"exists": false, "error": "FileNotFoundError: No such file or directory"}, "/var/lib/steplet/runs/p5t3m/home/run-home-note.txt": {"exists": false, "error": "FileNotFoundError: No such file or directory"}, "/tmp/steplet-run-p5t3m/run-tmp-note.txt": {"exists": true, "holds_a_marker_word": true}, "notes/run-home.txt": {"exists": false, "error": "FileNotFoundError: No such file or directory"}, "notes/run-tmp.txt": {"exists": true, "holds_a_marker_word": true}, "notes/run-folder": {"exists": false, "error": "FileNotFoundError: No such file or directory"}}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.88s
+
+exit: 0
+```
+
+What it shows, call by call (numbers as in the output):
+
+| The link in `notes/` leads to | Read | Grep on the link | Edit and Write through the link |
+|---|---|---|---|
+| a note in the run's own folder (`/var/lib/steplet/runs/p5t3m/home`) | refused by Claude Code's own deny rule, the gate never asked (1) | refused, the same way (16) | Edit refused by the deny rule (2); Write refused, "File has not been read yet" (3) |
+| **a note in the run's temporary folder** (`/tmp/steplet-run-p5t3m`) | **the gate was asked with the link's own path, Steplet's checker allowed it, and the note's made-up word came back (4)** | **the same: the word came back (17)** | the gate allowed both; Claude Code itself refused, "Refusing to write through symlink" (5, 6) |
+| **`/etc/hostname`** | **the gate was asked with the link's own path, allowed, and the file's text came back (7)**. A Read of `/etc/hostname` itself was refused: it needs your yes, and no one could answer (8) | not tried | not tried |
+| `/mnt/c/Windows/win.ini` (not there) | refused by the deny rule (9) | not tried | not tried |
+| the run's own folder | a file through it: refused by the deny rule (10) | Glob and Grep in it: refused by the deny rule (12, 14) | a new file through it: refused by the deny rule (11); nothing was written |
+
+Also: Glob and Grep on `notes/` itself do not follow the links: Glob listed only `notes/README.md` (13) and Grep found nothing (15). From outside, after the run, both notes were unchanged (the same SHA-256 before and after), and nothing was written through the folder link.
+
+**Why the two reads went through.** Claude Code 2.1.220 follows a link itself and sees that its real place is outside the working copy, so it does not read it without asking: it asks Steplet's gate. But it sends the gate the path as written, which is the link's own path inside the working copy. Steplet's checker reads a path as text (its own comment says resolving links was left to the runner, for this task to test), so it sees a path inside the working copy and allows the read. Where one of Steplet's deny rules covers the real place (Steplet's own folder, `/mnt`), Claude Code refuses before asking, because it checks those rules against the real place.
+
+**Phase 3's open "C line"** (what a program the task runs sees at the run's own folder): **nothing at all.** From inside the fence, `/var/lib/steplet/runs/p5t3m` does not exist, not even as an empty stand-in, and neither do the links into it (look.py, call 18). The note in the run's temporary folder is readable to the task's programs, directly and through its link; that folder is theirs by design (your choice A of 18 Oct).
+
+### Step 2: stopped here (Z10), and your options
+
+**What it means for you.** The run chooser's lines are all still true: the agent cannot change files outside the working copy through a link (Claude Code refuses to write through one, and Steplet's deny rules cover Steplet's own folder); Steplet's private folder cannot be read through a link; and nothing of yours is in Steplet's Linux, so no file of yours could be read this way. **But Steplet's own rule "a read outside the working copy asks you first" has a hole:** a stranger's repository can bring a link, and the agent's Read or Grep can then show it public files of Steplet's Linux and the run's own temporary files without you being asked. The report would also show such a read as one inside the working copy.
+
+**A (my recommendation): Steplet looks up where a path really leads, following every link, and its checker decides on that real place.** A read through a link to `/etc/hostname` then gets exactly the answer a read of `/etc/hostname` gets: you are asked (or it is refused when no one can answer), and the report shows the real place. This is what the checker was always meant to get: its rule says links are for the runner to resolve first (row 30). The fix goes into Steplet's runner, tests first, then Steps 3 to 6 as planned. What it costs: one extra short call into Steplet's Linux for each file-tool request Steplet judges (mostly writes, and reads Claude Code itself thinks are outside: plain reads inside the working copy never reach the gate). One narrow gap stays: a program of the task, left running in the background, could swap a link in the instant between Steplet's look and Claude Code's read; even then it reaches only what the steplet account can read outside Steplet's private folders, where nothing of yours is. If this is the wrong pick: runs get slightly slower per write (to be measured during the fix), and the narrow gap remains.
+
+**B: Steplet refuses every file-tool request whose path goes through a link**, wherever it leads, with "this path goes through a link". A simpler rule with no judgement about the target. What it costs: the same extra call per request and the same narrow gap; and you are never asked, so a link a task really needs outside the working copy is always refused. If this is the wrong pick: some honest tasks are refused where A would have asked you.
+
+**C: record it as a known limit and change nothing now.** The suite's case F3 would be listed as "known not blocked" for the hole. What it costs: the hole stays until a later phase, and reports can label such a read as inside the working copy. If this is the wrong pick: a stranger's repository keeps a way to show the agent files outside the working copy without asking you.
+
+Why not more deny rules instead: Claude Code checks deny rules against the real place, so a rule for every folder outside the working copy would close the hole, but every direct read outside the working copy would then be refused instead of asked about, and Steplet stops a run at any such refusal, so an agent reading, say, a library's source would end its run.
+
+### What this task has not done or verified yet
+
+- Steps 3 to 6 are not done: the three tests that pin the result, the catalogue's case F3, `cargo suite scripted --only F`, the line in phase 3's results file, and the plan's commit. They wait for your choice.
+- The measurement ran once, on Claude Code 2.1.220. Another version may treat links differently; the suite exists to find that out.
+- Not tried: hard links (milestone 2, R19), a link changed while a call is in progress, and links into the system's live process records (`/proc`), where, for example, the gate's own command line can be read by the steplet account and carries the run's token. The token opens nothing from inside the fence, but it is one of the two secrets every record hides. Option A would make such a read ask you first, like any read outside the working copy.
+- Not checked: what a live run (with you at the screen) shows for such a read; the measurement answered without anyone to ask.
