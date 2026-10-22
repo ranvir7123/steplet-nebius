@@ -142,7 +142,12 @@ const fn gate(name: &'static str) -> TestRef {
     TestRef { package: "steplet-gate", program: "gate", name }
 }
 
+const fn app(program: &'static str, name: &'static str) -> TestRef {
+    TestRef { package: "steplet-app", program, name }
+}
+
 const WINDOWS: &[Needs] = &[Needs::Windows];
+const LINUX: &[Needs] = &[Needs::StepletLinux];
 const LINUX_AND_NETWORK: &[Needs] = &[Needs::StepletLinux, Needs::Network];
 
 /// The test of the milestone 0 fixture, which backs five lines: every try it makes is checked from outside.
@@ -208,23 +213,41 @@ pub const CASES: &[Case] = &[
         id: "G7",
         attack: "Another program takes the gate channel's name first",
         lines: &[Line::Checks],
-        tests: &[run("gate", "someone_holding_the_pipe_name_first_stops_the_gate_from_starting")],
+        tests: &[
+            run("gate", "someone_holding_the_pipe_name_first_stops_the_gate_from_starting"),
+            run("gate", "a_run_whose_gate_channel_name_is_taken_does_not_start"),
+            app("views", "a_run_whose_gate_channel_name_is_taken_says_so_in_words"),
+        ],
         layer: Layer::Scripted,
-        needs: WINDOWS,
+        needs: LINUX,
     },
     Case {
         id: "G8",
         attack: "A program other than the gate connects to the channel",
         lines: &[Line::Checks],
-        tests: &[run("gate", "a_program_other_than_the_gate_is_refused")],
+        tests: &[
+            run("gate", "a_program_other_than_the_gate_is_refused"),
+            run("gate", "a_wrong_program_with_the_right_token_is_refused_in_a_real_run"),
+        ],
         layer: Layer::Scripted,
-        needs: WINDOWS,
+        needs: LINUX_AND_NETWORK,
     },
     Case {
         id: "G9",
         attack: "A restricted or low-integrity program connects to the channel",
         lines: &[Line::Checks],
         tests: &[run("gate", "a_restricted_or_low_integrity_client_is_refused")],
+        layer: Layer::Scripted,
+        needs: WINDOWS,
+    },
+    Case {
+        id: "G10",
+        attack: "Another program of your Windows account adds its own end to the gate channel",
+        lines: &[Line::Checks],
+        tests: &[
+            gate("the_gate_talks_only_to_the_steplet_that_started_the_run"),
+            gate("the_gate_answers_when_steplet_s_end_is_the_one_named"),
+        ],
         layer: Layer::Scripted,
         needs: WINDOWS,
     },

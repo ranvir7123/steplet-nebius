@@ -136,13 +136,30 @@ impl Gate {
         Gate { child, input, lines }
     }
 
-    /// The gate in MCP mode on `pipe`, logging to a fresh file, with Steplet's deadline.
+    /// The gate in MCP mode on `pipe`, logging to a fresh file, with Steplet's deadline; this test program, which
+    /// holds the stand-in's end of the pipe, is the Steplet it is told about.
     fn mcp(pipe: &str, deadline_ms: u64) -> (Gate, std::path::PathBuf) {
+        Gate::mcp_naming(pipe, deadline_ms, std::process::id())
+    }
+
+    /// `mcp`, told that Steplet is the program with process number `steplet`.
+    fn mcp_naming(pipe: &str, deadline_ms: u64, steplet: u32) -> (Gate, std::path::PathBuf) {
         let log = std::env::temp_dir().join(format!("{pipe}.gate.log"));
         let _ = std::fs::remove_file(&log);
-        let ms = deadline_ms.to_string();
-        let gate =
-            Gate::start(&["--pipe", pipe, "--token", TOKEN, "--log", log.to_str().unwrap(), "--deadline-ms", &ms]);
+        let (ms, pid) = (deadline_ms.to_string(), steplet.to_string());
+        let log_arg = log.to_str().unwrap();
+        let gate = Gate::start(&[
+            "--pipe",
+            pipe,
+            "--token",
+            TOKEN,
+            "--log",
+            log_arg,
+            "--deadline-ms",
+            &ms,
+            "--steplet-pid",
+            &pid,
+        ]);
         (gate, log)
     }
 
@@ -346,10 +363,15 @@ fn the_log_names_each_decision_but_never_its_input() {
 
 /// Runs the gate's key mode against `replies`; returns its exit code and everything it printed.
 fn key_mode(pipe: &str, deadline_ms: u64) -> (Option<i32>, Vec<u8>, Duration) {
+    key_mode_naming(pipe, deadline_ms, std::process::id())
+}
+
+/// `key_mode`, told that Steplet is the program with process number `steplet`.
+fn key_mode_naming(pipe: &str, deadline_ms: u64, steplet: u32) -> (Option<i32>, Vec<u8>, Duration) {
     let started = Instant::now();
-    let ms = deadline_ms.to_string();
+    let (ms, pid) = (deadline_ms.to_string(), steplet.to_string());
     let out = Command::new(GATE)
-        .args(["--key", "--pipe", pipe, "--token", TOKEN, "--deadline-ms", &ms])
+        .args(["--key", "--pipe", pipe, "--token", TOKEN, "--deadline-ms", &ms, "--steplet-pid", &pid])
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
@@ -388,24 +410,128 @@ fn the_key_mode_prints_the_key_alone_or_nothing() {
     assert_eq!((code, printed.len()), (Some(1), 0), "no pipe");
 }
 
+/// Phase 3 measured that another program of the same Windows account can add its own end to Steplet's pipe (K5). The
+/// gate is told which program Steplet is, and talks to no other: its requests carry the run's token.
+#[test]
+fn the_gate_talks_only_to_the_steplet_that_started_the_run() {
+    let pipe = pipe_name();
+    let allow = json!({"behavior": "allow", "updatedInput": {"file_path": "/work/r/repo/README"}}).to_string();
+    let key = json!({"key": "sk-ant-api03-STEPLET-TEST-MADE-UP-NOT-A-KEY"}).to_string();
+    // This test program holds the pipe's ends, and would allow anything and hand over a key.
+    let other_end = StandIn::start(&pipe, vec![Reply::Line(allow), Reply::Line(key)]);
+    // The program the gate is told is Steplet: any other running program, here an idle gate of its own.
+    let (named, _) = Gate::mcp(&pipe_name(), 2000);
+    let steplet = named.child.id();
+    let (mut gate, log) = Gate::mcp_naming(&pipe, 2000, steplet);
+    let (decision, _) = gate.decide(1, "Read", json!({"file_path": "/work/r/repo/README"}));
+    println!("--- told Steplet is process {steplet}, at an end held by process {}: {decision}", std::process::id());
+    assert!(is_refusal(&decision), "{decision}");
+    let message = decision["message"].as_str().unwrap();
+    assert!(message.contains("the program at Steplet's end is not the Steplet that started this run"), "{message}");
+    assert_eq!(gate.reply(Duration::from_millis(500)), None, "nothing but the refusal reaches Claude Code");
+    let (code, printed, _) = key_mode_naming(&pipe, 2000, steplet);
+    assert_eq!((code, printed.len()), (Some(1), 0), "the key mode takes no key from another program");
+    assert_eq!(other_end.seen(), Vec::<Value>::new(), "the other program got no request, so not the run's token");
+    assert_eq!(gate.finish(), Some(0));
+    let text = std::fs::read_to_string(&log).unwrap();
+    println!("--- gate log:\n{text}");
+    let why = "refused by the gate itself: the program at Steplet's end is not the Steplet that started this run";
+    assert!(text.contains(why), "{text}");
+}
+
+/// The near miss of the test above: told the program that does hold Steplet's end, the gate asks it as before.
+#[test]
+fn the_gate_answers_when_steplet_s_end_is_the_one_named() {
+    let pipe = pipe_name();
+    let input = json!({"file_path": "/work/r/repo/README"});
+    let allow = json!({"behavior": "allow", "updatedInput": input}).to_string();
+    let key = "sk-ant-api03-STEPLET-TEST-MADE-UP-NOT-A-KEY";
+    let steplet = StandIn::start(&pipe, vec![Reply::Line(allow), Reply::Line(json!({"key": key}).to_string())]);
+    let (mut gate, _) = Gate::mcp_naming(&pipe, 2000, std::process::id());
+    let (decision, _) = gate.decide(1, "Read", input.clone());
+    assert_eq!(decision, json!({"behavior": "allow", "updatedInput": input}));
+    let (code, printed, _) = key_mode_naming(&pipe, 2000, std::process::id());
+    assert_eq!((code, printed.as_slice()), (Some(0), key.as_bytes()));
+    assert_eq!(steplet.seen().len(), 2, "both requests reached Steplet");
+    assert_eq!(gate.finish(), Some(0));
+}
+
 #[test]
 fn options_it_does_not_know_are_refused() {
     let log = std::env::temp_dir().join("steplet-gate-test-options.log");
     let log = log.to_str().unwrap();
+    let me = std::process::id().to_string();
+    let me = me.as_str();
     for args in [
-        vec!["--token", TOKEN, "--log", log, "--deadline-ms", "1000"],
-        vec!["--pipe", "p", "--log", log, "--deadline-ms", "1000"],
-        vec!["--pipe", "p", "--token", TOKEN, "--deadline-ms", "1000"],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "0"],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "soon"],
+        vec!["--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--steplet-pid", me],
+        vec!["--pipe", "p", "--log", log, "--deadline-ms", "1000", "--steplet-pid", me],
+        vec!["--pipe", "p", "--token", TOKEN, "--deadline-ms", "1000", "--steplet-pid", me],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--steplet-pid", me],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "0", "--steplet-pid", me],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "soon", "--steplet-pid", me],
         // More than an hour, Steplet's own limit; the largest number would overflow the gate's clock.
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "3600001"],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "18446744073709551615"],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--crash-once"],
-        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "extra"],
-        vec!["--pipe", "p", "--pipe", "q", "--token", TOKEN, "--log", log, "--deadline-ms", "1000"],
-        vec!["--key", "--pipe", "p", "--token", TOKEN],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "3600001", "--steplet-pid", me],
+        vec![
+            "--pipe",
+            "p",
+            "--token",
+            TOKEN,
+            "--log",
+            log,
+            "--deadline-ms",
+            "18446744073709551615",
+            "--steplet-pid",
+            me,
+        ],
+        vec![
+            "--pipe",
+            "p",
+            "--token",
+            TOKEN,
+            "--log",
+            log,
+            "--deadline-ms",
+            "1000",
+            "--steplet-pid",
+            me,
+            "--crash-once",
+        ],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--steplet-pid", me, "extra"],
+        vec![
+            "--pipe",
+            "p",
+            "--pipe",
+            "q",
+            "--token",
+            TOKEN,
+            "--log",
+            log,
+            "--deadline-ms",
+            "1000",
+            "--steplet-pid",
+            me,
+        ],
+        vec!["--key", "--pipe", "p", "--token", TOKEN, "--steplet-pid", me],
+        // Without Steplet's process number, or with one that names no program, the gate does not start.
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000"],
+        vec!["--key", "--pipe", "p", "--token", TOKEN, "--deadline-ms", "1000"],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--steplet-pid", "0"],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--steplet-pid", "steplet"],
+        vec!["--pipe", "p", "--token", TOKEN, "--log", log, "--deadline-ms", "1000", "--steplet-pid", "4294967296"],
+        vec![
+            "--pipe",
+            "p",
+            "--token",
+            TOKEN,
+            "--log",
+            log,
+            "--deadline-ms",
+            "1000",
+            "--steplet-pid",
+            me,
+            "--steplet-pid",
+            me,
+        ],
     ] {
         let out = Command::new(GATE).args(&args).stdin(Stdio::null()).output().unwrap();
         assert_eq!(out.status.code(), Some(2), "{args:?}");

@@ -3,20 +3,29 @@
 //! state: each request goes to Steplet over the run's named pipe, on a connection of its own, and anything other than
 //! a clear answer from Steplet in time is a refusal (F33, F36, F38).
 //!
-//! `steplet-gate --pipe <name> --token <run token> --log <Windows path> --deadline-ms <n>`
+//! `steplet-gate --pipe <name> --token <run token> --log <Windows path> --deadline-ms <n> --steplet-pid <n>`
 //!
-//! `steplet-gate --key --pipe <name> --token <run token> --deadline-ms <n>` is Claude Code's `apiKeyHelper` (H2): it
-//! asks Steplet for the key over the same pipe and prints it with no line ending, so the key is never written to a
-//! file inside Linux. Anything unclear prints nothing and ends with exit code 1. Wrong options end with exit code 2.
+//! `steplet-gate --key --pipe <name> --token <run token> --deadline-ms <n> --steplet-pid <n>` is Claude Code's
+//! `apiKeyHelper` (H2): it asks Steplet for the key over the same pipe and prints it with no line ending, so the key is
+//! never written to a file inside Linux. Anything unclear prints nothing and ends with exit code 1. Wrong options end
+//! with exit code 2.
+//!
+//! `--steplet-pid` is the Windows process number of the Steplet that started the run. Another program of the same
+//! Windows account can add its own end to Steplet's pipe (phase 3), so before sending anything on a connection the gate
+//! asks Windows which program holds the other end, and talks only to that Steplet (phase 5, K5): a request carries the
+//! run's token. Any other program there gets nothing, and the request is refused, so such a program can make a run's
+//! requests fail (as any program of the account could, by ending Steplet), but cannot answer them.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::windows::fs::OpenOptionsExt;
+use std::os::windows::io::AsRawHandle;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
+use windows_sys::Win32::System::Pipes::GetNamedPipeServerProcessId;
 
 const ERROR_FILE_NOT_FOUND: i32 = 2;
 const ERROR_PIPE_BUSY: i32 = 231;
@@ -39,11 +48,13 @@ struct Options {
     token: String,
     log: Option<String>,
     deadline: Duration,
+    /// The Steplet that started the run, as Windows numbers its processes.
+    steplet: u32,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
     let mut key = false;
-    let (mut pipe, mut token, mut log, mut deadline) = (None, None, None, None);
+    let (mut pipe, mut token, mut log, mut deadline, mut steplet) = (None, None, None, None, None);
     let mut args = args.iter();
     while let Some(name) = args.next() {
         let slot = match name.as_str() {
@@ -56,6 +67,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--token" => &mut token,
             "--log" => &mut log,
             "--deadline-ms" => &mut deadline,
+            "--steplet-pid" => &mut steplet,
             other => return Err(format!("unknown option {other:?}")),
         };
         if slot.is_some() {
@@ -79,7 +91,14 @@ fn options(args: &[String]) -> Result<Options, String> {
         (true, Some(_)) => return Err("--log is not used with --key".into()),
         _ => {}
     }
-    Ok(Options { key, pipe: format!(r"\\.\pipe\{pipe}"), token, log, deadline: Duration::from_millis(deadline) })
+    let steplet = steplet
+        .ok_or("--steplet-pid is missing")?
+        .parse::<u32>()
+        .ok()
+        .filter(|&pid| pid != 0)
+        .ok_or("--steplet-pid must be the process number of the Steplet that started the run")?;
+    let pipe = format!(r"\\.\pipe\{pipe}");
+    Ok(Options { key, pipe, token, log, deadline: Duration::from_millis(deadline), steplet })
 }
 
 /// Letters, digits, `.`, `_` and `-`, not starting with `-`: the same rule Steplet uses when it writes the name.
@@ -105,20 +124,30 @@ fn main() {
 }
 
 /// Asks Steplet once: one connection, one request line, one answer line, all within `limit`.
-fn ask(pipe: &str, request: &Value, limit: Duration) -> Result<Value, String> {
+fn ask(o: &Options, request: &Value, limit: Duration) -> Result<Value, String> {
     let until = Instant::now() + limit;
     let (tx, rx) = mpsc::channel();
-    let (pipe, line) = (pipe.to_owned(), format!("{request}\n"));
+    let (pipe, line, steplet) = (o.pipe.clone(), format!("{request}\n"), o.steplet);
     // On a thread of its own, so a Steplet that never answers cannot hold the gate past `limit`. Such a thread stays
     // blocked until Steplet lets go of the connection or the gate ends.
     thread::spawn(move || {
-        let _ = tx.send(exchange(&pipe, &line, until));
+        let _ = tx.send(exchange(&pipe, steplet, &line, until));
     });
     rx.recv_timeout(limit).unwrap_or_else(|_| Err("Steplet did not answer in time".into()))
 }
 
-fn exchange(pipe: &str, line: &str, until: Instant) -> Result<Value, String> {
+fn exchange(pipe: &str, steplet: u32, line: &str, until: Instant) -> Result<Value, String> {
     let f = connect(pipe, until)?;
+    // Nothing is sent before Windows has said the other end is held by the Steplet that started the run.
+    match server_process(&f) {
+        Ok(pid) if pid == steplet => {}
+        Ok(pid) => {
+            return Err(format!(
+                "the program at Steplet's end is not the Steplet that started this run (process {pid}, not {steplet})"
+            ));
+        }
+        Err(e) => return Err(format!("Windows would not say which program is at Steplet's end ({e})")),
+    }
     (&f).write_all(line.as_bytes()).map_err(|e| format!("the request could not be sent ({e})"))?;
     let mut answer = Vec::new();
     BufReader::new(&f)
@@ -146,6 +175,16 @@ fn connect(pipe: &str, until: Instant) -> Result<File, String> {
             Err(e) => return Err(format!("Steplet could not be reached ({e})")),
         }
     }
+}
+
+/// The Windows process number of the program holding the other end of the connection `f`.
+fn server_process(f: &File) -> std::io::Result<u32> {
+    let mut pid = 0;
+    // SAFETY: `f` is an open pipe handle for the whole call, and `pid` is a place for one number.
+    if unsafe { GetNamedPipeServerProcessId(f.as_raw_handle(), &mut pid) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(pid)
 }
 
 /// Steplet's answer in the shape Claude Code reads: exactly `{behavior: "allow", updatedInput: {…}}` or
@@ -224,7 +263,7 @@ fn decide(o: &Options, a: &Value, log: &Log) -> Value {
     let started = Instant::now();
     let request = json!({"kind": "decide", "run_token": o.token, "tool_name": a["tool_name"], "input": a["input"],
         "tool_use_id": a["tool_use_id"]});
-    let (answer, own_refusal) = decision(ask(&o.pipe, &request, o.deadline + GRACE));
+    let (answer, own_refusal) = decision(ask(o, &request, o.deadline + GRACE));
     let name = |field: &str| plain(a[field].as_str().unwrap_or("?"));
     log.line(&format!(
         "tool={} id={} behavior={} ms={}",
@@ -241,7 +280,7 @@ fn decide(o: &Options, a: &Value, log: &Log) -> Value {
 
 /// Claude Code's `apiKeyHelper`: prints the key alone, or nothing. Returns the exit code.
 fn print_key(o: &Options) -> i32 {
-    let answer = ask(&o.pipe, &json!({"kind": "key", "run_token": o.token}), o.deadline + GRACE);
+    let answer = ask(o, &json!({"kind": "key", "run_token": o.token}), o.deadline + GRACE);
     let key = match &answer {
         Ok(a) => a.get("key").and_then(Value::as_str).filter(|k| !k.is_empty()),
         Err(_) => None,

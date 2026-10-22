@@ -6,12 +6,12 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 use steplet_app::views::{
     Here, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
-    setup_failure, setup_line, setup_view,
+    run_failure, setup_failure, setup_line, setup_view,
 };
 use steplet_core::report::check;
 use steplet_run::setup::SetupError;
 use steplet_run::setup::{State, Wsl};
-use steplet_run::{Answer, Event, Question, Reply, RunOutcome, Trust, build_report};
+use steplet_run::{Answer, Event, GateError, Question, Reply, RunError, RunOutcome, Trust, build_report};
 
 /// The corpus's own time of viewing (crates/steplet-core/tests/corpus.rs), so expiry findings are the expected ones.
 const NOW: i64 = 1_791_720_000;
@@ -303,6 +303,15 @@ fn a_setup_failure_says_where_it_stopped_in_words() {
     let refused = setup_failure(&SetupError::Refused("Linux name"));
     assert_eq!(refused.reason, "Steplet will not hand this Linux name to WSL.");
     assert_eq!(refused.detail, None);
+}
+
+/// Phase 5 Task 2: the run that does not start because another program holds its gate channel's name
+/// (`a_run_whose_gate_channel_name_is_taken_does_not_start`) says so in words.
+#[test]
+fn a_run_whose_gate_channel_name_is_taken_says_so_in_words() {
+    let (_, f) = run_failure(&RunError::Gate(GateError::Taken));
+    assert_eq!(f.reason, "Another program holds the name of this run's safety gate, so Steplet did not start it.");
+    assert_eq!(f.detail, None);
 }
 
 #[test]

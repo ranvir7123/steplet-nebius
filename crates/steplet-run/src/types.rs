@@ -99,8 +99,9 @@ impl RunPaths {
 }
 
 /// How Claude Code reaches the gate in one run: the gate program on Steplet's Linux disk, the pipe it relays to, the
-/// run's token, the gate's log (a Windows path: the gate is a Windows program), and Steplet's limit on each decision
-/// (F36). Made only by `new`, which checks its values, and read-only after that. Its `Debug` hides the token.
+/// run's token, the gate's log (a Windows path: the gate is a Windows program), Steplet's limit on each decision
+/// (F36), and which program Steplet is (K5). Made only by `new`, which checks its values, and read-only after that. Its
+/// `Debug` hides the token.
 #[derive(Clone, PartialEq)]
 pub struct GateLink {
     exe: String,
@@ -108,13 +109,15 @@ pub struct GateLink {
     token: String,
     log: String,
     deadline: Duration,
+    steplet_pid: u32,
 }
 
 impl GateLink {
     /// The program, pipe name and token also go into `apiKeyHelper`, a line Claude Code hands to a shell, so each is
     /// made of plain words (the program is an absolute path of them). The log is passed as one argument, not through
     /// a shell, so only an empty log, a leading `-` (the gate would read it as an option) or a control character is
-    /// refused. The deadline is from a tenth of a second to an hour.
+    /// refused. The deadline is from a tenth of a second to an hour. The link names this program as Steplet, so the
+    /// program that makes it must be the one that serves its pipe (`serve`); otherwise the gate refuses every request.
     pub fn new(exe: &str, pipe: &str, token: &str, log: &str, deadline: Duration) -> Result<GateLink, BadValue> {
         let path_ok = exe
             .strip_prefix('/')
@@ -134,7 +137,9 @@ impl GateLink {
         if !(Duration::from_millis(100)..=Duration::from_secs(3600)).contains(&deadline) {
             return Err(BadValue("gate deadline"));
         }
-        Ok(GateLink { exe: exe.into(), pipe: pipe.into(), token: token.into(), log: log.into(), deadline })
+        // `serve` runs in the program that makes the link: this one holds Steplet's end of the pipe.
+        let steplet_pid = std::process::id();
+        Ok(GateLink { exe: exe.into(), pipe: pipe.into(), token: token.into(), log: log.into(), deadline, steplet_pid })
     }
 
     pub fn exe(&self) -> &str {
@@ -158,6 +163,12 @@ impl GateLink {
         self.deadline
     }
 
+    /// The Windows process number of the Steplet that made the link and serves its pipe: the gate talks to no other
+    /// program at Steplet's end (`--steplet-pid`, K5).
+    pub fn steplet_pid(&self) -> u32 {
+        self.steplet_pid
+    }
+
     /// The deadline as the gate's `--deadline-ms` option.
     pub(crate) fn deadline_ms(&self) -> String {
         self.deadline.as_millis().to_string()
@@ -172,6 +183,7 @@ impl fmt::Debug for GateLink {
             .field("token", &HIDDEN)
             .field("log", &self.log)
             .field("deadline", &self.deadline)
+            .field("steplet_pid", &self.steplet_pid)
             .finish()
     }
 }

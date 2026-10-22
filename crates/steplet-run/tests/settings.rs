@@ -49,6 +49,7 @@ fn the_gate_link_keeps_its_values() {
         ["/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd", LOG]
     );
     assert_eq!(g.deadline(), DEADLINE);
+    assert_eq!(g.steplet_pid(), std::process::id(), "the program that makes the link serves its pipe");
 }
 
 #[test]
@@ -79,7 +80,11 @@ fn the_settings_are_exactly_the_planned_shape() {
                 ]
             },
             "switchModelsOnFlag": false,
-            "apiKeyHelper": "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token 0123abcd --deadline-ms 30000"
+            "apiKeyHelper": format!(
+                "/opt/steplet/gate/steplet-gate.exe --key --pipe steplet-r1 --token 0123abcd --deadline-ms 30000 \
+                 --steplet-pid {}",
+                std::process::id()
+            )
         })
     );
 }
@@ -88,10 +93,12 @@ fn the_settings_are_exactly_the_planned_shape() {
 fn the_settings_match_the_file_the_task_2_runs_used() {
     // The file Task 2's scripted and real-model runs used, with its token placeholder (spikes/p3/p2.settings.json).
     // Since Task 8 the key mode also gets Steplet's deadline, and since phase 4 Task 1 Claude Code itself refuses
-    // writes into Steplet's own folder; the rest is unchanged.
+    // writes into Steplet's own folder, and since phase 5 Task 2 the gate is told which program Steplet is; the rest
+    // is unchanged.
     let g = gate("/opt/steplet/gate/spike-gate.exe", "steplet-p3-p2", "RUN_TOKEN");
     let mut used = read(include_str!("support/task2.settings.json"));
-    let helper = format!("{} --deadline-ms 30000", used["apiKeyHelper"].as_str().unwrap());
+    let helper =
+        format!("{} --deadline-ms 30000 --steplet-pid {}", used["apiKeyHelper"].as_str().unwrap(), std::process::id());
     used["apiKeyHelper"] = helper.into();
     used["permissions"]["deny"].as_array_mut().unwrap().push("Edit(//var/lib/steplet/**)".into());
     assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g, false)), used);
@@ -126,7 +133,10 @@ fn the_mcp_config_names_the_gate_as_its_only_server() {
                 "gate": {
                     "type": "stdio",
                     "command": "/opt/steplet/gate/steplet-gate.exe",
-                    "args": ["--pipe", "steplet-r1", "--token", "0123abcd", "--log", LOG, "--deadline-ms", "30000"]
+                    "args": [
+                        "--pipe", "steplet-r1", "--token", "0123abcd", "--log", LOG, "--deadline-ms", "30000",
+                        "--steplet-pid", std::process::id().to_string()
+                    ]
                 }
             }
         })

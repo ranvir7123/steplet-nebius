@@ -9,8 +9,8 @@ mod support;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::os::windows::fs::OpenOptionsExt;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,11 +19,15 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Asked, Event, GateAnswer, GateError, GateLink, GateRequest, GateService, RunPaths, RunRequest, decide,
-    discard, gate_for_run, launch, prepare, serve,
+    ApiKey, Asked, Event, GateAnswer, GateError, GateLink, GateRequest, GateService, Live, Progress, RunError,
+    RunPaths, RunRequest, RunSetup, decide, discard, gate_for_run, launch, prepare, run_live, run_live_on_pipe, serve,
 };
 use support::{MADE_UP_KEY, logs_dir, scripted_model};
-use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Storage::FileSystem::{
+    FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX, SECURITY_IDENTIFICATION,
+};
+use windows_sys::Win32::System::Pipes::{CreateNamedPipeW, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES};
 
 const TOKEN: &str = "t8servicetoken0123";
 const ERROR_ACCESS_DENIED: i32 = 5;
@@ -429,30 +433,19 @@ fn a_restricted_or_low_integrity_client_is_refused() {
     println!("--- recorded: {:#?}", gate.requests());
 }
 
+/// An end of the pipe named `pipe`, made by this test program: the first end of that name when `first`.
+fn create(pipe: &str, first: bool) -> io::Result<HANDLE> {
+    let name: Vec<u16> = format!(r"\\.\pipe\{pipe}").encode_utf16().chain([0]).collect();
+    let mode = PIPE_ACCESS_DUPLEX | if first { FILE_FLAG_FIRST_PIPE_INSTANCE } else { 0 };
+    // SAFETY: `name` is NUL-terminated; default security.
+    let h = unsafe {
+        CreateNamedPipeW(name.as_ptr(), mode, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, 4096, 4096, 0, std::ptr::null())
+    };
+    (h != INVALID_HANDLE_VALUE).then_some(h).ok_or_else(io::Error::last_os_error)
+}
+
 #[test]
 fn someone_holding_the_pipe_name_first_stops_the_gate_from_starting() {
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX};
-    use windows_sys::Win32::System::Pipes::{CreateNamedPipeW, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES};
-
-    let create = |pipe: &str, first: bool| {
-        let name: Vec<u16> = format!(r"\\.\pipe\{pipe}").encode_utf16().chain([0]).collect();
-        let mode = PIPE_ACCESS_DUPLEX | if first { FILE_FLAG_FIRST_PIPE_INSTANCE } else { 0 };
-        // SAFETY: `name` is NUL-terminated; default security.
-        let h = unsafe {
-            CreateNamedPipeW(
-                name.as_ptr(),
-                mode,
-                PIPE_TYPE_BYTE,
-                PIPE_UNLIMITED_INSTANCES,
-                4096,
-                4096,
-                0,
-                std::ptr::null(),
-            )
-        };
-        (h != INVALID_HANDLE_VALUE).then_some(h).ok_or_else(io::Error::last_os_error)
-    };
     let pipe = pipe_name();
     let squatter = create(&pipe, true).expect("the test takes the name first");
     let p = policy("/work/t8/repo");
@@ -951,4 +944,103 @@ fn each_run_starts_the_gate_from_a_path_of_its_own() {
     discard(&paths).unwrap();
     let left = support::root_sh(&distro, "ls /opt/steplet/gate/runs/ | grep -c '^tgp1[.]' || true");
     assert_eq!(left, "0", "the run's gate copies are removed with the run");
+}
+
+/// The setup of the real runs below: the gate installed on Steplet's Linux, the made-up key, a 3 s decision deadline.
+fn run_setup(distro: &str, model_url: Option<String>) -> RunSetup {
+    RunSetup {
+        gate_exe: support::install_gate(distro),
+        logs: logs_dir(),
+        key: Some(ApiKey::new(MADE_UP_KEY.into())),
+        decision_deadline: Duration::from_secs(3),
+        model_url,
+    }
+}
+
+/// Phase 5 Task 2: the test above (`someone_holding_the_pipe_name_first_stops_the_gate_from_starting`) through a real
+/// run. A run's channel name ends in eight random characters no one can guess, so this test names the channel itself
+/// (`run_live_on_pipe`), and takes that name before the run starts.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn a_run_whose_gate_channel_name_is_taken_does_not_start() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let held = support::hold_linux();
+    let paths = RunPaths::new(&distro, "tg7").unwrap();
+    let pipe = format!("steplet-tg7-taken-{}", std::process::id());
+    let squatter = create(&pipe, true).expect("the test takes the name first");
+    let progress = Arc::new(Mutex::new(Vec::new()));
+    let seen = progress.clone();
+    let live =
+        Live { on_progress: Box::new(move |p| seen.lock().unwrap().push(format!("{p:?}"))), ..Live::unattended() };
+    let got = run_live_on_pipe(
+        &held,
+        &pipe,
+        &run_request(60),
+        &paths,
+        &policy(paths.work_repo()),
+        &run_setup(&distro, None),
+        Arc::new(live),
+    );
+    // SAFETY: the handle made above.
+    unsafe { CloseHandle(squatter) };
+    println!("--- the run, its channel's name taken first: {:?}", got.as_ref().err());
+    assert!(matches!(got, Err(RunError::Gate(GateError::Taken))), "the run must not start on a channel someone holds");
+    let progress = progress.lock().unwrap();
+    assert!(progress.is_empty(), "nothing was prepared and the agent never started: {progress:?}");
+    let left =
+        support::root_sh(&distro, "ls -d /work/tg7 /var/lib/steplet/runs/tg7 /opt/steplet/gate/runs/tg7.* 2>&1; true");
+    println!("--- what the run left: {left:?}");
+    assert!(
+        left.lines().all(|l| l.contains("No such file or directory")),
+        "no working copy, run folder or gate copy: {left}"
+    );
+}
+
+/// Phase 5 Task 2: `a_program_other_than_the_gate_is_refused` through a real run. Once the run is prepared, before the
+/// agent starts, this test program reads the run's channel name and token from the gate settings (as root) and asks
+/// Steplet with them; then the run goes on.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_wrong_program_with_the_right_token_is_refused_in_a_real_run() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let distro = support::steplet_linux();
+    let paths = RunPaths::new(&distro, "tg8").unwrap();
+    let script = r#"{"steps": [
+        {"tool": "Bash", "input": {"command": "touch declared.txt", "description": "Declared"}},
+        {"text": "Task 2: done."}]}"#;
+    let _model = scripted_model(&distro, "tg8", script, 47923);
+    let asked = Arc::new(Mutex::new(None));
+    let (answer, mcp, d) = (asked.clone(), paths.mcp().to_owned(), distro.clone());
+    let outsider = move |p: Progress| {
+        if !matches!(p, Progress::Prepared(_)) {
+            return;
+        }
+        let settings: Value = serde_json::from_str(&support::run(&d, "root", &["/usr/bin/cat", &mcp])).unwrap();
+        let args: Vec<&str> =
+            settings["mcpServers"]["gate"]["args"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect();
+        let value = |name: &str| args[args.iter().position(|a| *a == name).unwrap() + 1].to_owned();
+        let (pipe, token) = (value("--pipe"), value("--token"));
+        let request = json!({"kind": "decide", "run_token": token, "tool_name": "Bash",
+            "input": {"command": "touch declared.txt"}, "tool_use_id": "toolu_tg8_outsider"});
+        *answer.lock().unwrap() = Some((token, ask(&pipe, &request).map_err(|e| e.to_string())));
+    };
+    let live = Live { on_progress: Box::new(outsider), ..Live::unattended() };
+    let setup = run_setup(&distro, Some("http://127.0.0.1:47923".into()));
+    let report = run_live(&run_request(120), &paths, &policy(paths.work_repo()), &setup, Arc::new(live)).unwrap();
+    println!("--- the report: {report:#?}");
+    let (token, answer) = asked.lock().unwrap().take().expect("the test asked once the run was prepared");
+    let answer = answer.unwrap();
+    println!("--- what Steplet answered this test program: {answer}");
+    assert!(is_refusal(&answer), "the right token from the wrong program is refused: {answer}");
+
+    let outside = "a connection to Steplet's gate: a program other than the gate connected";
+    assert!(report.refused.iter().any(|r| r.starts_with(outside)), "the report lists it: {:?}", report.refused);
+    assert_eq!(report.refused.len(), 1, "nothing else was refused: {:?}", report.refused);
+    assert!(!format!("{report:?}").contains(&token), "the run's token is not in the report");
+    // The run's own request was still asked and answered: its declared command ran.
+    let first = &report.commands[0];
+    assert_eq!((first.command.as_str(), first.exit_code), ("touch declared.txt", Some(0)));
+    assert_eq!(report.changed_files, Some(vec!["?? declared.txt".to_owned()]));
+    assert!(report.completed, "{report:?}");
 }

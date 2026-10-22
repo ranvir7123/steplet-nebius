@@ -37,7 +37,9 @@ pub use report::{
     Check, NotYes, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line,
     read_trust,
 };
-pub use run::{BACKSTOP, RunError, RunOutcome, RunSetup, RunningAgent, run, run_live, run_live_locked, watch_run};
+pub use run::{
+    BACKSTOP, RunError, RunOutcome, RunSetup, RunningAgent, run, run_live, run_live_locked, run_live_on_pipe, watch_run,
+};
 pub use settings::{mcp_json, settings_json};
 pub use stream::parse_line;
 pub use task::task_text;

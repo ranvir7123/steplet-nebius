@@ -134,7 +134,7 @@ pub fn run_live(
 /// `run_live` for a caller that already holds the one-run lock. The app takes it when Run is pressed and keeps it
 /// until the run is over, so its note of a run in progress is never taken for a crash's leftover by another window.
 pub fn run_live_locked(
-    _held: &RunLock,
+    held: &RunLock,
     req: &RunRequest,
     paths: &RunPaths,
     policy: &Policy,
@@ -143,12 +143,28 @@ pub fn run_live_locked(
 ) -> Result<Report, RunError> {
     limits_fit(&live, setup)?;
     let pipe = format!("steplet-{}-{}", paths.run_id(), random_hex::<8>().map_err(RunError::Random)?);
+    run_live_on_pipe(held, &pipe, req, paths, policy, setup, live)
+}
+
+/// `run_live_locked` with the gate's pipe named `pipe`. Steplet's own runs always go through `run_live_locked`, whose
+/// name no one can guess; this is for the test that takes a run's pipe name before the run starts (phase 5, Task 2).
+#[doc(hidden)]
+pub fn run_live_on_pipe(
+    _held: &RunLock,
+    pipe: &str,
+    req: &RunRequest,
+    paths: &RunPaths,
+    policy: &Policy,
+    setup: &RunSetup,
+    live: Arc<Live>,
+) -> Result<Report, RunError> {
+    limits_fit(&live, setup)?;
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
     // The gate starts from a copy of its own for this run (see `gate_for_run`); `discard` removes it with the run.
     let gate_exe = gate_for_run(paths, &setup.gate_exe).map_err(RunError::Gate)?;
-    let link = match GateLink::new(&gate_exe, &pipe, &token, &log.to_string_lossy(), setup.decision_deadline) {
+    let link = match GateLink::new(&gate_exe, pipe, &token, &log.to_string_lossy(), setup.decision_deadline) {
         Ok(link) => link,
         Err(e) => {
             let _ = discard(paths);
