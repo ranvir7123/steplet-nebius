@@ -62,7 +62,8 @@ fn which_actions_ask_the_gate() {
         {"tool": "Write", "input": {"file_path": format!("{repo}/written.txt"), "content": "t9\n"}},
         {"text": "Task 9: measured."}]});
     let policy = Policy::from_steplet(&request().steplet, paths.work_repo()).unwrap();
-    let (link, gate) = serve_gate(&distro, "t9m", Duration::from_secs(10), move |r| decide(&policy, r));
+    let checker = support::checker(&distro, policy);
+    let (link, gate) = serve_gate(&distro, "t9m", Duration::from_secs(10), move |r| decide(&checker, r));
     let _model = scripted_model(&distro, "t9m", &script.to_string(), 47930);
     let req = request();
     prepare(&req, &paths, &link).unwrap();
@@ -218,8 +219,9 @@ fn run_with_changed_settings(name: &str, port: u16, script: &Value, change: &str
     let paths = RunPaths::new(&distro, name).unwrap();
     let req = long_request();
     let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
-    let checker = policy.clone();
-    let (link, gate) = serve_gate(&distro, name, Duration::from_secs(10), move |r| decide(&checker, r));
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, name, Duration::from_secs(10), move |r| decide(&deciding, r));
     let _model = scripted_model(&distro, name, &script.to_string(), port);
     prepare(&req, &paths, &link).unwrap();
     rewrite_settings(&paths, change);
@@ -227,7 +229,7 @@ fn run_with_changed_settings(name: &str, port: u16, script: &Value, change: &str
     let start = Instant::now();
     let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}")), &[]).unwrap();
     let outcome =
-        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let took = start.elapsed();
     discard(&paths).unwrap();
     (outcome, took)

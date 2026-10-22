@@ -1,25 +1,103 @@
-//! The one place a request from the agent becomes the checker's answer (row 29): the request is read as one of the
-//! checker's actions, and `Policy::check` decides. Anything Steplet cannot read is refused, with a reason.
+//! The one place a request from the agent becomes the checker's answer (row 29): each path of a file-tool request is
+//! looked up where it really leads (row 30), the request is read as one of the checker's actions, and
+//! `Policy::check` decides. Anything Steplet cannot read, or whose real place it cannot find, is refused, with a
+//! reason.
+
+use std::sync::Arc;
 
 use serde_json::Value;
 use steplet_core::policy::{Action, Decision, Policy};
 
+use crate::places::RealPaths;
 use crate::types::{GateAnswer, GateRequest};
 
-/// The gate's answer to `req` when no receiver can be asked (an unattended run, the tests): an `Ask` from the checker
-/// is a refusal that carries the checker's reason. A live run asks the receiver instead (`Asker::decide`).
-pub fn decide(policy: &Policy, req: &GateRequest) -> GateAnswer {
-    match check(policy, req) {
-        Err(message) => deny(message),
-        Ok(Decision::Allow) => GateAnswer::Allow { updated_input: req.input.clone() },
-        Ok(Decision::Deny { reason, .. }) => deny(reason),
-        Ok(Decision::Ask { reason }) => no_one_to_ask(reason),
+const NOT_FOUND: &str = "Steplet could not find where this path leads, so it refused it";
+
+/// The checker as a run uses it: the file's policy, deciding each path of the agent's file tools where it really
+/// leads (`paths`), never as written.
+#[derive(Clone)]
+pub struct Checker {
+    policy: Policy,
+    paths: Arc<dyn RealPaths>,
+}
+
+impl Checker {
+    pub fn new(policy: Policy, paths: Arc<dyn RealPaths>) -> Checker {
+        Checker { policy, paths }
     }
 }
 
-/// The checker's decision on `req`, or why Steplet refuses it before asking the checker: a tool it does not offer, or
-/// a request it cannot read.
-pub(crate) fn check(policy: &Policy, req: &GateRequest) -> Result<Decision, &'static str> {
+/// The gate's answer to `req` when no receiver can be asked (an unattended run, the tests): an `Ask` from the checker
+/// is a refusal that carries the checker's reason. A live run asks the receiver instead (`Asker::decide`). An allow
+/// hands back the request as written.
+pub fn decide(checker: &Checker, req: &GateRequest) -> GateAnswer {
+    match check(checker, req) {
+        Err(message) => deny(&message),
+        Ok(c) => match c.decision {
+            Decision::Allow => GateAnswer::Allow { updated_input: req.input.clone() },
+            Decision::Deny { reason, .. } => deny(&c.noted(reason)),
+            Decision::Ask { reason } => no_one_to_ask(&c.noted(reason)),
+        },
+    }
+}
+
+/// The checker's decision on a request, taken where its paths really lead.
+pub(crate) struct Checked {
+    pub(crate) decision: Decision,
+    /// The request with each path replaced by where it really leads.
+    pub(crate) real: GateRequest,
+    /// "<path> leads to <place>", when the real place is not the path as written.
+    leads: Option<String>,
+}
+
+impl Checked {
+    /// `reason`, followed by where the path really leads when that is not where it is written.
+    pub(crate) fn noted(&self, reason: &str) -> String {
+        noted(reason, self.leads.as_deref())
+    }
+}
+
+fn noted(reason: &str, leads: Option<&str>) -> String {
+    match leads {
+        Some(leads) => format!("{reason} ({leads})"),
+        None => reason.into(),
+    }
+}
+
+/// The checker's decision on `req` where its paths really lead, or why Steplet refuses it before asking the checker:
+/// a tool it does not offer, a request it cannot read, or a path whose real place it cannot find.
+pub(crate) fn check(checker: &Checker, req: &GateRequest) -> Result<Checked, String> {
+    let (real, leads) = where_it_leads(&*checker.paths, req)?;
+    match check_as_written(&checker.policy, &real) {
+        Ok(decision) => Ok(Checked { decision, real, leads }),
+        Err(message) => Err(noted(message, leads.as_deref())),
+    }
+}
+
+/// `req` with the path of a file-tool request replaced by where it really leads, and "<path> leads to <place>" when
+/// that differs. A path that is not absolute stays as written: the checker reads it as text, and refuses or asks.
+fn where_it_leads(paths: &dyn RealPaths, req: &GateRequest) -> Result<(GateRequest, Option<String>), String> {
+    let field = match req.tool_name.as_str() {
+        "Read" | "Write" | "Edit" => "file_path",
+        "Glob" | "Grep" => "path",
+        _ => return Ok((req.clone(), None)),
+    };
+    let Some(written) = req.input.get(field).and_then(Value::as_str).filter(|p| p.starts_with('/')) else {
+        return Ok((req.clone(), None));
+    };
+    let place = paths.real(written).map_err(|_| NOT_FOUND.to_owned())?;
+    if place == written {
+        return Ok((req.clone(), None));
+    }
+    let leads = format!("{written} leads to {place}");
+    let mut real = req.clone();
+    real.input[field] = Value::String(place);
+    Ok((real, Some(leads)))
+}
+
+/// The checker's decision on `req`, its paths read as written, or why Steplet refuses it before asking the checker: a
+/// tool it does not offer, or a request it cannot read.
+fn check_as_written(policy: &Policy, req: &GateRequest) -> Result<Decision, &'static str> {
     let text = |field: &str| req.input.get(field).and_then(Value::as_str);
     let action = match req.tool_name.as_str() {
         "Bash" => text("command").map(Action::Command),

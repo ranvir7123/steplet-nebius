@@ -502,6 +502,8 @@ key, last 20 characters: 0  (files read: 4)
 
 Task 3 tests the agent's own file tools against shortcut files that point out of the working copy. While it was being prepared, a safety filter on the assistant's side stopped the work twice. Task 3 is left for later, on the user's word; the tasks after it do not depend on its result to be built. Until it runs, the C line above and the "receiver's files are not even present" promise rest on Task 1 Check 3 (nothing of the receiver's is in Steplet's Linux) and Task 2 (the key is on no Linux disk), not on a direct test of the file tools.
 
+**Run on 22 Oct 2026, as Task 3 of milestone 1 phase 5:** see `docs/milestone-1-phase-5-results.md`, section "Task 3". It found that a read through such a link could reach a file outside the working copy without asking you, fixed it (Steplet now decides each path where it really leads), and answered the C line: from inside the fence, the run's own folder does not exist at all.
+
 ## Task 4: the runner crate, and the checker mapping
 
 **Changes from the plan, both recorded here:**

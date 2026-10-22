@@ -3,11 +3,16 @@
 //! the gate, so a call that skipped the gate is judged by what it was. Chained commands (`;`, `|`) are not read at all
 //! (R8, G1), so one that skips the gate stops the run (the owner's decision, 17 Oct 2026).
 
+mod support;
+
+use std::sync::Arc;
+
 use serde_json::{Value, json};
 use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
-use steplet_run::{Event, Tripwire, Verdict, Watcher};
+use steplet_run::{Checker, Event, Tripwire, Verdict, Watcher};
+use support::{CANNOT_LOOK, MadeUpLinks};
 
 const WORK: &str = "/work/r1/repo";
 
@@ -27,8 +32,12 @@ fn result(id: &str, is_error: bool) -> Event {
 /// One tool call and its result, seen by a fresh watcher. `gate` is what Steplet answered the gate about this call:
 /// `None` when the gate was never asked, `Some(true)` for "allow", `Some(false)` for "deny".
 fn judge(name: &str, input: Value, gate: Option<bool>, is_error: bool) -> Verdict {
-    let p = policy();
-    let mut w = Watcher::new(&p, WORK);
+    judge_with(&support::checker_as_written(policy()), name, input, gate, is_error)
+}
+
+/// As `judge`, with `checker` deciding.
+fn judge_with(checker: &Checker, name: &str, input: Value, gate: Option<bool>, is_error: bool) -> Verdict {
+    let mut w = Watcher::new(checker, WORK);
     let asked = |id: &str| if id == "u1" { gate } else { None };
     assert_eq!(w.see(&call("u1", name, input), &asked), Verdict::default(), "a call is judged at its result");
     w.see(&result("u1", is_error), &asked)
@@ -169,7 +178,7 @@ fn a_call_the_gate_refused_must_come_back_as_an_error() {
 
 #[test]
 fn a_result_for_a_call_never_seen_stops_the_run() {
-    let p = policy();
+    let p = support::checker_as_written(policy());
     let mut w = Watcher::new(&p, WORK);
     let never = |_: &str| None;
     assert_eq!(
@@ -188,7 +197,7 @@ fn a_result_for_a_call_never_seen_stops_the_run() {
 #[test]
 fn each_result_is_matched_to_its_own_call() {
     // Two calls in one message, their results in the other order: a write the gate allowed, and a read that skipped it.
-    let p = policy();
+    let p = support::checker_as_written(policy());
     let mut w = Watcher::new(&p, WORK);
     let asked = |id: &str| (id == "u1").then_some(true);
     assert_eq!(w.see(&call("u1", "Bash", json!({"command": "touch made.txt"})), &asked), Verdict::default());
@@ -199,7 +208,7 @@ fn each_result_is_matched_to_its_own_call() {
 
 #[test]
 fn a_hook_event_stops_the_run() {
-    let p = policy();
+    let p = support::checker_as_written(policy());
     let mut w = Watcher::new(&p, WORK);
     assert_eq!(
         w.see(&Event::HookEvent { name: "PreToolUse:Bash".into() }, &|_| None),
@@ -209,7 +218,7 @@ fn a_hook_event_stops_the_run() {
 
 #[test]
 fn the_other_events_are_not_judged() {
-    let p = policy();
+    let p = support::checker_as_written(policy());
     let mut w = Watcher::new(&p, WORK);
     for e in [
         Event::Started { model: "m".into(), tools: vec!["Bash".into()], gate_connected: true },
@@ -229,4 +238,40 @@ fn the_other_events_are_not_judged() {
     ] {
         assert_eq!(w.see(&e, &|_| None), Verdict::default(), "{e:?}");
     }
+}
+
+/// Phase 5 Task 3 (row 30): a read that skipped the gate is judged where it really leads. Claude Code refuses a read
+/// through a link into Steplet's own folder by Steplet's deny rule, without asking the gate; judged as written (inside
+/// the copy) it looked like a harmless read. Now it stops the run, as other calls refused by Steplet's own rules do
+/// (H11). A link that stays inside the copy is still a harmless read, and a path Steplet cannot look up is not one.
+#[test]
+fn a_read_that_skipped_the_gate_is_judged_where_it_really_leads() {
+    let links = Checker::new(
+        policy(),
+        Arc::new(MadeUpLinks(vec![
+            ("/work/r1/repo/notes/run", "/var/lib/steplet/runs/r1"),
+            ("/work/r1/repo/notes/readme", "/work/r1/repo/README.md"),
+        ])),
+    );
+    let note = "/work/r1/repo/notes/run/home/note.txt";
+    assert_eq!(
+        judge_with(&links, "Read", json!({"file_path": note}), None, true),
+        stopped("Read", note, Tripwire::SkippedGate(format!("Read {note}")))
+    );
+    assert_eq!(
+        judge_with(&links, "Glob", json!({"pattern": "**/*", "path": "/work/r1/repo/notes/run"}), None, true),
+        stopped(
+            "Glob",
+            "**/* in /work/r1/repo/notes/run",
+            Tripwire::SkippedGate("Glob **/* in /work/r1/repo/notes/run".into())
+        )
+    );
+    assert_eq!(
+        judge_with(&links, "Read", json!({"file_path": "/work/r1/repo/notes/readme"}), None, false),
+        harmless("Read", "/work/r1/repo/notes/readme")
+    );
+    assert_eq!(
+        judge_with(&links, "Read", json!({"file_path": CANNOT_LOOK}), None, false),
+        stopped("Read", CANNOT_LOOK, Tripwire::SkippedGate(format!("Read {CANNOT_LOOK}")))
+    );
 }

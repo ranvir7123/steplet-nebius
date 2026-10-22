@@ -16,10 +16,10 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    Answers, Asker, Check, GateAnswer, GateRequest, Live, NotYes, Progress, Question, Reply, RunError, RunPaths,
-    RunRequest, RunSetup, StopSignal, fingerprint, run_live,
+    Answers, Asker, Check, Checker, GateAnswer, GateRequest, Live, NotYes, Progress, Question, Reply, RunError,
+    RunPaths, RunRequest, RunSetup, StopSignal, fingerprint, run_live,
 };
-use support::MADE_UP_KEY;
+use support::{MADE_UP_KEY, MadeUpLinks};
 
 const WORK: &str = "/work/r1/repo";
 const LIMIT: Duration = Duration::from_millis(200);
@@ -32,6 +32,10 @@ fn steplet() -> steplet_core::header::Steplet {
 
 fn policy() -> Policy {
     Policy::from_steplet(&steplet(), WORK).unwrap()
+}
+
+fn checker() -> Checker {
+    support::checker_as_written(policy())
 }
 
 fn bash(command: &str, id: &str) -> GateRequest {
@@ -104,7 +108,7 @@ fn deny(message: &str) -> GateAnswer {
 fn a_yes_allows_exactly_the_request_shown() {
     let (asker, seen, _, _) = asker(yes(), LIMIT);
     let req = bash("touch asked.txt", "u1");
-    assert_eq!(asker.decide(&policy(), &req), GateAnswer::Allow { updated_input: req.input.clone() });
+    assert_eq!(asker.decide(&checker(), &req), GateAnswer::Allow { updated_input: req.input.clone() });
     let qs = questions(&seen);
     assert_eq!(qs.len(), 1);
     let q = &qs[0];
@@ -116,10 +120,65 @@ fn a_yes_allows_exactly_the_request_shown() {
     assert_eq!(closed(&seen), [(q.id, Reply::Yes { fingerprint: q.fingerprint.clone() })]);
 }
 
+/// Phase 5 Task 3 (row 30): a question about a path says where it really leads, while the screen still shows the
+/// request as written; and a yes covers the request as it really leads. When the same request later leads somewhere
+/// else (its link was changed), the receiver is asked again.
+#[test]
+fn a_question_says_where_a_path_really_leads() {
+    let (asker, seen, _, _) = asker(yes(), LIMIT);
+    let read = GateRequest {
+        tool_name: "Read".into(),
+        input: json!({"file_path": "/work/r1/repo/notes/a.txt"}),
+        ..bash("", "u1")
+    };
+    let first = Checker::new(policy(), Arc::new(MadeUpLinks(vec![("/work/r1/repo/notes/a.txt", "/etc/hostname")])));
+    let then = Checker::new(policy(), Arc::new(MadeUpLinks(vec![("/work/r1/repo/notes/a.txt", "/etc/os-release")])));
+    let allowed = GateAnswer::Allow { updated_input: read.input.clone() };
+    assert_eq!(asker.decide(&first, &read), allowed);
+    assert_eq!(asker.decide(&first, &GateRequest { tool_use_id: "u2".into(), ..read.clone() }), allowed);
+    assert_eq!(asker.decide(&then, &GateRequest { tool_use_id: "u3".into(), ..read.clone() }), allowed);
+    let qs = questions(&seen);
+    assert_eq!(qs.len(), 2, "asked once, then again once the path led elsewhere: {qs:?}");
+    assert_eq!(qs[0].reason, "this path is outside the repository (/work/r1/repo/notes/a.txt leads to /etc/hostname)");
+    assert_eq!(
+        qs[1].reason,
+        "this path is outside the repository (/work/r1/repo/notes/a.txt leads to /etc/os-release)"
+    );
+    assert_eq!((qs[0].what.as_str(), &qs[0].input), ("/work/r1/repo/notes/a.txt", &read.input));
+    assert_ne!(qs[0].fingerprint, qs[1].fingerprint);
+    let replies: Vec<Reply> = asker.answers().into_iter().map(|a| a.reply).collect();
+    assert_eq!(
+        replies,
+        [
+            Reply::Yes { fingerprint: qs[0].fingerprint.clone() },
+            Reply::Reused,
+            Reply::Yes { fingerprint: qs[1].fingerprint.clone() }
+        ]
+    );
+}
+
+/// Phase 5 Task 3's review: a yes covers the request as written and where it really leads, both. A yes for a link
+/// that leads to `/etc/hostname` is not reused for a request that names `/etc/hostname` itself: that request was never
+/// on screen.
+#[test]
+fn a_yes_through_a_link_does_not_cover_the_place_named_directly() {
+    let (asker, seen, _, _) = asker(yes(), LIMIT);
+    let links = Checker::new(policy(), Arc::new(MadeUpLinks(vec![("/work/r1/repo/notes/a.txt", "/etc/hostname")])));
+    let read = |path: &str, id: &str| GateRequest {
+        tool_name: "Read".into(),
+        input: json!({ "file_path": path }),
+        ..bash("", id)
+    };
+    assert!(matches!(asker.decide(&links, &read("/work/r1/repo/notes/a.txt", "u1")), GateAnswer::Allow { .. }));
+    assert!(matches!(asker.decide(&links, &read("/etc/hostname", "u2")), GateAnswer::Allow { .. }));
+    let replies: Vec<Reply> = asker.answers().into_iter().map(|a| a.reply).collect();
+    assert_eq!(questions(&seen).len(), 2, "asked again for the place named directly: {replies:?}");
+}
+
 #[test]
 fn a_yes_with_another_fingerprint_is_a_no() {
     let (asker, seen, _, _) = asker(Box::new(|_| Some(Reply::Yes { fingerprint: "0".repeat(64) })), LIMIT);
-    let answer = asker.decide(&policy(), &bash("touch asked.txt", "u1"));
+    let answer = asker.decide(&checker(), &bash("touch asked.txt", "u1"));
     assert_eq!(answer, deny("the answer did not match the request on screen, so Steplet refused it"));
     assert_eq!(closed(&seen).len(), 1);
     assert_eq!(closed(&seen)[0].1, Reply::No);
@@ -129,7 +188,7 @@ fn a_yes_with_another_fingerprint_is_a_no() {
 fn no_answer_within_the_limit_is_a_no() {
     let (asker, seen, _, _) = asker(Box::new(|_| None), LIMIT);
     let start = Instant::now();
-    let answer = asker.decide(&policy(), &bash("touch asked.txt", "u1"));
+    let answer = asker.decide(&checker(), &bash("touch asked.txt", "u1"));
     let took = start.elapsed();
     assert_eq!(answer, deny("no answer in time, so Steplet refused it"));
     assert!(took >= LIMIT && took < Duration::from_secs(1), "{took:?}");
@@ -145,7 +204,7 @@ fn a_stop_withdraws_the_open_question_at_once() {
         thread::sleep(Duration::from_millis(100));
         pressing.stop();
     });
-    let answer = asker.decide(&policy(), &bash("touch asked.txt", "u1"));
+    let answer = asker.decide(&checker(), &bash("touch asked.txt", "u1"));
     let took = start.elapsed();
     assert!(matches!(answer, GateAnswer::Deny { .. }), "{answer:?}");
     assert!(took < Duration::from_millis(500), "{took:?}");
@@ -156,8 +215,8 @@ fn a_stop_withdraws_the_open_question_at_once() {
 fn the_same_exact_request_later_in_the_run_is_allowed_without_asking_again() {
     let (asker, seen, _, _) = asker(yes(), LIMIT);
     let (first, again) = (bash("touch asked.txt", "u1"), bash("touch asked.txt", "u2"));
-    assert!(matches!(asker.decide(&policy(), &first), GateAnswer::Allow { .. }));
-    assert_eq!(asker.decide(&policy(), &again), GateAnswer::Allow { updated_input: again.input.clone() });
+    assert!(matches!(asker.decide(&checker(), &first), GateAnswer::Allow { .. }));
+    assert_eq!(asker.decide(&checker(), &again), GateAnswer::Allow { updated_input: again.input.clone() });
     assert_eq!(questions(&seen).len(), 1, "asked once (J2 B)");
     let replies: Vec<Reply> = asker.answers().into_iter().map(|a| a.reply).collect();
     assert_eq!(replies, [Reply::Yes { fingerprint: fingerprint(&first) }, Reply::Reused]);
@@ -166,8 +225,8 @@ fn the_same_exact_request_later_in_the_run_is_allowed_without_asking_again() {
 #[test]
 fn a_request_that_differs_by_one_character_asks_again() {
     let (asker, seen, _, _) = asker(yes(), LIMIT);
-    assert!(matches!(asker.decide(&policy(), &bash("touch a.txt", "u1")), GateAnswer::Allow { .. }));
-    assert!(matches!(asker.decide(&policy(), &bash("touch b.txt", "u2")), GateAnswer::Allow { .. }));
+    assert!(matches!(asker.decide(&checker(), &bash("touch a.txt", "u1")), GateAnswer::Allow { .. }));
+    assert!(matches!(asker.decide(&checker(), &bash("touch b.txt", "u2")), GateAnswer::Allow { .. }));
     assert_eq!(questions(&seen).len(), 2);
     assert_ne!(fingerprint(&bash("touch a.txt", "u1")), fingerprint(&bash("touch b.txt", "u1")));
     assert_eq!(
@@ -180,14 +239,14 @@ fn a_request_that_differs_by_one_character_asks_again() {
 #[test]
 fn the_checkers_allow_and_deny_never_ask() {
     let (asker, seen, _, _) = asker(yes(), LIMIT);
-    assert!(matches!(asker.decide(&policy(), &bash("cargo test", "u1")), GateAnswer::Allow { .. }));
-    assert!(matches!(asker.decide(&policy(), &bash("sudo make install", "u2")), GateAnswer::Deny { .. }));
+    assert!(matches!(asker.decide(&checker(), &bash("cargo test", "u1")), GateAnswer::Allow { .. }));
+    assert!(matches!(asker.decide(&checker(), &bash("sudo make install", "u2")), GateAnswer::Deny { .. }));
     let write = GateRequest {
         tool_name: "Write".into(),
         input: json!({"file_path": "/tmp/x", "content": "made up"}),
         ..bash("", "u3")
     };
-    assert!(matches!(asker.decide(&policy(), &write), GateAnswer::Deny { .. }), "J1: refused without a question");
+    assert!(matches!(asker.decide(&checker(), &write), GateAnswer::Deny { .. }), "J1: refused without a question");
     assert!(questions(&seen).is_empty(), "nothing was asked");
     assert!(asker.answers().is_empty());
 }
@@ -208,7 +267,7 @@ fn a_request_steplet_cannot_show_exactly_is_refused_without_asking() {
         ..bash("", "u3")
     };
     for req in [&escape, &key, &space] {
-        let answer = asker.decide(&policy(), req);
+        let answer = asker.decide(&checker(), req);
         assert!(
             matches!(&answer, GateAnswer::Deny { message } if message.contains("cannot show")),
             "{:?}: {answer:?}",
@@ -217,7 +276,7 @@ fn a_request_steplet_cannot_show_exactly_is_refused_without_asking() {
     }
     assert!(questions(&seen).is_empty(), "none of them was asked");
     // The same request without them is asked, as the control.
-    assert!(matches!(asker.decide(&policy(), &bash("touch made-up.txt", "u4")), GateAnswer::Allow { .. }));
+    assert!(matches!(asker.decide(&checker(), &bash("touch made-up.txt", "u4")), GateAnswer::Allow { .. }));
     assert_eq!(questions(&seen).len(), 1);
 }
 
@@ -227,7 +286,7 @@ fn two_questions_at_once_each_get_their_own_answer() {
     let asker = Arc::new(asker);
     let ask = |command: &'static str, id: &'static str| {
         let asker = asker.clone();
-        thread::spawn(move || asker.decide(&policy(), &bash(command, id)))
+        thread::spawn(move || asker.decide(&checker(), &bash(command, id)))
     };
     let (a, b) = (ask("touch a.txt", "u1"), ask("touch b.txt", "u2"));
     let start = Instant::now();
@@ -286,14 +345,14 @@ fn each_decision_reaches_the_screen_as_its_check() {
         input: json!({"file_path": "/tmp/x", "content": "made up"}),
         ..bash("", "c4")
     };
-    yes_asker.decide(&policy(), &bash("cargo test", "c1"));
-    yes_asker.decide(&policy(), &bash("touch asked.txt", "c2"));
-    yes_asker.decide(&policy(), &bash("touch asked.txt", "c3"));
-    yes_asker.decide(&policy(), &write);
+    yes_asker.decide(&checker(), &bash("cargo test", "c1"));
+    yes_asker.decide(&checker(), &bash("touch asked.txt", "c2"));
+    yes_asker.decide(&checker(), &bash("touch asked.txt", "c3"));
+    yes_asker.decide(&checker(), &write);
     let (no_asker, no_seen, _, _) = asker(Box::new(|_| Some(Reply::No)), LIMIT);
-    no_asker.decide(&policy(), &bash("touch other.txt", "c5"));
+    no_asker.decide(&checker(), &bash("touch other.txt", "c5"));
     let (silent, silent_seen, _, _) = asker(Box::new(|_| None), Duration::from_millis(50));
-    silent.decide(&policy(), &bash("touch other.txt", "c6"));
+    silent.decide(&checker(), &bash("touch other.txt", "c6"));
     let checks = |seen: &Mutex<Vec<Progress>>| -> Vec<(String, Check, Option<String>)> {
         seen.lock()
             .unwrap()

@@ -8,6 +8,7 @@ mod gate;
 mod launch;
 mod live;
 mod lock;
+mod places;
 mod prepare;
 mod promises;
 mod report;
@@ -22,13 +23,14 @@ pub mod wsl;
 
 pub use ask::{Answer, Answers, Asker, Question, Reply, fingerprint};
 pub use client::Client;
-pub use decide::decide;
+pub use decide::{Checker, decide};
 pub use gate::{
     ApiKey, Asked, GateError, GateService, gate_file_name, gate_for_run, gate_on_windows, install_gate, serve,
 };
 pub use launch::{LaunchError, RunHandle, launch};
 pub use live::{Live, Progress, StopSignal};
 pub use lock::RunLock;
+pub use places::{LinuxPaths, RealPaths};
 pub use prepare::{
     PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, fetchable, prepare, removed_files, run_config,
 };

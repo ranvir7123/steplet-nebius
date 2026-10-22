@@ -12,9 +12,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use steplet_core::policy::{Decision, Policy};
+use steplet_core::policy::Decision;
 
-use crate::decide::{check, no_one_to_ask};
+use crate::decide::{Checker, check, no_one_to_ask};
 use crate::live::{Live, Progress, StopSignal};
 use crate::report::{Check, NotYes, Scrubber};
 use crate::types::{GateAnswer, GateRequest};
@@ -31,7 +31,7 @@ const CANNOT_SHOW: &str = "Steplet cannot show this request to the receiver exac
 const TAKE_BACK_LIMIT: Duration = Duration::from_secs(2);
 
 /// One question for the receiver. `what` and `input` are cleaned for the screen; `fingerprint` is of the request
-/// itself.
+/// itself and, when one of its paths leads somewhere else (row 30), of where it really leads too.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Question {
     pub id: u64,
@@ -148,8 +148,8 @@ impl Asker {
 
     /// The gate's answer to `req`; blocks at most the ask limit, and stops waiting once the run is being stopped.
     /// The decision also goes to the screen, as the call's check.
-    pub fn decide(&self, policy: &Policy, req: &GateRequest) -> GateAnswer {
-        let (answer, reply) = self.answer(policy, req);
+    pub fn decide(&self, checker: &Checker, req: &GateRequest) -> GateAnswer {
+        let (answer, reply) = self.answer(checker, req);
         let (check, reason) = match (&answer, &reply) {
             (GateAnswer::Allow { .. }, Some(r)) => (Check::AllowedByYou { reused: matches!(r, Reply::Reused) }, None),
             (GateAnswer::Allow { .. }, None) => (Check::Allowed, None),
@@ -164,20 +164,29 @@ impl Asker {
     }
 
     /// The gate's answer to `req`, and the receiver's reply when that decided it (a question now, or a yes reused).
-    fn answer(&self, policy: &Policy, req: &GateRequest) -> (GateAnswer, Option<Reply>) {
-        let reason = match check(policy, req) {
-            Err(message) => return (deny(message), None),
-            Ok(Decision::Allow) => return (allow(req), None),
-            Ok(Decision::Deny { reason, .. }) => return (deny(reason), None),
-            Ok(Decision::Ask { reason }) => reason,
+    fn answer(&self, checker: &Checker, req: &GateRequest) -> (GateAnswer, Option<Reply>) {
+        let checked = match check(checker, req) {
+            Err(message) => return (deny(&message), None),
+            Ok(checked) => checked,
         };
-        let Some(answers) = &self.live.answers else { return (no_one_to_ask(reason), None) };
+        let reason = match checked.decision {
+            Decision::Allow => return (allow(req), None),
+            Decision::Deny { reason, .. } => return (deny(&checked.noted(reason)), None),
+            Decision::Ask { reason } => checked.noted(reason),
+        };
+        let Some(answers) = &self.live.answers else { return (no_one_to_ask(&reason), None) };
         // A yes covers exactly the request on screen, so a request the screen cannot show exactly (cleaning would
-        // change it) is never asked about.
-        if self.scrub.value(&req.input) != req.input || self.scrub.text(&req.tool_name) != req.tool_name {
+        // change it, or the place it leads to) is never asked about.
+        if self.scrub.value(&req.input) != req.input
+            || self.scrub.text(&req.tool_name) != req.tool_name
+            || self.scrub.text(&reason) != reason
+        {
             return (deny(CANNOT_SHOW), None);
         }
-        let print = fingerprint(req);
+        // Of the request as written and, when a path leads elsewhere, as it really leads: a yes covers exactly the
+        // request on screen, and is not reused once the same request leads somewhere else.
+        let print =
+            if checked.real.input == req.input { fingerprint(req) } else { leading_fingerprint(req, &checked.real) };
         let (tool, what) = (self.scrub.text(&req.tool_name), self.scrub.text(&what(&req.tool_name, &req.input)));
         let note = |reply: &Reply| {
             let answer = Answer {
@@ -201,7 +210,7 @@ impl Asker {
             tool: tool.clone(),
             what: what.clone(),
             input: self.scrub.value(&req.input),
-            reason: reason.into(),
+            reason,
             fingerprint: print.clone(),
             asked_at,
         };
@@ -240,6 +249,16 @@ impl Asker {
     pub fn answers(&self) -> Vec<Answer> {
         self.record.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
+}
+
+/// The fingerprint of a request whose path leads somewhere other than where it is written (`real`, row 30): SHA-256,
+/// in lower-case hexadecimal, of both requests' fingerprints with a zero byte between them.
+fn leading_fingerprint(req: &GateRequest, real: &GateRequest) -> String {
+    let mut h = Sha256::new();
+    h.update(fingerprint(req).as_bytes());
+    h.update([0]);
+    h.update(fingerprint(real).as_bytes());
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The fingerprint of an exact request: SHA-256, in lower-case hexadecimal, of the tool's name, a zero byte, and the

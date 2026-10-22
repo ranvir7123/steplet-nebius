@@ -108,8 +108,8 @@ impl Policy {
     /// A file the agent's own tools read or write. Those tools run outside the fence, so a write outside the working
     /// copy is refused without a question (J1): nothing of the receiver's is out there, and a file left there could
     /// change the next run (a settings file in the run's own folder could load hooks). Reads outside still ask. The
-    /// path is read as text: a link inside the copy that points out of it is for the runner to resolve first (row 30,
-    /// R19), which phase 3's Task 3 was to test and is still deferred.
+    /// path is read as text: the runner gives the place a link leads to, not the link (row 30; `steplet_run::Checker`,
+    /// since milestone 1 phase 5 Task 3).
     fn path(&self, path: &str, write: bool) -> Decision {
         let outside =
             || deny(rules::CAP_OUTSIDE_PATH, "the agent's file tools may change files only inside the working copy");

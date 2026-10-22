@@ -58,7 +58,7 @@ fn policy(work: &str) -> Policy {
 
 /// The service for `pipe`, expecting this test program as the gate, deciding with the checker.
 fn service(pipe: &str, deadline: Duration) -> GateService {
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     serve(&link(pipe, deadline), &this_program(), Some(ApiKey::new(MADE_UP_KEY.into())), move |r| decide(&p, r))
         .unwrap()
 }
@@ -239,7 +239,7 @@ fn a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate() {
 
     // A service given no key serves none.
     let bare_pipe = pipe_name();
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let bare = serve(&link(&bare_pipe, Duration::from_secs(5)), &this_program(), None, move |r| decide(&p, r)).unwrap();
     let none = ask(&bare_pipe, &key_request(TOKEN)).unwrap();
     assert!(none.get("key").is_none(), "{none}");
@@ -250,7 +250,7 @@ fn a_wrong_run_token_is_refused_and_the_key_goes_only_to_the_run_s_gate() {
 #[test]
 fn a_program_other_than_the_gate_is_refused() {
     let pipe = pipe_name();
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let elsewhere = r"\\wsl.localhost\steplet\opt\steplet\gate\steplet-gate-0000000000000000.exe";
     let key = Some(ApiKey::new(MADE_UP_KEY.into()));
     let gate = serve(&link(&pipe, Duration::from_secs(5)), elsewhere, key, move |r| decide(&p, r)).unwrap();
@@ -448,7 +448,7 @@ fn create(pipe: &str, first: bool) -> io::Result<HANDLE> {
 fn someone_holding_the_pipe_name_first_stops_the_gate_from_starting() {
     let pipe = pipe_name();
     let squatter = create(&pipe, true).expect("the test takes the name first");
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let got = serve(&link(&pipe, Duration::from_secs(5)), &this_program(), None, move |r| decide(&p, r));
     println!("--- the name was taken first: {:?}", got.as_ref().err());
     assert!(matches!(got, Err(GateError::Taken)), "the run must not start on a pipe someone else holds");
@@ -477,7 +477,7 @@ fn someone_holding_the_pipe_name_first_stops_the_gate_from_starting() {
 #[test]
 fn a_decision_that_never_comes_is_refused_at_steplet_s_deadline() {
     let pipe = pipe_name();
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let stall = move |r: &GateRequest| {
         if r.tool_use_id == "toolu_stall" {
             thread::sleep(Duration::from_secs(3600));
@@ -506,7 +506,7 @@ fn a_decision_that_never_comes_is_refused_at_steplet_s_deadline() {
 #[test]
 fn a_request_still_being_decided_counts_as_not_allowed() {
     let pipe = pipe_name();
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let (go, wait) = std::sync::mpsc::channel::<()>();
     let wait = Mutex::new(wait);
     let slow = move |r: &GateRequest| {
@@ -568,7 +568,7 @@ fn a_client_that_says_nothing_or_nonsense_is_refused_and_the_next_is_answered() 
 fn an_answer_the_client_never_read_is_recorded_as_not_delivered() {
     // What Steplet sees when the gate dies mid-request (F39): the answer cannot be sent.
     let pipe = pipe_name();
-    let p = policy("/work/t8/repo");
+    let p = support::checker_as_written(policy("/work/t8/repo"));
     let slow = move |r: &GateRequest| {
         thread::sleep(Duration::from_millis(300));
         decide(&p, r)
@@ -770,7 +770,7 @@ fn a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not() {
         {"tool": "Write", "input": {"file_path": "/work/t8a/repo/written.txt", "content": "t8\n"}},
         {"text": "Task 8: done."}]}"#;
     let checker = |paths: &RunPaths| -> Box<dyn Fn(&GateRequest) -> GateAnswer + Send + Sync> {
-        let p = policy(paths.work_repo());
+        let p = support::checker(paths.distro_id(), policy(paths.work_repo()));
         Box::new(move |r| decide(&p, r))
     };
     let (events, code, gate, paths, model_log) = live_run("t8a", 47920, script, Duration::from_secs(10), checker);

@@ -3,16 +3,56 @@
 //! only.
 #![allow(dead_code)] // each test file uses part of it
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
-use steplet_run::{ApiKey, GateAnswer, GateLink, GateRequest, GateService, gate_on_windows, serve, wsl};
+use steplet_core::policy::Policy;
+use steplet_run::{
+    ApiKey, Checker, GateAnswer, GateLink, GateRequest, GateService, LinuxPaths, RealPaths, gate_on_windows, serve, wsl,
+};
 
 pub fn steplet_linux() -> String {
     wsl::find_distribution("steplet").unwrap().expect("Steplet's Linux is installed")
+}
+
+/// The checker for `policy` as a run uses it: each path of the agent's file tools is looked up in Steplet's Linux
+/// (phase 5 Task 3).
+pub fn checker(distro: &str, policy: Policy) -> Checker {
+    Checker::new(policy, Arc::new(LinuxPaths::new(distro)))
+}
+
+/// The checker for `policy` where no path is a link, for tests that run without Steplet's Linux.
+pub fn checker_as_written(policy: Policy) -> Checker {
+    Checker::new(policy, Arc::new(MadeUpLinks(Vec::new())))
+}
+
+/// A path Steplet cannot look up, as when its Linux does not answer (`MadeUpLinks`).
+pub const CANNOT_LOOK: &str = "/work/r1/repo/cannot-look";
+
+/// Where paths lead, for tests without Steplet's Linux: each `(link, place)` is a link at `link` that leads to
+/// `place`, and a path below a link to a folder leads below its place. Any other path leads where it is written,
+/// except `CANNOT_LOOK`.
+pub struct MadeUpLinks(pub Vec<(&'static str, &'static str)>);
+
+impl RealPaths for MadeUpLinks {
+    fn real(&self, path: &str) -> io::Result<String> {
+        if path == CANNOT_LOOK {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "made up: Steplet's Linux did not answer"));
+        }
+        for (link, place) in &self.0 {
+            if path == *link {
+                return Ok((*place).into());
+            }
+            if let Some(rest) = path.strip_prefix(link).filter(|rest| rest.starts_with('/')) {
+                return Ok(format!("{place}{rest}"));
+            }
+        }
+        Ok(path.into())
+    }
 }
 
 /// Runs one program in Steplet's Linux; it must succeed. Returns its output, trimmed.

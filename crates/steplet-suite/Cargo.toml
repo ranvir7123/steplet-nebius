@@ -8,9 +8,8 @@ publish.workspace = true
 
 [dependencies]
 steplet-run = { path = "../steplet-run" }
-# For the runner's helpers shared from steplet-run's tests (`#[path]`): the scripted model checks the key's SHA-256.
+# For the runner's helpers shared from steplet-run's tests (`#[path]`): the scripted model checks the key's SHA-256,
+# and the checker helpers name the file's policy.
 sha2 = "=0.10.9"
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
-
-[dev-dependencies]
 steplet-core = { path = "../steplet-core" }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_SystemInformation"] }

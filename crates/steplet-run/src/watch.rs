@@ -7,19 +7,19 @@
 //! - A call the gate allowed is fine. One it refused must come back as an error; otherwise it ran although Steplet
 //!   refused it.
 //! - A call that skipped the gate is fine only if it was a harmless read: a command the command reader reads as a
-//!   read-only one inside the working copy (G2, D8, E2), or a Read, Glob or Grep the checker would allow. Anything
-//!   else stops the run. That includes chained commands (`;`, `|`), which the command reader does not read at all
-//!   (R8, G1), and calls Claude Code refused by Steplet's own deny rules: Steplet cannot tell from the stream whether
-//!   a skipped command ran, since its output could imitate a refusal.
+//!   read-only one inside the working copy (G2, D8, E2), or a Read, Glob or Grep the checker would allow where its
+//!   path really leads (row 30: a link in the copy can lead out of it). Anything else stops the run. That includes
+//!   chained commands (`;`, `|`), which the command reader does not read at all (R8, G1), and calls Claude Code
+//!   refused by Steplet's own deny rules: Steplet cannot tell from the stream whether a skipped command ran, since
+//!   its output could imitate a refusal.
 //! - Any hook event stops the run (D3).
 
 use std::collections::HashMap;
 
 use serde_json::Value;
 use steplet_core::command::{self, Assessment, Kind};
-use steplet_core::policy::Policy;
 
-use crate::decide::decide;
+use crate::decide::{Checker, decide};
 use crate::types::{Event, GateAnswer, GateRequest};
 
 /// Why Steplet stopped a run.
@@ -44,16 +44,16 @@ pub struct Verdict {
 
 /// Judges the events of one run, in order.
 pub struct Watcher<'a> {
-    policy: &'a Policy,
+    checker: &'a Checker,
     work: String,
     /// The tool calls seen whose results have not come yet: id, then tool and input.
     calls: HashMap<String, (String, Value)>,
 }
 
 impl<'a> Watcher<'a> {
-    /// A watcher for a run that `policy` checks, in the working copy `work`.
-    pub fn new(policy: &'a Policy, work: &str) -> Watcher<'a> {
-        Watcher { policy, work: work.into(), calls: HashMap::new() }
+    /// A watcher for a run that `checker` checks, in the working copy `work`.
+    pub fn new(checker: &'a Checker, work: &str) -> Watcher<'a> {
+        Watcher { checker, work: work.into(), calls: HashMap::new() }
     }
 
     /// Judges `event`. `gate` says what Steplet answered the gate about a tool call id: `None` if the gate never
@@ -105,7 +105,7 @@ impl<'a> Watcher<'a> {
                 command::assess(text(input, "command")),
                 Assessment::Words { kind: Kind::ReadOnly, outside: false, .. }
             ),
-            // The checker's own answer, as the gate would have given it (row 29).
+            // The checker's own answer, as the gate would have given it, where the path really leads (rows 29, 30).
             "Read" | "Glob" | "Grep" => {
                 let request = GateRequest {
                     run_token: String::new(),
@@ -113,7 +113,7 @@ impl<'a> Watcher<'a> {
                     input: input.clone(),
                     tool_use_id: String::new(),
                 };
-                matches!(decide(self.policy, &request), GateAnswer::Allow { .. })
+                matches!(decide(self.checker, &request), GateAnswer::Allow { .. })
             }
             _ => false,
         }

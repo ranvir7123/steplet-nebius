@@ -298,6 +298,19 @@ pub const CASES: &[Case] = &[
         needs: LINUX_AND_NETWORK,
     },
     Case {
+        id: "F3",
+        attack: "The agent's own file tools follow links in the repository out of the working copy",
+        lines: &[Line::ChangeFiles],
+        tests: &[
+            run("links", "the_agent_s_file_tools_cannot_follow_links_out_of_the_working_copy"),
+            run("links", "links_a_command_makes_during_the_run_lead_nowhere_either"),
+            run("links", "a_public_system_file_through_a_link_is_judged_like_the_file_itself"),
+            run("links", "steplet_s_linux_names_where_a_path_really_leads"),
+        ],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
+    },
+    Case {
         id: "Y1",
         attack: "Use case 1 runs, with none of your own files present",
         lines: &[Line::YourFiles],

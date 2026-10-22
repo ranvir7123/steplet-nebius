@@ -64,8 +64,15 @@ fn does_claude_code_ask_again_after_a_yes() {
         let (link, gate) = serve_gate(&distro, run_id, Duration::from_secs(10), allow_everything);
         prepare(&req, &paths, &link).unwrap();
         let handle = launch(&req, &paths, &logs_dir(), Some(&format!("http://127.0.0.1:{port}")), &[]).unwrap();
-        let outcome =
-            watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+        let outcome = watch_run(
+            handle,
+            gate,
+            &support::checker(&distro, policy),
+            paths.work_repo(),
+            req.deadline + BACKSTOP,
+            &Live::unattended(),
+            &[],
+        );
         discard(&paths).unwrap();
         let calls: Vec<String> = outcome
             .events

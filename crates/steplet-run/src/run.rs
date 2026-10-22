@@ -14,11 +14,12 @@ use steplet_core::policy::Policy;
 use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
 
 use crate::ask::{Answer, Asker};
-use crate::decide::decide;
+use crate::decide::{Checker, decide};
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_for_run, gate_on_windows, serve};
 use crate::launch::{LaunchError, RunHandle, launch};
 use crate::live::{Live, Progress, StopSignal};
 use crate::lock::RunLock;
+use crate::places::LinuxPaths;
 use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
 use crate::report::{Report, Scrubber, Trust, build_report, read_trust};
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
@@ -171,15 +172,17 @@ pub fn run_live_on_pipe(
             return Err(RunError::Refused(e));
         }
     };
-    let checker = policy.clone();
+    // Each path of the agent's file tools is decided where it really leads in Steplet's Linux (row 30).
+    let checker = Checker::new(policy.clone(), Arc::new(LinuxPaths::new(paths.distro_id())));
+    let deciding = checker.clone();
     let program = gate_on_windows(DISTRIBUTION, &gate_exe);
     // With someone to ask, the checker's "ask" becomes a question on their screen; without, a refusal.
     let asker = Arc::new(Asker::new(live.clone(), &secrets));
     let gate = if live.answers.is_some() {
         let asking = asker.clone();
-        serve(&link, &program, setup.key.clone(), move |r| asking.decide(&checker, r))
+        serve(&link, &program, setup.key.clone(), move |r| asking.decide(&deciding, r))
     } else {
-        serve(&link, &program, setup.key.clone(), move |r| decide(&checker, r))
+        serve(&link, &program, setup.key.clone(), move |r| decide(&deciding, r))
     };
     let gate = match gate {
         Ok(gate) => gate,
@@ -200,7 +203,7 @@ pub fn run_live_on_pipe(
     };
     let mut outcome = match started {
         Ok(Some(handle)) => {
-            watch_run(handle, gate, policy, paths.work_repo(), req.deadline + BACKSTOP, &live, &secrets)
+            watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &live, &secrets)
         }
         // The receiver pressed Stop before the agent started: nothing of the task ran.
         Ok(None) => RunOutcome { stopped_by_you: true, stopped_at: Some(0), ..RunOutcome::new(gate.into_requests()) },
@@ -210,6 +213,9 @@ pub fn run_live_on_pipe(
             return Err(e);
         }
     };
+    // The look-up program in Steplet's Linux ends here (the gate's copy went with the gate), before Steplet's own
+    // looks and the removal, which then find nothing of it running.
+    drop(checker);
     // The run is over: a question still on screen is taken back, and recorded as such.
     asker.take_back_all();
     outcome.answers = asker.answers();
@@ -306,13 +312,13 @@ impl RunningAgent for RunHandle {
 pub fn watch_run(
     mut handle: impl RunningAgent,
     gate: GateService,
-    policy: &Policy,
+    checker: &Checker,
     work: &str,
     stop_after: Duration,
     live: &Live,
     secrets: &[&str],
 ) -> RunOutcome {
-    let mut watcher = Watcher::new(policy, work);
+    let mut watcher = Watcher::new(checker, work);
     let scrub = Scrubber::new(secrets);
     let show = |e: &Event| (live.on_progress)(Progress::Event(scrub.event(e)));
     let mut outcome = RunOutcome::new(Vec::new());

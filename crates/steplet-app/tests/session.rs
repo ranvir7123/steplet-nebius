@@ -14,8 +14,8 @@ use steplet_app::session::{DiscardFn, Places, Ready, RunFn, Screen, Session};
 use steplet_app::views::{ANOTHER_WINDOW, ProgressView, RED_SENTENCE};
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Asker, GateAnswer, GateRequest, Live, Report, RunError, RunLock, RunOutcome, RunPaths, RunRequest,
-    RunSetup, Trust, build_report,
+    ApiKey, Asker, Checker, GateAnswer, GateRequest, Live, RealPaths, Report, RunError, RunLock, RunOutcome, RunPaths,
+    RunRequest, RunSetup, Trust, build_report,
 };
 
 /// The corpus's own time of viewing: 11 Oct 2026. The example files expire at the end of 2026-12-31 or later.
@@ -27,6 +27,19 @@ static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
 fn alone() -> std::sync::MutexGuard<'static, ()> {
     ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Paths as written: the stand-in runs below ask only about commands, which hold no path to look up.
+struct AsWritten;
+
+impl RealPaths for AsWritten {
+    fn real(&self, path: &str) -> std::io::Result<String> {
+        Ok(path.into())
+    }
+}
+
+fn checker(policy: &Policy) -> Checker {
+    Checker::new(policy.clone(), Arc::new(AsWritten))
 }
 
 fn read(path: &str) -> Vec<u8> {
@@ -231,7 +244,7 @@ fn an_answer_reaches_the_runner_bound_to_its_question() {
         Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, policy: &Policy, _: &RunSetup, live: Arc<Live>| {
             let asker = Asker::new(live, &[]);
             for (command, id) in [("touch first.txt", "toolu_01"), ("touch second.txt", "toolu_02")] {
-                let answer = asker.decide(policy, &bash(command, id));
+                let answer = asker.decide(&checker(policy), &bash(command, id));
                 keep.lock().unwrap().push(answer);
             }
             Ok(empty_report())
@@ -274,10 +287,10 @@ fn a_question_flashes_the_taskbar_and_waits_its_turn() {
                 let (asker, policy) = (asker.clone(), policy.clone());
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(100));
-                    asker.decide(&policy, &bash("touch second.txt", "toolu_02"))
+                    asker.decide(&checker(&policy), &bash("touch second.txt", "toolu_02"))
                 })
             };
-            asker.decide(policy, &bash("touch first.txt", "toolu_01"));
+            asker.decide(&checker(policy), &bash("touch first.txt", "toolu_01"));
             second.join().unwrap();
             Ok(empty_report())
         });

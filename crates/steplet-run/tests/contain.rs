@@ -267,8 +267,9 @@ fn every_try_of_the_hostile_fixture_is_contained() {
     println!("--- control, outside the fence: {started:?}; marker written: {}", control.exists());
     assert!(control.exists(), "outside the fence, Steplet's Linux can start the copied cmd.exe");
 
-    let checker = policy.clone();
-    let (link, gate) = serve_gate(&distro, "t11b", Duration::from_secs(10), move |r| decide(&checker, r));
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "t11b", Duration::from_secs(10), move |r| decide(&deciding, r));
     let script = json!({"steps": [
         {"tool": "Bash", "input": {"command": FIXTURE_TESTS, "description": "Run the tests"}},
         {"text": THE_END}]});
@@ -310,7 +311,7 @@ fn every_try_of_the_hostile_fixture_is_contained() {
     let start = Instant::now();
     let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47951"), &[]).unwrap();
     let outcome =
-        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let took = start.elapsed();
     // Steplet's own looks, as `run` makes them; then the evidence, all before the run is removed.
     let changed = changes(&paths);
@@ -446,8 +447,9 @@ fn a_write_into_steplets_own_folder_is_refused_before_the_gate() {
         {"tool": "Bash", "input": {"command": TEMPFILE, "description": "Make a temporary file"}},
         {"tool": "Write", "input": {"file_path": planted, "content": "{}\n"}},
         {"text": THE_END}]});
-    let checker = policy.clone();
-    let (link, gate) = serve_gate(&distro, "p4t1", Duration::from_secs(10), move |r| decide(&checker, r));
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "p4t1", Duration::from_secs(10), move |r| decide(&deciding, r));
     let _model = scripted_model(&distro, "p4t1", &script.to_string(), 47953);
     prepare(&req, &paths, &link).unwrap();
     let present = |path: &str| root_sh(&distro, &format!("test -e {path} && echo present || echo absent"));
@@ -456,7 +458,7 @@ fn a_write_into_steplets_own_folder_is_refused_before_the_gate() {
 
     let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47953"), &[]).unwrap();
     let outcome =
-        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let after = (present(probe), present(&planted));
     discard(&paths).unwrap();
     let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);
@@ -608,8 +610,9 @@ fn a_declared_site_is_the_only_one_a_program_can_reach() {
     let paths = RunPaths::new(&distro, "p4t5a").unwrap();
     let req = request("allow:\n  commands:\n    - python3 probe.py\n  domains:\n    - example.org\n");
     let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
-    let checker = policy.clone();
-    let (link, gate) = serve_gate(&distro, "p4t5a", Duration::from_secs(10), move |r| decide(&checker, r));
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "p4t5a", Duration::from_secs(10), move |r| decide(&deciding, r));
     let script = json!({"steps": [
         {"tool": "Bash", "input": {"command": "python3 probe.py", "description": "Try the two sites"}},
         {"text": THE_END}]});
@@ -624,7 +627,7 @@ fn a_declared_site_is_the_only_one_a_program_can_reach() {
 
     let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47955"), &[]).unwrap();
     let outcome =
-        watch_run(handle, gate, &policy, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
     let record = root_sh(&distro, &format!("cat {}/probe_results.json", paths.work_repo()));
     discard(&paths).unwrap();
     let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);
@@ -657,8 +660,9 @@ fn the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after() {
     // A program the agent asks about (Claude Code runs `sleep` without asking, which Steplet stops, H11).
     let req = request(&format!("allow:\n  commands:\n    - '{WAIT}'\n"));
     let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
-    let checker = policy.clone();
-    let (link, gate) = serve_gate(&distro, "p4t5t", Duration::from_secs(10), move |r| decide(&checker, r));
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "p4t5t", Duration::from_secs(10), move |r| decide(&deciding, r));
     let script = json!({"steps": [
         {"tool": "Bash", "input": {"command": WAIT, "description": "Wait a moment"}},
         {"text": THE_END}]});
@@ -667,9 +671,9 @@ fn the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after() {
     prepare(&req, &paths, &link).unwrap();
     let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47956"), &[]).unwrap();
     let watching = {
-        let (policy, work) = (policy.clone(), paths.work_repo().to_owned());
+        let (checker, work) = (checker.clone(), paths.work_repo().to_owned());
         let deadline = req.deadline + BACKSTOP;
-        std::thread::spawn(move || watch_run(handle, gate, &policy, &work, deadline, &Live::unattended(), &[]))
+        std::thread::spawn(move || watch_run(handle, gate, &checker, &work, deadline, &Live::unattended(), &[]))
     };
     // Until the declared command runs inside the fence.
     let start = Instant::now();

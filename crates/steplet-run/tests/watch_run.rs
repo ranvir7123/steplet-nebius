@@ -173,7 +173,8 @@ fn watch_live(stand: Stand, stop_after: Duration, live: Live, secrets: &[&str]) 
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let secrets: Vec<&str> = secrets.iter().map(String::as_str).collect();
-        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, stop_after, &live, &secrets));
+        let _ =
+            tx.send(watch_run(stand, gate, &support::checker_as_written(policy()), WORK, stop_after, &live, &secrets));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(10)).expect("watch_run returned within 10 s");
     let notes = notes.lock().unwrap().clone();
@@ -263,7 +264,15 @@ fn at_a_tripwire_the_gate_refuses_before_the_stop_begins() {
         Stand { script: VecDeque::from([hook]), ask_on_stop: Some(pipe), notes: notes.clone(), ..Stand::default() };
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
-        let _ = tx.send(watch_run(stand, gate, &policy(), WORK, Duration::from_secs(60), &Live::unattended(), &[]));
+        let _ = tx.send(watch_run(
+            stand,
+            gate,
+            &support::checker_as_written(policy()),
+            WORK,
+            Duration::from_secs(60),
+            &Live::unattended(),
+            &[],
+        ));
     });
     let outcome = rx.recv_timeout(Duration::from_secs(10)).expect("watch_run returned within 10 s");
     assert!(matches!(outcome.stopped_by, Some(Tripwire::Hook(_))));
