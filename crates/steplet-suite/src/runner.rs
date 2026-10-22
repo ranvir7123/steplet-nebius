@@ -29,6 +29,8 @@ pub enum NotReady {
     LinuxBusy,
     /// Steplet's Linux has another Claude Code than the one the suite backs.
     ClaudeVersion { found: String },
+    /// Before the first case, Steplet's Linux held these, and the clean-up could not remove them.
+    NotClean { left: Vec<String> },
 }
 
 impl NotReady {
@@ -41,6 +43,10 @@ impl NotReady {
             NotReady::ClaudeVersion { found } => format!(
                 "Claude Code {found} is installed in Steplet's Linux; this suite backs {CLAUDE_VERSION} only. Nothing \
                  was changed."
+            ),
+            NotReady::NotClean { left } => format!(
+                "Before the first case, Steplet's Linux held what the suite could not remove: {}. No case was run.",
+                left.join("; ")
             ),
         }
     }
@@ -77,7 +83,7 @@ pub fn ready_to_run(look: &State, claude_found: Option<&str>, lock_free: bool) -
 }
 
 /// The files of `/opt/steplet-test` kept on purpose: the helpers each test puts there again, and their logs.
-const KEPT_TEST_FILES: &[&str] = &["listener.py", "fake_model.py", "made-up-key.sha256"];
+const KEPT_TEST_FILES: &[&str] = &["listener.py", "fake_model.py", "made-up-key.sha256", "count_key.py", "m0-fixture"];
 const KEPT_TEST_ENDINGS: &[&str] = &[".script.json", ".model.log", ".listener.log"];
 
 /// What a case left, from the look after it (`support::after_case_look`, records ended by a NUL): each path, or
@@ -184,13 +190,24 @@ pub struct CaseResult {
     pub left: Vec<String>,
 }
 
+/// What one run of the suite found.
+#[derive(Debug)]
+pub struct Suite {
+    /// What Steplet's Linux held before the first case, each said in words; already removed, and counted against no
+    /// case.
+    pub before: Vec<String>,
+    pub results: Vec<CaseResult>,
+}
+
 /// Runs `cases` in order, calling `row` as each one finishes. Stops before anything when a case needs Steplet's Linux
-/// and it is busy, not set up, or has another Claude Code. A test that several cases name runs once.
+/// and it is busy, not set up, has another Claude Code, or holds from earlier work what the clean-up cannot remove. A
+/// test that several cases name runs once.
 pub fn run_cases(
     cases: &[&'static Case],
     machine: &mut dyn Machine,
     row: &mut dyn FnMut(&CaseResult),
-) -> Result<Vec<CaseResult>, NotReady> {
+) -> Result<Suite, NotReady> {
+    let mut before = Vec::new();
     if cases.iter().any(|c| c.needs.contains(&Needs::StepletLinux)) {
         if !machine.take_lock() {
             return Err(NotReady::LinuxBusy);
@@ -198,6 +215,11 @@ pub fn run_cases(
         let (state, claude) = machine.look();
         machine.let_go();
         ready_to_run(&state, claude.as_deref(), true)?;
+        let start = look_and_clean(machine).ok_or(NotReady::LinuxBusy)?;
+        if !start.still_there.is_empty() {
+            return Err(NotReady::NotClean { left: start.still_there });
+        }
+        before = start.left.iter().map(|l| format!("there before the suite started, removed: {l}")).collect();
     }
 
     let mut programs: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -262,35 +284,54 @@ pub fn run_cases(
             .iter()
             .filter_map(|t| known.get(&(t.package, t.program, t.name)).map(|o| (t.name.to_owned(), o.clone())))
             .collect();
-        let left = if case.needs.contains(&Needs::StepletLinux) { look_after(machine) } else { Vec::new() };
+        let left = if case.needs.contains(&Needs::StepletLinux) {
+            match look_and_clean(machine) {
+                Some(looked) => looked.said(),
+                None => vec![
+                    "could not look after this case: Steplet's Linux is in use by another run, so nothing was looked \
+                     at or removed"
+                        .to_owned(),
+                ],
+            }
+        } else {
+            Vec::new()
+        };
         let reused = earlier.len() == case.tests.len();
         let result = CaseResult { case, verdict: verdict(case, &mine), took, output, reused, left };
         row(&result);
         results.push(result);
     }
-    Ok(results)
+    Ok(Suite { before, results })
 }
 
-/// The look after a case on Steplet's Linux: what it left, removed, and looked for again, all while holding Steplet's
-/// one-run lock, so a run a Steplet window started meanwhile is never taken for leftovers.
-fn look_after(machine: &mut dyn Machine) -> Vec<String> {
+/// What one look and clean-up found: what was left (then removed), and what was still there after the clean-up.
+struct Looked {
+    left: Vec<String>,
+    still_there: Vec<String>,
+}
+
+impl Looked {
+    fn said(&self) -> Vec<String> {
+        let left = self.left.iter().map(|l| format!("left behind: {l}"));
+        left.chain(self.still_there.iter().map(|l| format!("still there after the clean-up: {l}"))).collect()
+    }
+}
+
+/// A look in Steplet's Linux for anything left, its removal, and a second look, all while holding Steplet's one-run
+/// lock, so a run a Steplet window started meanwhile is never taken for leftovers. `None` when another run holds the
+/// lock: then nothing was looked at or removed.
+fn look_and_clean(machine: &mut dyn Machine) -> Option<Looked> {
     if !machine.take_lock() {
-        return vec![
-            "could not look after this case: Steplet's Linux is in use by another run, so nothing was looked at or \
-             removed"
-                .to_owned(),
-        ];
+        return None;
     }
     let left = leftovers(&machine.after_case_look());
-    let mut said: Vec<String> = left.iter().map(|l| format!("left behind: {l}")).collect();
+    let mut still_there = Vec::new();
     if !left.is_empty() {
         machine.remove(&left);
-        said.extend(
-            leftovers(&machine.after_case_look()).iter().map(|l| format!("still there after the clean-up: {l}")),
-        );
+        still_there = leftovers(&machine.after_case_look());
     }
     machine.let_go();
-    said
+    Some(Looked { left, still_there })
 }
 
 /// The suite passes only when every case was blocked and none left anything behind.

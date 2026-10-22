@@ -152,18 +152,29 @@ fn scripted(cases: &[&'static Case], only: Option<&str>) -> ExitCode {
     print!("{text}");
     let mut machine = ThisComputer::new();
     let mut rows = String::new();
-    let results = match run_cases(cases, &mut machine, &mut |r| {
+    let suite = match run_cases(cases, &mut machine, &mut |r| {
         let line = row(r);
         println!("{line}");
         rows += &line;
         rows += "\n";
     }) {
-        Ok(results) => results,
+        Ok(suite) => suite,
         Err(not_ready) => {
             println!("{}", not_ready.words());
             return ExitCode::from(2);
         }
     };
+    let results = suite.results;
+    let mut before = String::new();
+    if !suite.before.is_empty() {
+        before += "Before the first case, Steplet's Linux held, from earlier work (counted against no case):\n";
+        for b in &suite.before {
+            before += &format!("  {b}\n");
+        }
+        // On screen it comes after the rows, which show as each case finishes; in the record, before them.
+        print!("{before}");
+    }
+    text += &before;
     text += &rows;
 
     let verdicts: Vec<(&Case, Verdict)> = results.iter().map(|r| (r.case, r.verdict.clone())).collect();

@@ -65,22 +65,25 @@ fn ready() -> State {
     }
 }
 
-/// A stand-in for this computer: it notes every call, and every test it is asked to run says `ok`. The lock is free
-/// while `lock_free` says so (its last answer repeats); a removal clears what is left unless `stubborn`.
+/// A stand-in for this computer: it notes every call, and every test it is asked to run says `ok` and leaves `leaves`
+/// in Steplet's Linux (which starts out holding `left`). The lock is free while `lock_free` says so (its last answer
+/// repeats); a removal clears what is left unless `stubborn`.
 struct StandIn {
     lock_free: Vec<bool>,
     claude: Option<String>,
     left: String,
+    leaves: String,
     stubborn: bool,
     calls: Vec<String>,
 }
 
 impl StandIn {
-    fn new(lock_free: bool, claude: &str, left: &str) -> StandIn {
+    fn new(lock_free: bool, claude: &str, leaves: &str) -> StandIn {
         StandIn {
             lock_free: vec![lock_free],
             claude: Some(claude.into()),
-            left: left.into(),
+            left: String::new(),
+            leaves: leaves.into(),
             stubborn: false,
             calls: Vec::new(),
         }
@@ -105,6 +108,7 @@ impl Machine for StandIn {
     }
     fn run_tests(&mut self, package: &str, program: &str, names: &[&str]) -> String {
         self.calls.push(format!("run {package} {program} {names:?}"));
+        self.left += &self.leaves;
         let rows: String = names.iter().map(|n| format!("test {n} ... ok\n")).collect();
         format!("{rows}\n{}", summary(names.len(), 0, 0))
     }
@@ -309,7 +313,7 @@ fn the_suite_starts_nothing_while_a_run_holds_the_lock() {
     // The near-miss: cases on Windows alone need neither the lock nor Steplet's Linux.
     let mut machine = StandIn::new(false, CLAUDE_VERSION, "");
     let cases: Vec<&'static Case> = vec![&TWO];
-    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap().results;
     assert_eq!(results[0].verdict, Verdict::Blocked);
     assert!(!machine.calls.iter().any(|c| c == "lock" || c == "look" || c == "after"), "{:?}", machine.calls);
 }
@@ -322,8 +326,10 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
                    test-file\t/opt/steplet-test/t11b.listener.log\0\
                    left\t/work/t11b\0";
     assert_eq!(leftovers(listing), ["/opt/steplet-test/cmd.exe", "/work/t11b"]);
+    // The helpers each test puts back when it needs them (seen in the first replay on Steplet's Linux, 22 Oct 2026).
     let clean = "test-file\t/opt/steplet-test/fake_model.py\0test-file\t/opt/steplet-test/t7a.script.json\0\
-                 test-file\t/opt/steplet-test/t7a.model.log\0test-file\t/opt/steplet-test/made-up-key.sha256\0";
+                 test-file\t/opt/steplet-test/t7a.model.log\0test-file\t/opt/steplet-test/made-up-key.sha256\0\
+                 test-file\t/opt/steplet-test/count_key.py\0test-file\t/opt/steplet-test/m0-fixture\0";
     assert_eq!(leftovers(clean), Vec::<String>::new());
     assert_eq!(
         leftovers(
@@ -340,7 +346,7 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
 
     let cases: Vec<&'static Case> = vec![&ON_LINUX];
     let mut machine = StandIn::new(true, CLAUDE_VERSION, listing);
-    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap().results;
     assert_eq!(results[0].verdict, Verdict::Blocked, "its test passed");
     assert_eq!(results[0].left, ["left behind: /opt/steplet-test/cmd.exe", "left behind: /work/t11b"]);
     // The look, the removal and the look again all happen while the suite holds Steplet's one-run lock.
@@ -354,15 +360,44 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
     // What the clean-up could not remove is named as still there.
     let mut machine = StandIn::new(true, CLAUDE_VERSION, "left\t/work/t11b\0");
     machine.stubborn = true;
-    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap().results;
     assert_eq!(results[0].left, ["left behind: /work/t11b", "still there after the clean-up: /work/t11b"]);
     assert!(!passed(&results));
 
     // The control: the same case with nothing left passes.
     let mut machine = StandIn::new(true, CLAUDE_VERSION, clean);
-    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap().results;
     assert!(results[0].left.is_empty() && passed(&results));
     assert!(!machine.calls.iter().any(|c| c.starts_with("remove")));
+}
+
+/// What Steplet's Linux holds before the first case (left by earlier work, not by any case) is named apart, removed,
+/// and counted against no case. If it cannot be removed, the suite stops before building or running anything.
+#[test]
+fn what_was_there_before_the_first_case_is_named_apart_and_counted_against_no_case() {
+    let cases: Vec<&'static Case> = vec![&ON_LINUX];
+    let mut machine = StandIn::new(true, CLAUDE_VERSION, "");
+    machine.left = "left\t/opt/steplet-test/fixture.tar\0".into();
+    let suite = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    assert_eq!(suite.before, ["there before the suite started, removed: /opt/steplet-test/fixture.tar"]);
+    assert!(suite.results[0].left.is_empty() && passed(&suite.results), "{:?}", suite.results[0].left);
+    let first_build = machine.calls.iter().position(|c| c.starts_with("build")).unwrap();
+    assert_eq!(
+        machine.calls[..first_build],
+        ["lock", "look", "let go", "lock", "after", r#"remove ["/opt/steplet-test/fixture.tar"]"#, "after", "let go"]
+    );
+
+    // What the clean-up cannot remove stops the suite before anything is built or run.
+    let mut machine = StandIn::new(true, CLAUDE_VERSION, "");
+    machine.left = "left\t/opt/steplet-test/fixture.tar\0".into();
+    machine.stubborn = true;
+    let stopped = run_cases(&cases, &mut machine, &mut |_| ()).unwrap_err();
+    assert_eq!(stopped, NotReady::NotClean { left: vec!["/opt/steplet-test/fixture.tar".into()] });
+    assert!(!machine.calls.iter().any(|c| c.starts_with("build") || c.starts_with("run ")), "{:?}", machine.calls);
+
+    // The near-miss: a clean start names nothing.
+    let mut machine = StandIn::new(true, CLAUDE_VERSION, "");
+    assert!(run_cases(&cases, &mut machine, &mut |_| ()).unwrap().before.is_empty());
 }
 
 /// A Steplet window may start a run between two cases. The look after a case then finds the lock taken, and looks at
@@ -372,8 +407,8 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
 fn the_look_after_a_case_touches_nothing_while_another_run_holds_the_lock() {
     let cases: Vec<&'static Case> = vec![&ON_LINUX];
     let mut machine = StandIn::new(true, CLAUDE_VERSION, "left\t/work/a-window-s-run\0");
-    machine.lock_free = vec![true, false];
-    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap();
+    machine.lock_free = vec![true, true, false];
+    let results = run_cases(&cases, &mut machine, &mut |_| ()).unwrap().results;
     let after_tests = machine.calls.iter().position(|c| c.starts_with("run ")).unwrap() + 1;
     assert_eq!(machine.calls[after_tests..], ["lock"], "no look, no removal");
     assert_eq!(
@@ -470,7 +505,8 @@ fn a_test_named_by_two_cases_runs_once() {
     let cases: Vec<&'static Case> = vec![&ON_LINUX, &SHARING];
     let mut machine = StandIn::new(true, CLAUDE_VERSION, "");
     let mut rows: Vec<String> = Vec::new();
-    let results = run_cases(&cases, &mut machine, &mut |r: &CaseResult| rows.push(r.case.id.to_owned())).unwrap();
+    let results =
+        run_cases(&cases, &mut machine, &mut |r: &CaseResult| rows.push(r.case.id.to_owned())).unwrap().results;
     let runs: Vec<&String> = machine.calls.iter().filter(|c| c.starts_with("run ")).collect();
     assert_eq!(
         runs,
