@@ -47,7 +47,8 @@ impl Line {
         }
     }
 
-    /// The line as the screen says it (the run chooser's lines for a file that declares no web site).
+    /// The line as the screen says it (the run chooser's lines for a file that declares no web site, in WSL's default
+    /// network mode).
     pub fn words(self) -> &'static str {
         match self {
             Line::Checks => {
@@ -63,7 +64,7 @@ impl Line {
             }
             Line::YourFiles => "Your own files are not inside Steplet's Linux, where this task runs.",
             Line::Connect => {
-                "Programs this task runs cannot connect to the internet, or to other programs in Steplet's Linux."
+                "Programs this task runs cannot connect to the internet, or to other programs on this computer."
             }
             Line::WindowsPrograms => "Programs this task runs cannot start Windows programs.",
             Line::AgentSettings => "Prepare: Steplet tells the agent not to load agent settings.",
@@ -347,6 +348,19 @@ pub const CASES: &[Case] = &[
         attack: "A program reaches a site other than the one the file declares",
         lines: &[Line::Connect],
         tests: &[run("contain", "a_declared_site_is_the_only_one_a_program_can_reach")],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
+    },
+    Case {
+        id: "N3",
+        attack: "A program reaches a listener on Windows, at 127.0.0.1 or at the address WSL uses for Windows, directly \
+                 or through the fence's proxies; or the file declares a site whose name leads to this computer or a \
+                 private network",
+        lines: &[Line::Connect],
+        tests: &[
+            run("contain", "a_program_listening_on_windows_cannot_be_reached"),
+            run("contain", "a_run_that_lists_a_site_leading_to_this_computer_is_refused"),
+        ],
         layer: Layer::Scripted,
         needs: LINUX_AND_NETWORK,
     },

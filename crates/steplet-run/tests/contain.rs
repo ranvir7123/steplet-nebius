@@ -4,7 +4,8 @@
 //! - use case 1, end to end, with nothing of the receiver's present in Steplet's Linux;
 //! - milestone 0's test fixture, whose test setup tries to reach outside its working copy and writes down whether each
 //!   try worked (`support/m0_fixture/`); every try must be contained;
-//! - a web fetch is allowed only to a site the file declares.
+//! - a web fetch is allowed only to a site the file declares;
+//! - a program listening on Windows cannot be reached from inside the fence (phase 5 Task 4).
 //!
 //! The fixture is test data and inert: the secret it looks for is made up for each run, the listener only counts what
 //! reaches it, and the Windows program it tries to start would only write a marker file in Steplet's logs folder.
@@ -14,6 +15,10 @@
 
 mod support;
 
+use std::io::{BufRead, BufReader};
+use std::net::TcpStream;
+use std::path::Path;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -23,8 +28,9 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, BACKSTOP, Check, Live, Report, RunPaths, RunRequest, RunSetup, Trust, build_report, changes, decide,
-    discard, launch, prepare, read_trust, run, run_config, run_live, watch_run, wsl,
+    ApiKey, BACKSTOP, Check, Live, NetworkMode, Report, RunError, RunPaths, RunRequest, RunSetup, Trust, build_report,
+    changes, decide, discard, launch, prepare, read_network_mode, read_trust, run, run_config, run_live,
+    run_live_on_pipe, watch_run, wsl,
 };
 use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model, serve_gate};
 
@@ -641,6 +647,383 @@ fn a_declared_site_is_the_only_one_a_program_can_reach() {
     assert!(other.starts_with("failed"), "a site the file does not declare: {other}");
     let c = &report.commands[0];
     assert_eq!((c.command.as_str(), &c.check, c.exit_code), ("python3 probe.py", &Check::Allowed, Some(0)));
+}
+
+/// Phase 5 Task 4 (N3): the port of the listener on Windows, the port of the listener inside Steplet's Linux, and the
+/// scripted model's port, for the next test.
+const WINDOWS_PORT: u16 = 47957;
+const LINUX_PORT: u16 = 47959;
+const N3_MODEL_PORT: u16 = 47958;
+
+/// A made-up name the refuse test's file declares as a site, under `.example`, which no real site can have. For the
+/// length of that test, root makes it lead to the address WSL uses for Windows, as a site whose owner pointed its
+/// name at this computer would.
+const WINDOWS_SIDE: &str = "windows-side.steplet-test.example";
+
+/// Test data for the next test (made up, inert): a program that tries to connect to each listener by address, and to
+/// the file's one real site, in every way the fence offers: directly, and through each proxy named in its environment
+/// (HTTP CONNECT and SOCKS5, with the login the proxy's address carries; never printed). Each connection to a listener
+/// sends a word naming the way and the target, so a listener's log would show which one got there. It writes down,
+/// for each try, whether it got there, in `probe_windows.json`.
+const WINDOWS_PROBE: &str = r#"import base64, json, os, socket, struct, sys
+from urllib.parse import unquote, urlparse
+
+wsl_address, windows_port, linux_port = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+TARGETS = [
+    ("windows-loopback", "127.0.0.1", windows_port),
+    ("windows-wsl-address", wsl_address, windows_port),
+    ("linux-loopback", "127.0.0.1", linux_port),
+    ("declared-site", "example.org", 443),
+]
+
+def ways():
+    found = {}
+    for name, value in sorted(os.environ.items()):
+        if name.lower().endswith("_proxy") and "://" in value:
+            p = urlparse(value)
+            kind = "socks" if p.scheme.startswith("socks") else "http" if p.scheme.startswith("http") else None
+            if kind:
+                found.setdefault((kind, p.hostname, p.port), p)
+    out, count = [("direct", None, None)], {}
+    for (kind, _, _), p in found.items():
+        count[kind] = count.get(kind, 0) + 1
+        out.append(("%s-proxy-%d" % (kind, count[kind]), kind, p))
+    return out
+
+def take(s, n):
+    data = b""
+    while len(data) < n:
+        more = s.recv(n - len(data))
+        if not more:
+            raise OSError("the proxy closed the connection")
+        data += more
+    return data
+
+def through_http(p, host, port):
+    s = socket.create_connection((p.hostname, p.port), timeout=10)
+    login = ""
+    if p.username:
+        word = base64.b64encode(("%s:%s" % (unquote(p.username), unquote(p.password or ""))).encode()).decode()
+        login = "Proxy-Authorization: Basic %s\r\n" % word
+    s.sendall(("CONNECT %s:%d HTTP/1.1\r\nHost: %s:%d\r\n%s\r\n" % (host, port, host, port, login)).encode())
+    reply = b""
+    while b"\r\n\r\n" not in reply:
+        more = s.recv(1024)
+        if not more:
+            break
+        reply += more
+    first = reply.split(b"\r\n")[0].decode("latin-1") or "(no reply)"
+    if first.split(" ")[1:2] != ["200"]:
+        s.close()
+        raise OSError("the proxy said: " + first)
+    return s
+
+def through_socks(p, host, port):
+    s = socket.create_connection((p.hostname, p.port), timeout=10)
+    s.sendall(b"\x05\x02\x00\x02" if p.username else b"\x05\x01\x00")
+    method = take(s, 2)[1]
+    if method == 2:
+        user, word = unquote(p.username or "").encode(), unquote(p.password or "").encode()
+        s.sendall(b"\x01" + bytes([len(user)]) + user + bytes([len(word)]) + word)
+        if take(s, 2)[1] != 0:
+            raise OSError("the proxy refused its own login")
+    elif method != 0:
+        raise OSError("the proxy refused every way to log in")
+    name = host.encode()
+    s.sendall(b"\x05\x01\x00\x03" + bytes([len(name)]) + name + struct.pack(">H", port))
+    reply = take(s, 4)
+    if reply[1] != 0:
+        s.close()
+        raise OSError("the proxy said: SOCKS reply %d" % reply[1])
+    take(s, {1: 4, 4: 16}.get(reply[3]) or take(s, 1)[0])
+    take(s, 2)
+    return s
+
+results = []
+for way, kind, p in ways():
+    for target, host, port in TARGETS:
+        try:
+            if kind is None:
+                s = socket.create_connection((host, port), timeout=10)
+            elif kind == "http":
+                s = through_http(p, host, port)
+            else:
+                s = through_socks(p, host, port)
+            if target != "declared-site":
+                s.sendall(("inside-%s-%s" % (way, target)).encode())
+            s.close()
+            results.append({"way": way, "target": target, "reached": True, "detail": "connected"})
+        except Exception as e:
+            results.append({"way": way, "target": target, "reached": False, "detail": "%s: %s" % (type(e).__name__, e)})
+with open("probe_windows.json", "w") as f:
+    json.dump(results, f)
+for r in results:
+    print(r["way"], r["target"], "->", "REACHED" if r["reached"] else r["detail"])
+"#;
+
+/// The listener on Windows (`support/windows_listener.py`), run with Windows' own Python on `port` at each of
+/// `addresses`, until it is dropped, or until this test program ends (its standard input closes). A case that cannot
+/// start it did not run.
+struct WindowsListener(std::process::Child);
+
+impl WindowsListener {
+    fn start(port: u16, log: &Path, addresses: &[&str]) -> WindowsListener {
+        let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/windows_listener.py");
+        let mut child = match Command::new("python")
+            .args(["-I", script, &port.to_string()])
+            .arg(log)
+            .args(addresses)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => support::did_not_run(&format!("Windows' own Python did not start: {e}")),
+        };
+        let mut first = String::new();
+        let _ = BufReader::new(child.stdout.take().unwrap()).read_line(&mut first);
+        println!("--- the Windows listener: {}", first.trim_end());
+        if !first.starts_with("listening on") {
+            let _ = child.kill();
+            let mut why = String::new();
+            let _ = std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut why);
+            let _ = child.wait();
+            support::did_not_run(&format!("the listener on Windows did not start: {}", why.trim_end()));
+        }
+        WindowsListener(child)
+    }
+}
+
+impl Drop for WindowsListener {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// The steplet account, outside the fence, connects to `host:port` and sends `word`: "reached", or why not.
+fn knock(distro: &str, host: &str, port: u16, word: &str) -> String {
+    let py = format!(
+        "import socket\ntry:\n    s = socket.create_connection(({host:?}, {port}), 5)\n    s.sendall({word:?}.encode())\n    \
+         s.close()\n    print('reached')\nexcept OSError as e:\n    print('failed: %s: %s' % (type(e).__name__, e))"
+    );
+    wsl::run(distro, "steplet", &["/usr/bin/python3", "-I", "-c", &py], b"").unwrap().stdout.trim_end().to_owned()
+}
+
+/// A plain Windows program (this test) connects to `host:port` and sends `word`.
+fn knock_from_windows(host: &str, port: u16, word: &str) -> std::io::Result<()> {
+    let to = format!("{host}:{port}").parse().unwrap();
+    let mut s = TcpStream::connect_timeout(&to, Duration::from_secs(5))?;
+    std::io::Write::write_all(&mut s, word.as_bytes())
+}
+
+/// The default route's gateway in Steplet's Linux: the address WSL uses to reach Windows. A run that has none did not
+/// run.
+fn wsl_address(distro: &str) -> String {
+    let route = root_sh(distro, "ip route show default");
+    match route.strip_prefix("default via ").and_then(|r| r.split_whitespace().next()) {
+        Some(address) => address.to_owned(),
+        None => support::did_not_run(&format!("Steplet's Linux has no default route to Windows: {route:?}")),
+    }
+}
+
+/// Phase 5 Task 4 (N3, choice K4): a program listening on Windows cannot be reached from inside the fence by its
+/// address. A listener on Windows logs every connection, on 127.0.0.1 and on the address WSL uses for Windows; a
+/// listener in Steplet's Linux logs its own. The controls come first: a plain Windows program reaches the Windows
+/// listener at both addresses, and the steplet account, outside the fence, reaches the listener in Steplet's Linux.
+/// The file declares one real site, which the probe must reach through the fence's proxy, so its tries show the way
+/// out works. Then the declared command, inside the fence, tries each listener by address directly and through each
+/// proxy. Pass: no try at a listener gets there, and each listener's log holds the controls only. (A declared name
+/// that led to this computer is a separate matter, refused before the run: the next test.) Judged from the listeners'
+/// logs, outside the fence; the probe's own record says which way failed how. The record notes WSL's network mode, as
+/// Steplet reads it and as WSL says it.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_program_listening_on_windows_cannot_be_reached() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let _linux = support::hold_linux();
+    let distro = support::steplet_linux();
+    let read = read_network_mode(std::env::var_os("USERPROFILE").as_deref().map(Path::new));
+    let said = root_sh(&distro, "wslinfo --networking-mode");
+    println!("--- WSL's network mode: as Steplet reads it from .wslconfig, {read:?}; as WSL says it, {said}");
+    // Steplet must never show the wider "on this computer" line unless WSL itself is in nat mode (I4): .wslconfig is
+    // only a hint at the running mode. On this laptop both say nat, so the wider line is justified; a divergence where
+    // Steplet read Nat while WSL was not nat would fail here rather than let the chooser overclaim.
+    let wsl_is_nat = said.trim() == "nat";
+    assert!(
+        read != NetworkMode::Nat || wsl_is_nat,
+        "Steplet read the network mode as {read:?} (the wider line) but WSL says {said:?}"
+    );
+    let wsl_address = wsl_address(&distro);
+    println!("--- the address WSL uses for Windows: {wsl_address}");
+
+    let windows_log = Path::new(env!("CARGO_TARGET_TMPDIR")).join("n3.windows-listener.log");
+    let _ = std::fs::remove_file(&windows_log);
+    let _windows = WindowsListener::start(WINDOWS_PORT, &windows_log, &["127.0.0.1", &wsl_address]);
+    let linux_log = "/opt/steplet-test/n3.listener.log";
+    let _linux_listener = support::listener(&distro, LINUX_PORT, linux_log);
+
+    // The controls, before the run.
+    for (host, word) in
+        [("127.0.0.1", "control-windows-loopback"), (wsl_address.as_str(), "control-windows-wsl-address")]
+    {
+        if let Err(e) = knock_from_windows(host, WINDOWS_PORT, word) {
+            panic!("the control: a Windows program could not reach the listener at {host}: {e}");
+        }
+    }
+    let outside = [
+        ("127.0.0.1", LINUX_PORT, "control-linux-loopback"),
+        (wsl_address.as_str(), WINDOWS_PORT, "control-linux-to-windows"),
+    ]
+    .map(|(host, port, word)| (word, knock(&distro, host, port, word)));
+    println!("--- the steplet account, outside the fence: {outside:?}");
+    assert_eq!(outside[0].1, "reached", "the control: the listener in Steplet's Linux works");
+
+    let command = format!("python3 probe_windows.py {wsl_address} {WINDOWS_PORT} {LINUX_PORT}");
+    let req = request(&format!("allow:\n  commands:\n    - {command}\n  domains:\n    - example.org\n"));
+    let paths = RunPaths::new(&distro, "p5t4n").unwrap();
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "p5t4n", Duration::from_secs(10), move |r| decide(&deciding, r));
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": command, "description": "Try the listeners"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p5t4n", &script.to_string(), N3_MODEL_PORT);
+    prepare(&req, &paths, &link).unwrap();
+    put_as_steplet(&distro, WINDOWS_PROBE.as_bytes(), &format!("{}/probe_windows.py", paths.work_repo()), "644");
+    let model_url = format!("http://127.0.0.1:{N3_MODEL_PORT}");
+    let handle = launch(&req, &paths, &logs_dir(), Some(&model_url), &[]).unwrap();
+    let outcome =
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &[]);
+    let record = root_sh(&distro, &format!("cat {}/probe_windows.json", paths.work_repo()));
+    discard(&paths).unwrap();
+    let report = build_report(&outcome, None, Trust::Unknown, &[MADE_UP_KEY, link.token()]);
+    std::thread::sleep(Duration::from_secs(1));
+    let windows_seen = std::fs::read_to_string(&windows_log).unwrap_or_default();
+    let linux_seen = root_sh(&distro, &format!("cat {linux_log}"));
+    println!("--- inside the fence, the probe's own record:");
+    let tries: Vec<Value> = serde_json::from_str(&record).unwrap_or_default();
+    for t in &tries {
+        println!("    {} {} -> {} {}", t["way"], t["target"], t["reached"], t["detail"]);
+    }
+    println!(
+        "--- the Windows listener's log:\n{windows_seen}--- the listener in Steplet's Linux, its log:\n{linux_seen}"
+    );
+    println!("--- the report:\n{report:#?}");
+
+    let c = &report.commands[0];
+    assert_eq!((c.command.as_str(), &c.check, c.exit_code), (command.as_str(), &Check::Allowed, Some(0)));
+    let firsts: Vec<String> = windows_seen
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap()["first"].as_str().unwrap().to_owned())
+        .collect();
+    for word in ["control-windows-loopback", "control-windows-wsl-address"] {
+        assert!(firsts.iter().any(|f| f == word), "the control: the Windows listener logged {word}");
+    }
+    let to_windows_reached = outside.iter().any(|(w, said)| *w == "control-linux-to-windows" && said == "reached");
+    assert_eq!(
+        firsts.iter().any(|f| f == "control-linux-to-windows"),
+        to_windows_reached,
+        "the outside control logged exactly when it said it got there"
+    );
+    assert!(
+        firsts.iter().all(|f| f.starts_with("control-")),
+        "nothing from inside the fence reached Windows: {firsts:?}"
+    );
+    assert_eq!(
+        linux_seen.lines().count(),
+        1,
+        "the listener in Steplet's Linux saw its one control only: {linux_seen:?}"
+    );
+
+    let ways: std::collections::BTreeSet<&str> = tries.iter().filter_map(|t| t["way"].as_str()).collect();
+    assert!(ways.contains("direct") && ways.iter().any(|w| w.starts_with("http-proxy")), "{ways:?}");
+    let proxy_reached_the_site =
+        tries.iter().any(|t| t["target"] == "declared-site" && t["way"] != "direct" && t["reached"] == true);
+    assert!(proxy_reached_the_site, "the probe's way out works: it reached the declared site through the proxy");
+    let got_there: Vec<String> = tries
+        .iter()
+        .filter(|t| t["target"] != "declared-site" && t["reached"] != false)
+        .map(|t| format!("{} {}", t["way"], t["target"]))
+        .collect();
+    assert_eq!(got_there, Vec::<String>::new(), "no try at a listener got there by address");
+}
+
+/// Phase 5 Task 4 (N3, choice K4 option B): a file that declares a web site whose name leads to this computer or a
+/// private network is refused before the run starts, so no program of it can reach a listener by that name (the fence
+/// dials a declared name wherever it leads, with no check of its own). Here the made-up name leads to the address WSL
+/// uses for Windows (a private address). The control: a run that lists only a public site is not refused for its sites
+/// (`check_sites` returns the public address to pin, none on this computer). Nothing of the agent runs, and the
+/// listener on Windows logs nothing. The made-up name's entry in `/etc/hosts` is put back after.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_run_that_lists_a_site_leading_to_this_computer_is_refused() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let held = support::hold_linux();
+    let distro = support::steplet_linux();
+    let wsl_address = wsl_address(&distro);
+    let _names = support::add_to_hosts(&distro, &format!("{wsl_address} {WINDOWS_SIDE}\n"));
+
+    let windows_log = Path::new(env!("CARGO_TARGET_TMPDIR")).join("n3-refuse.windows-listener.log");
+    let _ = std::fs::remove_file(&windows_log);
+    let _windows = WindowsListener::start(WINDOWS_PORT, &windows_log, &["127.0.0.1", &wsl_address]);
+
+    // A control so the "empty of the run's traffic" check below means something: a plain Windows program reaches the
+    // listener, proving it can log. Without it, a listener that was simply dead would also log nothing.
+    if let Err(e) = knock_from_windows("127.0.0.1", WINDOWS_PORT, "control-refuse-listener-works") {
+        panic!("the control: a Windows program could not reach the listener: {e}");
+    }
+
+    // The control: a public site passes the check, with its address to pin and none on this computer.
+    let public = steplet_run::check_sites(&["example.org".to_owned()], |n| steplet_run::resolve_in_linux(&distro, n));
+    println!("--- the check on a public site: {public:?}");
+    let pins = public.expect("a public site is not refused");
+    assert!(
+        !pins.is_empty() && pins.iter().all(|(_, ip)| !steplet_run::leads_to_this_computer_or_private(*ip)),
+        "{pins:?}"
+    );
+
+    let req = request(&format!(
+        "allow:\n  commands:\n    - python3 x.py\n  domains:\n    - example.org\n    - {WINDOWS_SIDE}\n"
+    ));
+    let paths = RunPaths::new(&distro, "p5t4r").unwrap();
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let err = run_live_on_pipe(
+        &held,
+        "steplet-p5t4r-refused",
+        &req,
+        &paths,
+        &policy,
+        &setup(&distro, N3_MODEL_PORT),
+        Arc::new(Live::unattended()),
+    )
+    .expect_err("a file that lists a site leading to this computer is refused");
+    println!("--- the run was refused: {err:?}");
+    match &err {
+        RunError::ListedSite { site, why } => {
+            assert_eq!(site, WINDOWS_SIDE);
+            assert!(why.contains("this computer or a private network"), "{why}");
+        }
+        other => panic!("expected a listed-site refusal, got {other:?}"),
+    }
+
+    // Nothing of the agent ran: /work is empty, and the Windows listener logged nothing.
+    std::thread::sleep(Duration::from_secs(1));
+    let work = root_sh(&distro, "ls -A /work");
+    let windows_seen = std::fs::read_to_string(&windows_log).unwrap_or_default();
+    println!("--- /work after the refusal: {work:?}\n--- the Windows listener's log:\n{windows_seen}");
+    let firsts: Vec<String> = windows_seen
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap()["first"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(work, "", "nothing of the agent was prepared");
+    assert_eq!(
+        firsts,
+        ["control-refuse-listener-works"],
+        "the listener logged only the control, nothing from the refused run: {firsts:?}"
+    );
 }
 
 /// The declared command of the next test: it waits 8 seconds, inside the fence.

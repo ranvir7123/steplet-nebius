@@ -15,6 +15,7 @@ mod report;
 mod run;
 mod settings;
 pub mod setup;
+mod sites;
 mod stream;
 mod task;
 mod types;
@@ -34,7 +35,7 @@ pub use places::{LinuxPaths, RealPaths};
 pub use prepare::{
     PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, fetchable, prepare, removed_files, run_config,
 };
-pub use promises::{Promise, promises};
+pub use promises::{NetworkMode, Promise, network_mode, promises, read_network_mode};
 pub use report::{
     Check, NotYes, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line,
     read_trust,
@@ -43,6 +44,10 @@ pub use run::{
     BACKSTOP, RunError, RunOutcome, RunSetup, RunningAgent, run, run_live, run_live_locked, run_live_on_pipe, watch_run,
 };
 pub use settings::{mcp_json, settings_json};
+pub use sites::{
+    ListedSite, check_sites, leads_to_this_computer_or_private, pin_sites, resolve_all_in_linux, resolve_in_linux,
+    unpin_sites,
+};
 pub use stream::parse_line;
 pub use task::task_text;
 pub use types::{BadValue, Event, GateAnswer, GateLink, GateRequest, RunPaths, RunRequest};

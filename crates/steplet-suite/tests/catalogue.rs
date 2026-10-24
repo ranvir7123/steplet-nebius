@@ -5,7 +5,7 @@ use std::path::Path;
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
-use steplet_run::promises;
+use steplet_run::{NetworkMode, promises};
 use steplet_suite::catalogue::{CASES, Case, Layer, Line, Needs, TestRef, cases_for, select};
 
 fn steplet(allow: &str) -> Steplet {
@@ -78,12 +78,13 @@ fn every_line_on_screen_has_a_scripted_case() {
     }
 }
 
-/// Every test a chooser line names (for a file with sites and one without) is in a case backing that same line, so
-/// the suite replays everything the chooser rests on.
+/// Every test a chooser line names (for a file with sites and one without, in every WSL network mode) is in a case
+/// backing that same line, so the suite replays everything the chooser rests on.
 #[test]
 fn the_chooser_and_the_suite_name_the_same_tests() {
+    let modes = [NetworkMode::Nat, NetworkMode::Other, NetworkMode::Unknown];
     for s in [steplet(""), steplet("allow:\n  domains:\n    - example.org\n")] {
-        for p in promises(&s) {
+        for p in modes.iter().flat_map(|m| promises(&s, *m)) {
             let line = line_of(p.text);
             for test in p.tests {
                 let backed = CASES.iter().any(|c| c.lines.contains(&line) && c.tests.iter().any(|t| t.name == *test));

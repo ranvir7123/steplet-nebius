@@ -394,7 +394,11 @@ fn steplets_own_words_carry_no_decision_codes() {
     };
     let example = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/run-tests.steplet")).unwrap();
     let file = check(&example, NOW).steplet.unwrap();
-    let chooser = serde_json::to_string(&steplet_app::views::chooser(&steplet_run::promises(&file), true)).unwrap();
+    let chooser = serde_json::to_string(&steplet_app::views::chooser(
+        &steplet_run::promises(&file, steplet_run::NetworkMode::Nat),
+        true,
+    ))
+    .unwrap();
     let mut setups = String::new();
     for (wsl, linux, trouble) in [
         (Wsl::Missing, false, None),

@@ -346,10 +346,23 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "preview-not-runnable-key-changed": {
     shows: ["Steplet cannot run this file on this computer", /^This sender name was used before with another key/],
   },
+  // The network line in WSL's default network mode (phase 5 Task 4, K4): "on this computer", never the narrower line.
   "chooser-ready-no-sites": {
-    shows: [/cannot fetch any web address/, "Steplet fetches the repository first, then the agent starts."],
+    shows: [
+      /cannot fetch any web address/,
+      "Steplet fetches the repository first, then the agent starts.",
+      "Programs this task runs cannot connect to the internet, or to other programs on this computer.",
+    ],
+    hides: [/other programs in Steplet's Linux/],
   },
-  "chooser-ready-15-sites": { shows: ["docs-15.example.org"] },
+  "chooser-ready-15-sites": {
+    shows: [
+      "docs-15.example.org",
+      "Programs this task runs can connect only to these sites: not to the rest of the internet, or to other " +
+        "programs on this computer.",
+    ],
+    hides: [/other programs in Steplet's Linux/],
+  },
   "chooser-needs-setup": { shows: ["Steplet's own Linux or your key is not ready yet."] },
   "chooser-wsl-missing": { shows: ["Steplet's own Linux or your key is not ready yet."] },
   "setup-nothing-done": {

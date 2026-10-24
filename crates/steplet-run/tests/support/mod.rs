@@ -239,6 +239,49 @@ true";
     String::from_utf8_lossy(&out.stdout_bytes).into_owned()
 }
 
+/// Lines added to `/etc/hosts` in Steplet's Linux, for the length of a test; the file is put back as it was when this
+/// is dropped, whether the test passed or failed. Lines naming `.steplet-test.example` that a killed run left behind
+/// are not part of "as it was", so a crash never leaves a made-up name resolving. Test support for the listed-sites
+/// guard (phase 5 Task 4): a run's real pins are written to `/etc/hosts` the same way.
+pub struct AddedToHosts {
+    distro: String,
+    before: Vec<u8>,
+}
+
+impl Drop for AddedToHosts {
+    fn drop(&mut self) {
+        let _ = wsl::run(&self.distro, "root", &["/bin/sh", "-c", "cat > /etc/hosts"], &self.before);
+    }
+}
+
+pub fn add_to_hosts(distro: &str, lines: &str) -> AddedToHosts {
+    let found = wsl::run(distro, "root", &["/usr/bin/cat", "/etc/hosts"], b"").unwrap().stdout_bytes;
+    let before: Vec<u8> = found
+        .split_inclusive(|b| *b == b'\n')
+        .filter(|l| !String::from_utf8_lossy(l).contains(".steplet-test.example"))
+        .flatten()
+        .copied()
+        .collect();
+    let after = [before.as_slice(), lines.as_bytes()].concat();
+    let out = wsl::run(distro, "root", &["/bin/sh", "-c", "cat > /etc/hosts"], &after).unwrap();
+    assert_eq!(out.status, Some(0), "{}", out.stderr);
+    AddedToHosts { distro: distro.into(), before }
+}
+
+/// The bytes `/etc/hosts` held before `AddedToHosts` changed it, so a test can check the file is put back.
+impl AddedToHosts {
+    pub fn before(&self) -> &[u8] {
+        &self.before
+    }
+}
+
+/// The bytes of `/etc/hosts` in Steplet's Linux, read as root, so a test can snapshot it and check it is restored.
+pub fn etc_hosts(distro: &str) -> Vec<u8> {
+    let out = wsl::run(distro, "root", &["/usr/bin/cat", "/etc/hosts"], b"").unwrap();
+    assert_eq!(out.status, Some(0), "reading /etc/hosts: {}", out.stderr);
+    out.stdout_bytes
+}
+
 /// A marker (phase 5): a small file root puts in Steplet's Linux, holding a made-up word, readable by the steplet
 /// account, so a test can tell whether anything read or changed it. Removed when dropped, whether the test passed or
 /// failed.

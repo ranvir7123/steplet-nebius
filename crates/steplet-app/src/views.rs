@@ -982,6 +982,10 @@ pub fn run_failure(e: &RunError) -> (String, FailureView) {
             (starting, said("Claude Code could not start, so nothing ran. What went wrong:", why))
         }
         RunError::Limits => (starting, failure("Steplet's own time limits do not fit together, so nothing ran.", None)),
+        RunError::ListedSite { why, .. } => (starting, failure(why, None)),
+        RunError::Pin(why) => {
+            (starting, said("Steplet could not keep this file's web sites fixed for the run, so nothing ran:", why))
+        }
     }
 }
 

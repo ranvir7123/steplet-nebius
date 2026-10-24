@@ -24,8 +24,8 @@ use steplet_core::policy::{Action, Decision, Policy};
 use steplet_core::report::check;
 use steplet_run::setup::{State, Wsl};
 use steplet_run::{
-    Answer, Asked, Check, Client, Event, GateAnswer, GateRequest, NotYes, Prepared, Progress, Question, Reply,
-    RunOutcome, Tripwire, Trust, build_report, fingerprint, promises,
+    Answer, Asked, Check, Client, Event, GateAnswer, GateRequest, NetworkMode, NotYes, Prepared, Progress, Question,
+    Reply, RunOutcome, Tripwire, Trust, build_report, fingerprint, promises,
 };
 use ts_rs::{Config, TS};
 
@@ -416,7 +416,7 @@ fn with_preview(screen: &str, p: PreviewView) -> Fixture {
 }
 
 fn chooser_for(raw: &[u8], ready: bool) -> ChooserView {
-    views::chooser(&promises(&steplet_of(raw)), ready)
+    views::chooser(&promises(&steplet_of(raw), NetworkMode::Nat), ready)
 }
 
 fn scenarios() -> BTreeMap<&'static str, Fixture> {

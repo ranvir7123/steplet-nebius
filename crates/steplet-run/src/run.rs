@@ -22,6 +22,7 @@ use crate::lock::RunLock;
 use crate::places::LinuxPaths;
 use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
 use crate::report::{Report, Scrubber, Trust, build_report, read_trust};
+use crate::sites;
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
 use crate::watch::{Tripwire, Watcher};
 use crate::wsl;
@@ -71,6 +72,14 @@ pub enum RunError {
     /// The gate's deadline is shorter than the ask limit plus `ASK_MARGIN`: the gate would refuse a question before
     /// the receiver's time to answer it was up.
     Limits,
+    /// A web site the file declared leads to this computer or a private network, or could not be found at all, so the
+    /// run would reach something it is not allowed to. `why` is the whole sentence for the receiver (K4 B).
+    ListedSite {
+        site: String,
+        why: String,
+    },
+    /// Steplet could not keep the listed sites' addresses fixed for the run (the `/etc/hosts` write failed).
+    Pin(String),
 }
 
 /// What happened in a run, from Steplet's own records.
@@ -160,6 +169,33 @@ pub fn run_live_on_pipe(
     live: Arc<Live>,
 ) -> Result<Report, RunError> {
     limits_fit(&live, setup)?;
+    // K4 B: the agent's fence reaches only the sites the file declares, but it dials wherever a declared name leads,
+    // so a name pointing at this computer or a private network would reach programs there. Steplet resolves each
+    // declared site where it would lead for the run, refuses the run if one leads to this computer or a private
+    // network (or cannot be found), and keeps the answers for the run (pinned in the fence's `/etc/hosts`).
+    let distro = paths.distro_id();
+    let domains: Vec<String> = req.steplet.allow.domains.iter().map(|d| d.text.clone()).collect();
+    // Resolve every declared site in one bounded call; if the look-up itself cannot run, refuse the run (fail closed).
+    let resolved = match sites::resolve_all_in_linux(distro, &domains) {
+        Ok(resolved) => resolved,
+        Err(e) => {
+            return Err(RunError::ListedSite {
+                site: String::new(),
+                why: format!(
+                    "Steplet will not run this file: it could not look up where the web sites it lists lead ({e})."
+                ),
+            });
+        }
+    };
+    let pins = match sites::check_sites(&domains, |name| Ok(resolved.get(name).cloned().unwrap_or_default())) {
+        Ok(pins) => pins,
+        Err(bad) => return Err(RunError::ListedSite { site: bad.site, why: bad.why }),
+    };
+    // The guard is set before pinning, so even a pin that fails part way is cleaned up; the normal path unpins
+    // explicitly below (and records any failure in the report), leaving the guard only as a backstop for the early
+    // returns and for panics.
+    let mut pinned = Pinned::new(distro);
+    sites::pin_sites(distro, &pins).map_err(RunError::Pin)?;
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
@@ -234,6 +270,11 @@ pub fn run_live_on_pipe(
     }
     if let Err(e) = discard(paths) {
         after.push(format!("Steplet could not remove the run's folders: {e}"));
+    }
+    // The listed-site pins come out now, in the open, so a failure to remove them reaches the receiver in the report
+    // (the guard below is only a backstop for the early returns and for panics).
+    if let Err(e) = pinned.unpin() {
+        after.push(format!("Steplet could not remove this run's web-site pins from Steplet's Linux: {e}"));
     }
     let trust = if agent_ran { read_trust(config.as_deref()) } else { Trust::Unknown };
     let mut report = build_report(&outcome, changed.as_deref(), trust, &secrets);
@@ -426,6 +467,37 @@ fn already_come(agent: &mut impl RunningAgent) -> Vec<Event> {
         }
     }
     events
+}
+
+/// Removes the run's listed-site pins from Steplet's Linux `/etc/hosts` when the run ends, however it ends. The normal
+/// path calls `unpin` so a failure can be reported; `drop` is the backstop for the early returns and for panics. A
+/// block a crashed run left is replaced by the next run's `pin_sites`, so a stale pin never outlives one run.
+struct Pinned<'a> {
+    distro: &'a str,
+    done: bool,
+}
+
+impl<'a> Pinned<'a> {
+    fn new(distro: &'a str) -> Pinned<'a> {
+        Pinned { distro, done: false }
+    }
+
+    /// Removes the pins now and remembers it, so `drop` does nothing more. The caller reports any error.
+    fn unpin(&mut self) -> Result<(), String> {
+        if self.done {
+            return Ok(());
+        }
+        self.done = true;
+        sites::unpin_sites(self.distro)
+    }
+}
+
+impl Drop for Pinned<'_> {
+    fn drop(&mut self) {
+        if !self.done {
+            let _ = sites::unpin_sites(self.distro);
+        }
+    }
 }
 
 /// `N` random bytes from Windows' own generator, as lower-case hexadecimal.

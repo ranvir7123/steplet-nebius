@@ -204,7 +204,8 @@ fn stop_and_close(state: tauri::State<AppState>, window: tauri::WebviewWindow) {
     }
 }
 
-/// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now.
+/// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now. The
+/// network line follows WSL's network mode, as `%USERPROFILE%\.wslconfig` sets it (K4; read only, never changed).
 /// Commands that may wait on WSL run off the window's own thread (`async`), so the window never freezes.
 #[tauri::command(async)]
 fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> {
@@ -213,7 +214,8 @@ fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> 
         .steplet
         .ok_or("Steplet could not read this file, so it cannot run.")?;
     let ready = setup::view(&state.look(), key::TARGET, setup::switch()).ready;
-    Ok(views::chooser(&steplet_run::promises(&file), ready))
+    let network = steplet_run::read_network_mode(std::env::var_os("USERPROFILE").as_deref().map(std::path::Path::new));
+    Ok(views::chooser(&steplet_run::promises(&file, network), ready))
 }
 
 /// The Setup screen, from a new look at this computer ("Check again" too).
