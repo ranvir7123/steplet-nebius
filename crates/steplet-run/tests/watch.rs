@@ -50,14 +50,26 @@ fn harmless(tool: &str, what: &str) -> Verdict {
 
 fn harmless_call(id: &str, tool: &str, what: &str) -> Verdict {
     Verdict {
-        skipped: Some(Event::SkippedGate { id: id.into(), tool: tool.into(), what: what.into(), harmless: true }),
+        skipped: Some(Event::SkippedGate {
+            id: id.into(),
+            tool: tool.into(),
+            what: what.into(),
+            harmless: true,
+            not_offered: false,
+        }),
         stop: None,
     }
 }
 
 fn stopped(tool: &str, what: &str, why: Tripwire) -> Verdict {
     Verdict {
-        skipped: Some(Event::SkippedGate { id: "u1".into(), tool: tool.into(), what: what.into(), harmless: false }),
+        skipped: Some(Event::SkippedGate {
+            id: "u1".into(),
+            tool: tool.into(),
+            what: what.into(),
+            harmless: false,
+            not_offered: false,
+        }),
         stop: Some(why),
     }
 }
@@ -153,6 +165,59 @@ fn a_write_an_edit_a_fetch_or_any_other_tool_that_skipped_the_gate_stops_the_run
     }
 }
 
+/// Claude Code 2.1.220's own answer to a call for a tool the run does not offer, as phase 5 Task 5's first run saw it.
+const NO_SUCH_TOOL: &str = "<tool_use_error>Error: No such tool available: NotebookEdit. NotebookEdit exists but is not \
+                            enabled in this context. Use one of the available tools instead.</tool_use_error>";
+
+/// Phase 5 Task 5: a call for a tool the run does not offer (not in Claude Code's list when the run started), which
+/// Claude Code answered with its own words for such a tool, did not run. The record says so, and the run still stops,
+/// as for any other call that skipped the gate. A call that came back with no error or with other words, a run whose
+/// list Steplet never saw or that listed no tool, and a tool the run offers are judged as before.
+#[test]
+fn a_tool_the_run_does_not_offer_is_recorded_as_not_run_and_still_stops_the_run() {
+    let p = support::checker_as_written(policy());
+    let seven = ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch"].map(String::from).to_vec();
+    let offered = Event::Started { model: "m".into(), tools: seven, gate_connected: true };
+    let none_listed = Event::Started { model: "m".into(), tools: Vec::new(), gate_connected: true };
+    let notebook = json!({"notebook_path": "/work/r1/repo/n.ipynb", "new_source": "x"});
+    let see_saying = |started: Option<&Event>, tool: &str, input: &Value, is_error: bool, text: &str| {
+        let mut w = Watcher::new(&p, WORK);
+        if let Some(s) = started {
+            assert_eq!(w.see(s, &|_| None), Verdict::default(), "the start is not judged");
+        }
+        assert_eq!(w.see(&call("u1", tool, input.clone()), &|_| None), Verdict::default());
+        let came_back = Event::ToolResult { id: "u1".into(), is_error, text: text.into(), plain_end: true };
+        w.see(&came_back, &|_| None)
+    };
+    let see = |started: Option<&Event>, tool: &str, input: &Value, is_error: bool| {
+        see_saying(started, tool, input, is_error, NO_SUCH_TOOL)
+    };
+    let not_run = Verdict {
+        skipped: Some(Event::SkippedGate {
+            id: "u1".into(),
+            tool: "NotebookEdit".into(),
+            what: String::new(),
+            harmless: false,
+            not_offered: true,
+        }),
+        stop: Some(Tripwire::NotOffered("NotebookEdit".into())),
+    };
+    assert_eq!(see(Some(&offered), "NotebookEdit", &notebook, true), not_run);
+    let went_past = stopped("NotebookEdit", "", Tripwire::SkippedGate("NotebookEdit".into()));
+    assert_eq!(see(Some(&offered), "NotebookEdit", &notebook, false), went_past, "no error: no sign it did not run");
+    // Only Claude Code's own words for a tool it does not offer, naming this tool, say it did not run.
+    let other_words = see_saying(Some(&offered), "NotebookEdit", &notebook, true, "output");
+    assert_eq!(other_words, went_past, "an error in other words may come from a tool that ran");
+    let another_tool = NO_SUCH_TOOL.replace("NotebookEdit", "NotebookEditor");
+    let another = see_saying(Some(&offered), "NotebookEdit", &notebook, true, &another_tool);
+    assert_eq!(another, went_past, "the words name another tool");
+    assert_eq!(see(None, "NotebookEdit", &notebook, true), went_past, "no list seen");
+    assert_eq!(see(Some(&none_listed), "NotebookEdit", &notebook, true), went_past, "no tool listed");
+    let write = json!({"file_path": "/work/r1/repo/written.txt", "content": "t9\n"});
+    let why = Tripwire::SkippedGate("Write /work/r1/repo/written.txt".into());
+    assert_eq!(see(Some(&offered), "Write", &write, true), stopped("Write", "/work/r1/repo/written.txt", why));
+}
+
 #[test]
 fn a_call_the_gate_allowed_is_not_noted_whatever_came_back() {
     for (tool, input) in [
@@ -234,7 +299,13 @@ fn the_other_events_are_not_judged() {
         Event::Stderr("warning".into()),
         Event::Unreadable("not json".into()),
         Event::Other("system/status".into()),
-        Event::SkippedGate { id: "u9".into(), tool: "Bash".into(), what: "touch x".into(), harmless: false },
+        Event::SkippedGate {
+            id: "u9".into(),
+            tool: "Bash".into(),
+            what: "touch x".into(),
+            harmless: false,
+            not_offered: false,
+        },
     ] {
         assert_eq!(w.see(&e, &|_| None), Verdict::default(), "{e:?}");
     }

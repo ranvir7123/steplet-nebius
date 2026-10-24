@@ -324,7 +324,8 @@ fn each_event_reaches_the_screen_cleaned_and_in_order() {
                 id: "u1".into(),
                 tool: "Bash".into(),
                 what: "ls".into(),
-                harmless: true
+                harmless: true,
+                not_offered: false
             }),
         ]
     );

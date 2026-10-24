@@ -231,7 +231,7 @@ fn live_and_report_views_keep_outside_text_in_pieces() {
         Event::AgentText(format!("{q} says")),
         Event::ToolUse { id: "c1".into(), name: format!("Bash{q}"), input: input.clone() },
         Event::ToolResult { id: "c1".into(), is_error: true, text: format!("Exit code 1\n{q}"), plain_end: false },
-        Event::SkippedGate { id: "c1".into(), tool: q.into(), what: q.into(), harmless: false },
+        Event::SkippedGate { id: "c1".into(), tool: q.into(), what: q.into(), harmless: false, not_offered: false },
         Event::ModelSwitch { from: q.into(), to: Some(q.into()), category: q.into(), explanation: q.into() },
         Event::HookEvent { name: q.into() },
         Event::Stderr(q.into()),
@@ -439,6 +439,24 @@ fn a_call_that_ran_without_asking_is_not_marked_as_a_harmless_read() {
     use steplet_run::Check;
     assert_eq!(check_view(&Check::NotAsked { harmless: true }).kind, "not_asked");
     assert_eq!(check_view(&Check::NotAsked { harmless: false }).kind, "ran_without_asking");
+}
+
+/// Phase 5 Task 5: a call for a tool the run does not offer did not run, and stopped the run. Its words and the run's
+/// end say so, and never that it ran or went past Steplet's checker.
+#[test]
+fn a_call_for_a_tool_the_run_does_not_offer_says_it_did_not_run() {
+    use steplet_app::views::{EndView, check_view};
+    use steplet_run::{Check, Tripwire};
+    let v = check_view(&Check::NotOffered);
+    assert_eq!(
+        (v.kind.as_str(), v.words.as_str()),
+        ("not_offered", "A tool this run does not offer, so it did not run: Steplet stopped the run")
+    );
+    let o = RunOutcome { stopped_by: Some(Tripwire::NotOffered("NotebookEdit".into())), ..outcome(Vec::new()) };
+    let view = report_view(&build_report(&o, Some(&[]), Trust::NotRecorded, &[]));
+    let EndView::StoppedBySteplet { why, about } = &view.end else { panic!("{:?}", view.end) };
+    assert_eq!(why, "The agent asked for a tool this run does not offer, so Steplet stopped the run.");
+    assert_eq!(about, &line("NotebookEdit"));
 }
 
 /// Task 12: while Claude Code tries again after an error from the model's service, the live log says so in

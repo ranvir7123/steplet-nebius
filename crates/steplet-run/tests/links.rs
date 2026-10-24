@@ -16,7 +16,6 @@
 mod support;
 
 use std::sync::Mutex;
-use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -24,10 +23,10 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    Asked, BACKSTOP, Check, Event, GateAnswer, LinuxPaths, Live, RealPaths, Report, RunHandle, RunOutcome, RunPaths,
-    RunRequest, Tripwire, Trust, build_report, call_what, decide, discard, launch, prepare, watch_run, wsl,
+    Asked, BACKSTOP, Check, Event, GateAnswer, LinuxPaths, Live, RealPaths, Report, RunOutcome, RunPaths, RunRequest,
+    Tripwire, Trust, build_report, call_what, decide, discard, launch, prepare, watch_run, wsl,
 };
-use support::{MADE_UP_KEY, Marker, logs_dir, root_sh, scripted_model, serve_gate};
+use support::{AS_STEPLET, MADE_UP_KEY, Marker, every_event, logs_dir, root_sh, scripted_model, serve_gate};
 
 static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
@@ -72,36 +71,14 @@ fn request() -> RunRequest {
     }
 }
 
-/// Runs `command` as the steplet account with nobody's settings, as `prepare.sh` runs git.
-const AS_STEPLET: &str = "setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs -- \
-                          /usr/bin/env -i PATH=/usr/bin:/bin HOME=/nonexistent GIT_CONFIG_NOSYSTEM=1 \
-                          GIT_CONFIG_GLOBAL=/dev/null";
-
-/// Replaces the prepared working copy's files with the fixture's, as a new commit (test only: P3 lets Steplet clone
-/// only from public code hosts, and the fixture is on none). With `links`, the steplet account first runs
-/// `make_links.py` outside the fence, so the links arrive with the repository, as a stranger's repository would bring
-/// them. Prints the copy's commit and what `notes/` holds.
+/// Replaces the prepared working copy's files with the fixture's, as a new commit (`support::plant`). With `links`, the
+/// steplet account first runs `make_links.py` outside the fence, so the links arrive with the repository, as a
+/// stranger's repository would bring them. Prints the copy's commit and what `notes/` holds.
 fn plant(distro: &str, paths: &RunPaths, links: bool) {
-    let repo = paths.work_repo();
-    let git = format!(
-        "{AS_STEPLET} git -c core.hooksPath=/dev/null -c user.name=steplet-test -c user.email=test@example.invalid -C \
-         {repo}"
-    );
-    root_sh(distro, &format!("set -e\n{git} rm -q -r -- ."));
-    for (path, bytes) in FIXTURE {
-        support::install(distro, bytes, &format!("{repo}/{path}"), "644");
-    }
-    let make = if links { format!("cd {repo}\n{AS_STEPLET} python3 -I make_links.py\n") } else { String::new() };
-    let body = format!(
-        "set -e
-chown -R steplet:steplet {repo}
-chmod -R go-w {repo}
-{make}{git} add -A
-{git} commit -q -m 'Test data: a README, notes and two small programs'
-{git} log --oneline -1
-find {repo}/notes -mindepth 1 -printf '%P -> %l\\n' | sort"
-    );
-    println!("--- the working copy, committed (notes/ entries, with each link's target):\n{}", root_sh(distro, &body));
+    let make = if links { format!("{AS_STEPLET} python3 -I make_links.py") } else { String::new() };
+    let commit = support::plant(distro, paths, FIXTURE, &make, "Test data: a README, notes and two small programs");
+    let notes = root_sh(distro, &format!("find {}/notes -mindepth 1 -printf '%P -> %l\\n' | sort", paths.work_repo()));
+    println!("--- the working copy, committed (notes/ entries, with each link's target):\n{commit}\n{notes}");
 }
 
 /// The two notes outside the working copy: one in the run's own folder (its home), one in its temporary folder, each
@@ -158,21 +135,6 @@ fn glob(path: &str) -> Value {
 /// Searches for the start that both made-up words share, and shows the lines found.
 fn grep(path: &str) -> Value {
     json!({"tool": "Grep", "input": {"pattern": "steplet-marker", "path": path, "output_mode": "content"}})
-}
-
-/// Every event of a launched run, until it ends or `limit` passes, without the tripwire watcher: a measurement sees
-/// every call the script makes, where a real run would stop at the first tripwire.
-fn every_event(handle: &RunHandle, limit: Duration) -> Vec<Event> {
-    let start = Instant::now();
-    let mut events = Vec::new();
-    while start.elapsed() < limit {
-        match handle.events().recv_timeout(Duration::from_secs(1)) {
-            Ok(e) => events.push(e),
-            Err(RecvTimeoutError::Timeout) => continue,
-            Err(RecvTimeoutError::Disconnected) => break,
-        }
-    }
-    events
 }
 
 /// One tool call of a run: its id, the tool, what it was about, what the gate saw and answered (`None`: it was never

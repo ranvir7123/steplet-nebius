@@ -391,19 +391,21 @@ fn a_call_that_skipped_the_gate_reaches_the_screen_with_its_check() {
     use steplet_app::views::Limits;
     use steplet_run::{Event, Progress};
     let mut relay = Relay::new(Limits { ask: ASK_LIMIT, run: RUN_LIMIT });
-    let skipped = |harmless| {
+    let skipped = |harmless, not_offered| {
         Progress::Event(Event::SkippedGate {
             id: "toolu_s".into(),
             tool: "Bash".into(),
             what: "cat README".into(),
             harmless,
+            not_offered,
         })
     };
-    for (harmless, kind, words) in [
-        (true, "not_asked", "Ran without asking Steplet: a harmless read"),
-        (false, "ran_without_asking", "Ran without asking Steplet: Steplet stopped the run"),
+    for (harmless, not_offered, kind, words) in [
+        (true, false, "not_asked", "Ran without asking Steplet: a harmless read"),
+        (false, false, "ran_without_asking", "Ran without asking Steplet: Steplet stopped the run"),
+        (false, true, "not_offered", "A tool this run does not offer, so it did not run: Steplet stopped the run"),
     ] {
-        let views = relay.relay(&skipped(harmless)).views;
+        let views = relay.relay(&skipped(harmless, not_offered)).views;
         let checks: Vec<_> = views
             .iter()
             .filter_map(|v| match v {

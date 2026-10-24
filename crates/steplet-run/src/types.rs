@@ -280,12 +280,15 @@ pub enum Event {
     },
     /// A tool call that did not ask the gate, as the tripwire watcher judged it (Task 9). Steplet's own record, put
     /// right after the call's result. `id` is the call's; `what` is its command, path or address; `harmless` means it
-    /// was a harmless read (G2) and the run went on.
+    /// was a harmless read (G2) and the run went on; `not_offered` means its tool is not one the run offers (not in
+    /// `Started`'s list) and Claude Code answered it with its own words for such a tool, so it did not run (phase 5
+    /// Task 5).
     SkippedGate {
         id: String,
         tool: String,
         what: String,
         harmless: bool,
+        not_offered: bool,
     },
     /// One line of Claude Code's error output.
     Stderr(String),

@@ -190,7 +190,7 @@ const states: State[] = [
     scenario: `prepare-${state}`,
     reach: run,
   })),
-  ...["started", "busy", "long-command", "40-commands", "tripwire", "model-refusal", "wrong-key"].map((state) => ({
+  ...["started", "busy", "long-command", "40-commands", "tripwire", "not-offered", "model-refusal", "wrong-key"].map((state) => ({
     screen: "run",
     state,
     scenario: `run-${state}`,
@@ -282,6 +282,7 @@ const states: State[] = [
     "finished",
     "test-failed",
     "tripwire",
+    "not-offered",
     "interrupted",
     "faults",
     "40-commands",
@@ -392,6 +393,9 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "run-long-command": { shows: [/docs\/very\/long\/path/] },
   "run-40-commands": { shows: ["40 README"] },
   "run-tripwire": { shows: [/^Steplet stopped the run$/, "See the report"] },
+  "run-not-offered": {
+    shows: [/^Steplet stopped the run$/, "A tool this run does not offer, so it did not run: Steplet stopped the run"],
+  },
   "run-model-refusal": { shows: [/^The model refused$/, "See the report"] },
   "run-wrong-key": { shows: ["Anthropic did not accept the key. Claude Code tries again (10 of 10)."] },
   "run-long-output-closed": { shows: ["Show all 50,000 lines"] },
@@ -411,6 +415,12 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "report-finished": { shows: [/^Finished$/, "The README file has 1 line."], hides: [/^Saved as/] },
   "report-test-failed": { shows: ["Exit code 1", /No such file or directory/] },
   "report-tripwire": { shows: [/^Steplet stopped the run$/, "Save report…"] },
+  "report-not-offered": {
+    shows: [
+      "The agent asked for a tool this run does not offer, so Steplet stopped the run.",
+      "A tool this run does not offer, so it did not run: Steplet stopped the run",
+    ],
+  },
   "report-interrupted": { shows: [/^Interrupted$/, "It did not run"] },
   "report-faults": { shows: [/^Did not finish$/, /could not remove the run's working copy/] },
   "report-40-commands": { shows: ["Counted the README 40 times."] },

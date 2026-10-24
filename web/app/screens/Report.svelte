@@ -45,7 +45,7 @@
   const checkIcon = (c: CheckView): "green" | "amber" | "red" | "note" =>
     c.kind === "allowed" || c.kind === "allowed_by_you"
       ? "green"
-      : ["refused", "refused_by_you", "refused_but_ran", "ran_without_asking", "turned_away"].includes(c.kind)
+      : ["refused", "refused_by_you", "refused_but_ran", "ran_without_asking", "not_offered", "turned_away"].includes(c.kind)
         ? "red"
         : c.kind === "not_judged"
           ? "amber"

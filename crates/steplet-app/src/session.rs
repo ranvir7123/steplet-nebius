@@ -491,8 +491,8 @@ impl Relay {
                 };
                 out.views.extend(views::progress_view(p, call, self.limits));
                 // A call that never reached the gate: its check, in the report's own words, as for any other call.
-                if let Event::SkippedGate { id, harmless, .. } = e {
-                    let check = views::check_view(&steplet_run::Check::NotAsked { harmless: *harmless });
+                if let Event::SkippedGate { id, harmless, not_offered, .. } = e {
+                    let check = views::check_view(&steplet_run::Check::of_skipped(*harmless, *not_offered));
                     out.views.push(ProgressView::Checked { call: id.clone(), check, reason: None });
                 }
             }

@@ -12,6 +12,9 @@
 //!   chained commands (`;`, `|`), which the command reader does not read at all (R8, G1), and calls Claude Code
 //!   refused by Steplet's own deny rules: Steplet cannot tell from the stream whether a skipped command ran, since
 //!   its output could imitate a refusal.
+//!   A call for a tool the run does not offer stops it too; its record says it did not run when Claude Code's list of
+//!   the run's tools does not hold the tool and Claude Code answered it with its own words for such a tool (phase 5
+//!   Task 5).
 //! - Any hook event stops the run (D3).
 
 use std::collections::HashMap;
@@ -31,6 +34,8 @@ pub enum Tripwire {
     SkippedCommand(String),
     /// Another action did not go through the gate, or ran although the gate refused it (row 38); what it was.
     SkippedGate(String),
+    /// The agent asked for a tool the run does not offer, and it did not run (phase 5 Task 5); the tool's name.
+    NotOffered(String),
 }
 
 /// What the watcher made of one event.
@@ -48,12 +53,14 @@ pub struct Watcher<'a> {
     work: String,
     /// The tool calls seen whose results have not come yet: id, then tool and input.
     calls: HashMap<String, (String, Value)>,
+    /// The tools the run offers, as Claude Code listed them when the run started; empty until then.
+    offered: Vec<String>,
 }
 
 impl<'a> Watcher<'a> {
     /// A watcher for a run that `checker` checks, in the working copy `work`.
     pub fn new(checker: &'a Checker, work: &str) -> Watcher<'a> {
-        Watcher { checker, work: work.into(), calls: HashMap::new() }
+        Watcher { checker, work: work.into(), calls: HashMap::new(), offered: Vec::new() }
     }
 
     /// Judges `event`. `gate` says what Steplet answered the gate about a tool call id: `None` if the gate never
@@ -61,16 +68,20 @@ impl<'a> Watcher<'a> {
     pub fn see(&mut self, event: &Event, gate: &dyn Fn(&str) -> Option<bool>) -> Verdict {
         match event {
             Event::HookEvent { name } => stop(Tripwire::Hook(name.clone())),
+            Event::Started { tools, .. } => {
+                self.offered = tools.clone();
+                Verdict::default()
+            }
             Event::ToolUse { id, name, input } => {
                 self.calls.insert(id.clone(), (name.clone(), input.clone()));
                 Verdict::default()
             }
-            Event::ToolResult { id, is_error, .. } => self.judge(id, *is_error, gate(id)),
+            Event::ToolResult { id, is_error, text, .. } => self.judge(id, *is_error, text, gate(id)),
             _ => Verdict::default(),
         }
     }
 
-    fn judge(&mut self, id: &str, is_error: bool, answered: Option<bool>) -> Verdict {
+    fn judge(&mut self, id: &str, is_error: bool, text: &str, answered: Option<bool>) -> Verdict {
         let Some((tool, mut input)) = self.calls.remove(id) else {
             return stop(Tripwire::SkippedGate("a result for a tool call Steplet did not see".into()));
         };
@@ -88,12 +99,21 @@ impl<'a> Watcher<'a> {
             Some(false) => stop(Tripwire::SkippedGate(described(&tool, &what))),
             None => {
                 let harmless = self.harmless(&tool, &input);
+                // Only Claude Code's own list says a tool is missing, so with no list nothing is known to be missing;
+                // and only its own words for such a tool say the call did not run.
+                let not_offered = !harmless
+                    && is_error
+                    && !self.offered.is_empty()
+                    && !self.offered.contains(&tool)
+                    && refused_as_not_offered(&tool, text);
                 let tripwire = match tool.as_str() {
                     _ if harmless => None,
+                    _ if not_offered => Some(Tripwire::NotOffered(tool.clone())),
                     "Bash" => Some(Tripwire::SkippedCommand(what.clone())),
                     _ => Some(Tripwire::SkippedGate(described(&tool, &what))),
                 };
-                Verdict { skipped: Some(Event::SkippedGate { id: id.into(), tool, what, harmless }), stop: tripwire }
+                let skipped = Event::SkippedGate { id: id.into(), tool, what, harmless, not_offered };
+                Verdict { skipped: Some(skipped), stop: tripwire }
             }
         }
     }
@@ -122,6 +142,15 @@ impl<'a> Watcher<'a> {
 
 fn stop(why: Tripwire) -> Verdict {
     Verdict { skipped: None, stop: Some(why) }
+}
+
+/// True when a call's result is Claude Code's own answer to a call for `tool` when the run does not offer it, as
+/// Claude Code 2.1.220 was seen to give it (phase 5 Task 5): `<tool_use_error>Error: No such tool available: <tool>.`
+/// and more. Other words may come from a tool that ran.
+pub(crate) fn refused_as_not_offered(tool: &str, text: &str) -> bool {
+    text.strip_prefix("<tool_use_error>Error: No such tool available: ")
+        .and_then(|rest| rest.strip_prefix(tool))
+        .is_some_and(|rest| rest.starts_with('.'))
 }
 
 /// The part of a call a person needs to see: its command, path or address, or a search's pattern and folder.

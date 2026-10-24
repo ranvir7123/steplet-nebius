@@ -318,8 +318,13 @@ fn a_writing_command_made_to_skip_the_gate_stops_the_run() {
     let id = id_of(&outcome, "touch made.txt");
     assert!(!asked_the_gate(&outcome, &id), "the command skipped the gate");
     assert_eq!(outcome.stopped_by, Some(Tripwire::SkippedCommand("touch made.txt".into())));
-    let note =
-        Event::SkippedGate { id: id.clone(), tool: "Bash".into(), what: "touch made.txt".into(), harmless: false };
+    let note = Event::SkippedGate {
+        id: id.clone(),
+        tool: "Bash".into(),
+        what: "touch made.txt".into(),
+        harmless: false,
+        not_offered: false,
+    };
     assert!(outcome.events.contains(&note));
     assert!(!reached_the_end(&outcome), "the run was stopped before the script's end");
     assert!(tool_calls(&outcome) < 31, "{} of 31 tool calls were made", tool_calls(&outcome));

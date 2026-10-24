@@ -669,7 +669,7 @@ pub fn event_view(e: &Event, call: Option<(&str, &Value, bool)>) -> Option<Event
                 lines: text.lines().count() as u32,
             }
         }
-        Event::SkippedGate { id, tool, what, harmless } => {
+        Event::SkippedGate { id, tool, what, harmless, .. } => {
             EventView::Skipped { id: id.clone(), tool: line(tool), what: shown(what), harmless: *harmless }
         }
         Event::ModelSwitch { from, to, category, explanation } => EventView::ModelRefused {
@@ -1081,8 +1081,9 @@ pub enum EndView {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct CheckView {
     /// `allowed`, `allowed_by_you`, `refused`, `refused_by_you` (refused after asking the receiver),
-    /// `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run)
-    /// `not_judged` or `turned_away` (the gate turned its connection away, and it did not run).
+    /// `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run),
+    /// `not_offered` (a tool the run does not offer: it did not run, and it stopped the run), `not_judged` or
+    /// `turned_away` (the gate turned its connection away, and it did not run).
     pub kind: String,
     /// Steplet's words for it.
     pub words: String,
@@ -1103,6 +1104,9 @@ pub fn check_view(c: &Check) -> CheckView {
         Check::NotAsked { harmless: true } => ("not_asked", "Ran without asking Steplet: a harmless read"),
         Check::NotAsked { harmless: false } => {
             ("ran_without_asking", "Ran without asking Steplet: Steplet stopped the run")
+        }
+        Check::NotOffered => {
+            ("not_offered", "A tool this run does not offer, so it did not run: Steplet stopped the run")
         }
         Check::NotJudged => ("not_judged", "No result came, so there is no sign it ran"),
         Check::TurnedAway => ("turned_away", "Steplet turned this call's connection away"),
@@ -1202,6 +1206,9 @@ pub fn report_view(r: &Report) -> ReportView {
                 command,
             ),
             Tripwire::SkippedGate(what) => ("An action went past Steplet's checker, so Steplet stopped the run.", what),
+            Tripwire::NotOffered(tool) => {
+                ("The agent asked for a tool this run does not offer, so Steplet stopped the run.", tool)
+            }
         };
         EndView::StoppedBySteplet { why: why.into(), about: line(about) }
     } else if r.completed {

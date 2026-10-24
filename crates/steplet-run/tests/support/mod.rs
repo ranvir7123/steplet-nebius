@@ -307,6 +307,58 @@ pub fn marker(distro: &str, path: &str, word: &str) -> Marker {
     Marker { path: path.into(), word: word.into(), distro: distro.into() }
 }
 
+/// Runs a command as the steplet account with nobody's settings, as `prepare.sh` runs git.
+pub const AS_STEPLET: &str = "setpriv --reuid=steplet --regid=steplet --init-groups --inh-caps=-all --no-new-privs -- \
+                              /usr/bin/env -i PATH=/usr/bin:/bin HOME=/nonexistent GIT_CONFIG_NOSYSTEM=1 \
+                              GIT_CONFIG_GLOBAL=/dev/null";
+
+/// Replaces the prepared working copy's files with `files`, as a new commit with `message` (test only: P3 lets
+/// Steplet clone only from public code hosts, and a test's repository is on none). `before_commit` is shell that root
+/// runs in the working copy just before the commit, or empty. Returns the commit's line.
+pub fn plant(
+    distro: &str,
+    paths: &steplet_run::RunPaths,
+    files: &[(&str, &[u8])],
+    before_commit: &str,
+    message: &str,
+) -> String {
+    let repo = paths.work_repo();
+    let git = format!(
+        "{AS_STEPLET} git -c core.hooksPath=/dev/null -c user.name=steplet-test -c user.email=test@example.invalid -C \
+         {repo}"
+    );
+    root_sh(distro, &format!("set -e\n{git} rm -q -r -- ."));
+    for (path, bytes) in files {
+        install(distro, bytes, &format!("{repo}/{path}"), "644");
+    }
+    let body = format!(
+        "set -e
+chown -R steplet:steplet {repo}
+chmod -R go-w {repo}
+cd {repo}
+{before_commit}
+{git} add -A
+{git} commit -q -m '{message}'
+{git} log --oneline -1"
+    );
+    root_sh(distro, &body)
+}
+
+/// Every event of a launched run, until it ends or `limit` passes, without the tripwire watcher: a measurement, or a
+/// control, sees every call the script makes, where a real run would stop at the first tripwire.
+pub fn every_event(handle: &steplet_run::RunHandle, limit: Duration) -> Vec<steplet_run::Event> {
+    let start = Instant::now();
+    let mut events = Vec::new();
+    while start.elapsed() < limit {
+        match handle.events().recv_timeout(Duration::from_secs(1)) {
+            Ok(e) => events.push(e),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    events
+}
+
 /// The scripted model, inside Steplet's Linux as root on `127.0.0.1:<port>`, following `script` (JSON).
 pub fn scripted_model(distro: &str, name: &str, script: &str, port: u16) -> Helper {
     install(distro, include_bytes!("fake_model.py"), "/opt/steplet-test/fake_model.py", "644");

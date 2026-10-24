@@ -219,7 +219,13 @@ fn a_turned_away_connection_never_hides_a_call_that_went_past_the_gate() {
     let o = outcome(
         vec![
             bash("u1", "touch x"),
-            Event::SkippedGate { id: "u1".into(), tool: "Bash".into(), what: "touch x".into(), harmless: false },
+            Event::SkippedGate {
+                id: "u1".into(),
+                tool: "Bash".into(),
+                what: "touch x".into(),
+                harmless: false,
+                not_offered: false,
+            },
             result("u1", true, "exit 1"),
         ],
         vec![Asked::Refused {

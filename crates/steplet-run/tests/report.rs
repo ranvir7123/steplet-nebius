@@ -77,7 +77,7 @@ fn tool_result(id: &str, is_error: bool, text: &str) -> Event {
 }
 
 fn skipped(id: &str, command: &str, harmless: bool) -> Event {
-    Event::SkippedGate { id: id.into(), tool: "Bash".into(), what: command.into(), harmless }
+    Event::SkippedGate { id: id.into(), tool: "Bash".into(), what: command.into(), harmless, not_offered: false }
 }
 
 /// Steplet's answer to the gate about call `id`, as the gate service records it.
@@ -540,6 +540,45 @@ fn a_call_that_skipped_the_checker_and_ran_during_the_stop_is_not_marked_as_cut_
     let r = report(&o);
     let marked: Vec<(&str, bool)> = r.commands.iter().map(|c| (c.command.as_str(), c.after_stop)).collect();
     assert_eq!(marked, [("cat a | head", false), ("cat b; ls", false), ("touch c.txt", true)]);
+}
+
+/// Phase 5 Task 5: a call for a tool the run does not offer did not run (Claude Code answered it with its own words
+/// for such a tool), so the report shows it as not run, not as one that ran without asking Steplet. The run's stop
+/// gives the reason. Steplet's record alone is not enough: with other words in the result, the call may have run.
+#[test]
+fn a_call_for_a_tool_the_run_does_not_offer_is_shown_as_not_run() {
+    let notebook = json!({"notebook_path": "/work/r1/repo/n.ipynb", "new_source": "x"});
+    let no_such_tool = "<tool_use_error>Error: No such tool available: NotebookEdit. NotebookEdit exists but is not \
+                        enabled in this context. Use one of the available tools instead.</tool_use_error>";
+    let mut o = outcome(vec![
+        started(),
+        Event::ToolUse { id: "u1".into(), name: "NotebookEdit".into(), input: notebook },
+        tool_result("u1", true, no_such_tool),
+        Event::SkippedGate {
+            id: "u1".into(),
+            tool: "NotebookEdit".into(),
+            what: String::new(),
+            harmless: false,
+            not_offered: true,
+        },
+        finished("done"),
+    ]);
+    o.stopped_by = Some(Tripwire::NotOffered("NotebookEdit".into()));
+    o.stopped_at = Some(3);
+    o.exit_code = Some(124);
+    let r = report(&o);
+    let shown: Vec<_> =
+        r.commands.iter().map(|c| (c.tool.as_str(), &c.check, c.ended_in_error, c.after_stop)).collect();
+    assert_eq!(shown, [("NotebookEdit", &Check::NotOffered, Some(true), false)]);
+    assert_eq!(r.stopped_by, Some(Tripwire::NotOffered("NotebookEdit".into())));
+    assert!(!r.completed);
+    // The tool's name is the model's own text, so the key is hidden in it too.
+    o.stopped_by = Some(Tripwire::NotOffered(format!("NotebookEdit {MADE_UP_KEY}")));
+    assert_eq!(report(&o).stopped_by, Some(Tripwire::NotOffered(format!("NotebookEdit {HIDDEN}"))));
+    // Other words in the result: the record's mark is not taken on its own.
+    o.events[2] = tool_result("u1", true, "made-up: the tool failed");
+    let shown: Vec<_> = report(&o).commands.iter().map(|c| c.check.clone()).collect();
+    assert_eq!(shown, [Check::NotAsked { harmless: false }]);
 }
 
 /// Phase 0 S6: the fence stops a blocked attempt without telling Steplet, so the report says so and never claims the

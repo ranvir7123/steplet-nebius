@@ -19,7 +19,7 @@ use crate::ask::{Answer, Reply};
 use crate::gate::Asked;
 use crate::run::RunOutcome;
 use crate::types::{Event, GateAnswer};
-use crate::watch::{Tripwire, described, what};
+use crate::watch::{Tripwire, described, refused_as_not_offered, what};
 
 /// What a secret shows as in the report.
 const HIDDEN: &str = "[hidden by Steplet]";
@@ -101,11 +101,21 @@ pub enum Check {
     RefusedButRan,
     /// It did not ask the gate. `harmless`: it was a harmless read (G2); otherwise it stopped the run.
     NotAsked { harmless: bool },
+    /// It did not ask the gate, and its tool is not one the run offers: Claude Code answered it with its own words for
+    /// such a tool, so it did not run. It stopped the run (phase 5 Task 5).
+    NotOffered,
     /// No result came, so there is no evidence it ran (Task 9).
     NotJudged,
     /// The gate turned the call's connection away before deciding (the wrong run token, a request it could not
     /// read), and the call did not run (Task 13).
     TurnedAway,
+}
+
+impl Check {
+    /// The check of a call that did not ask the gate, from Steplet's record of it (`Event::SkippedGate`).
+    pub fn of_skipped(harmless: bool, not_offered: bool) -> Check {
+        if not_offered { Check::NotOffered } else { Check::NotAsked { harmless } }
+    }
 }
 
 /// How a question ended without a yes.
@@ -280,9 +290,13 @@ impl Scrubber {
                 models: models.iter().map(|m| t(m)).collect(),
                 text: t(text),
             },
-            Event::SkippedGate { id, tool, what, harmless } => {
-                Event::SkippedGate { id: t(id), tool: t(tool), what: t(what), harmless: *harmless }
-            }
+            Event::SkippedGate { id, tool, what, harmless, not_offered } => Event::SkippedGate {
+                id: t(id),
+                tool: t(tool),
+                what: t(what),
+                harmless: *harmless,
+                not_offered: *not_offered,
+            },
             Event::ApiRetry { status, error, attempt, max } => {
                 Event::ApiRetry { status: *status, error: t(error), attempt: *attempt, max: *max }
             }
@@ -310,6 +324,7 @@ impl Scrubber {
             Tripwire::Hook(name) => Tripwire::Hook(self.text(name)),
             Tripwire::SkippedCommand(command) => Tripwire::SkippedCommand(self.text(command)),
             Tripwire::SkippedGate(what) => Tripwire::SkippedGate(self.text(what)),
+            Tripwire::NotOffered(tool) => Tripwire::NotOffered(self.text(tool)),
         }
     }
 }
@@ -409,10 +424,10 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
     let not_yes: HashMap<&str, NotYes> =
         outcome.answers.iter().filter_map(|a| Some((a.call.as_str(), NotYes::of(&a.reply)?))).collect();
     let results = results(&outcome.events);
-    let mut skipped: HashMap<&str, bool> = HashMap::new();
+    let mut skipped: HashMap<&str, (bool, bool)> = HashMap::new();
     for e in &outcome.events {
-        if let Event::SkippedGate { id, harmless, .. } = e {
-            skipped.insert(id.as_str(), *harmless);
+        if let Event::SkippedGate { id, harmless, not_offered, .. } = e {
+            skipped.insert(id.as_str(), (*harmless, *not_offered));
         }
     }
     let stop = outcome.stopped_at;
@@ -437,7 +452,12 @@ fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
                 (None, None) if turned_away.contains(id.as_str()) && result.is_none_or(|r| r.is_error) => {
                     Check::TurnedAway
                 }
-                (None, Some(&harmless)) => Check::NotAsked { harmless },
+                // Marked not offered only with Claude Code's own words for such a tool: a call that came back with no
+                // error, or with other words, may have run, whatever else.
+                (None, Some(&(harmless, not_offered))) => Check::of_skipped(
+                    harmless,
+                    not_offered && result.is_some_and(|r| r.is_error && refused_as_not_offered(name, r.text)),
+                ),
                 (None, None) => Check::NotJudged,
             };
             let exit_code = result.and_then(|r| exit_code_of(name, input, r.is_error, r.plain_end, r.text));

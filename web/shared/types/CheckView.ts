@@ -3,8 +3,9 @@
 export type CheckView = { 
 /**
  * `allowed`, `allowed_by_you`, `refused`, `refused_by_you` (refused after asking the receiver),
- * `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run)
- * `not_judged` or `turned_away` (the gate turned its connection away, and it did not run).
+ * `refused_but_ran`, `not_asked` (a harmless read), `ran_without_asking` (no harmless read: it stopped the run),
+ * `not_offered` (a tool the run does not offer: it did not run, and it stopped the run), `not_judged` or
+ * `turned_away` (the gate turned its connection away, and it did not run).
  */
 kind: string, 
 /**
