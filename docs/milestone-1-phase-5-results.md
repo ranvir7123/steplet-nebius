@@ -3463,3 +3463,625 @@ The three new cases sit where the plan put them: G13 under the first line (now 1
 - **The 8 new pictures** were taken with Playwright's Chromium build 1234, not the pinned 1243. Taking them again with 1243 needs your yes to download it.
 - **WSL's warning** ("Failed to start the systemd user session for 'steplet'") showed again. It did not stop any test or the suite. Why it appears was not looked into.
 - **Model and stops:** Task 5 ran on `claude-opus-5-5` throughout. No reply was stopped by an AI safety check. Twice a file change (one write, one edit) waited because the tool's own permission check gave no answer; trying again worked. That is not a reply being stopped.
+
+## Task 6: a clean start after an interruption, a model refusal, and the key hidden everywhere (R20 items 4 and 5)
+
+A session on the same branch as Tasks 1 to 5 (`claude/steplet-phase5-task1-5653f2`, from `cdacaaa`), in the same work folder, on `claude-opus-5-5`. **Done: five new tests show that a run stopped after its first change starts again from a fresh copy, that a model's refusal ends the run and the report names the model and the refusal (and both models when another one is allowed), that a key a program prints is hidden in the report, on the screen and in the raw logs, and that the key is nowhere a program of the task can look. No way past was found, and nothing in the product changed.** Each test was shown able to fail with the opposite behaviour planted in Steplet's code, then put back exactly. The code review found four gaps in the tests themselves (each one would have let a real fault pass); each gap was first shown with a planted fault that the old test missed, then closed, and the new check was seen failing on that fault. Every step on Steplet's Linux ran with Steplet's one-run lock taken. No step started `steplet.exe`.
+
+This is defensive testing of our own app: every test runs only on this laptop, in Steplet's own Linux, against Steplet's own code. The test content is harmless: a command that appends one line to a text file, a stand-in model that refuses by script, a small program that writes down what it can see into a file of its own copy, and the made-up key `MADE_UP_KEY` (never a real key). Nothing in this section, its records or the test output holds the key's text: every look at it is a count.
+
+### What was built
+
+- **Three tests**, `crates/steplet-run/tests/restart.rs`, new. They need Steplet's Linux and the network, and run one at a time. Each one, by what Steplet must do and what the test checks:
+  - **`a_run_stopped_after_its_first_change_starts_again_clean` (case I2, C6).** Steplet must start a run that was stopped part-way again from a fresh copy, so nothing from the stopped run is in it and nothing happens twice.
+    - Run 1: the file's one declared command appends one line to `steps.txt`. As soon as that call's result reaches the screen, the test presses Stop, and root counts the file's lines from outside.
+    - Run 2, of the same file and with the same run id (so the same folders: if Steplet's preparing ever kept a copy it found there, run 2 would get run 1's): its first call asks whether `steps.txt` is there, then it appends the line and counts the lines.
+    - The test checks:
+      - report 1 says you stopped it, with no fault;
+      - Steplet removed run 1 as soon as it was stopped, and run 2 as soon as it ended: root counts what is left in `/work`, in the runs folder and in `/tmp` right after each run returns, before the test's own clean-up (it must be `0 0 0`);
+      - when run 2 was prepared, its copy held only the repository's own files (`.git` and `README`, root's look from outside);
+      - run 2's program found no `steps.txt` before its own change (`False`);
+      - after run 2 the file holds one line, not two (the program's count and root's look).
+    - **The control:** when Stop was pressed, run 1's line was in its copy (root's look: `1`), and Steplet's own list of changed files names `steps.txt`. So a fresh copy in run 2 is not one that simply never changed.
+  - **`a_model_refusal_ends_the_run_and_the_report_names_the_model` (case M2).** Steplet must end the run when the model refuses, and the report must name the model and the refusal.
+    - The stand-in model refuses at its very first answer, with the category `cyber` and an explanation. It would answer with text if asked again.
+    - The test checks: the run ended at once (well before its time limit) and did not complete; Claude Code's own record says it ended on the refusal (`stop_reason` "refusal"), and nothing else ended it (no tripwire, no Stop, no fault); the report lists one model and the refusal with its category, its explanation and no other model; the report lists no command; the copy did not change; Steplet removed the run.
+    - **The control:** the stand-in's own log of every request: it was asked by one model only, at its first step, and only refused. So the run did reach the model, and a refusal, not a crash, ended it.
+  - **`with_another_model_allowed_both_models_are_listed` (case M2, E1, D7).** With "another model" allowed by the receiver, Steplet must let Claude Code go on with another model, and the report must list both models and the refusal.
+    - The same refusal, with `allow_model_switch` on.
+    - The test checks: the report lists both models in order, and the refusal with the second model named as the one it switched to; the run completed, and Claude Code's own record says it ended normally (`end_turn`); no tripwire, no Stop, no fault; no command; the copy did not change; Steplet removed the run.
+    - **The control:** the stand-in's log: two different models asked it, the first refusing and the second answering.
+- **Two tests** added at the end of `crates/steplet-run/tests/contain.rs`:
+  - **`a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs` (case R3).** Steplet must hide the key wherever a run could show it, also when a program prints it.
+    - The file's declared command prints a line with the key in the middle. The command holds the key backwards and turns it round as it prints, so only what the program prints holds it.
+    - The run is made the way the app's Run button makes it, so Steplet uses its own list of what to hide.
+    - The test counts the key, and its last 20 characters, in the report, in every piece of progress sent to the screen (the live log), and in the run's three raw logs on Windows (its stream, its error output and the gate's log). Every count must be 0. The three logs are deleted when the test ends, and the run is removed, also when the test fails.
+    - **The controls:** the count finds the key in a text that holds it; each raw log is there, and the stream's and the gate's have lines, so a log Steplet failed to write is not counted as clean; the command's output in the report is exactly the printed line with `[hidden by Steplet]` in the key's place; and the screen and the stream log both carry that line. So the places counted did receive what the program printed.
+  - **`the_key_is_nowhere_a_program_the_task_runs_can_look` (case Y3).** Steplet must keep the key out of everything a program of the task can see.
+    - A small program, put in the copy before the run, writes into a file of its own copy: its own environment; the command line and environment of every other process it can read; the name of every file and folder it can see (except `/proc`, `/sys` and `/mnt`); and the contents of every file among those that it can read and that changed since just before the run was prepared (the time comes from Steplet's Linux; up to 1 MiB each; it also writes how many it read and how many were too big or unreadable). `/dev` is walked too, regular files only, so shared memory is covered.
+    - The declared command runs it. Before the run is removed, root counts the key and the run's token in what it wrote (`support/count_key.py`: the secret goes in on standard input, only counts come out). Both counts must be 0, and each count must have read exactly that one file.
+    - **The controls:** the same program, run by the steplet account outside the fence with the key put into its environment and into a file of its folder, finds it twice; that folder is removed before the run. And in the run, what it wrote has an environment (`PATH` among its names), at least one other process, its own file among the names and that file's contents among what it read, so it did look.
+- **The catalogue's cases I2, M2, R3 and Y3** (`crates/steplet-suite/src/catalogue.rs`), under the lines the plan's table gives them. There are 37 cases in all.
+  - I2, "A run stopped after its first change is run again", is under "Interrupted; the folder was reset; run again?".
+  - M2, "The model refuses in a real run, with and without another model allowed", is under "Report: every model used, and refusals".
+  - R3, "A program prints the key in a real run", is under "Report and live log are safe to read".
+  - Y3, "A program of the task looks for the key in its environment, other programs and the files it sees", is under "Your own files are not inside Steplet's Linux".
+
+### Changes from the plan, recorded here
+
+- **Both restart runs use the same run id**, where the app gives every run a fresh one. The same id is the only case in which a preparing step that wrongly kept a copy it found would hand run 2 the copy of run 1. That Steplet removed run 1 is checked on its own, right after run 1 returns (added after the code review, below).
+- **"Its first call reads steps.txt" became a call that prints whether the file is there** (`False`), so a missing file is an answer, not an error result. Root's two looks from outside (the prepared copy, the line count) were added as checks of their own.
+- **Root's looks in the restart test are made from inside the progress callback**, on the append call's result, so they see the copy at that moment, before Stop or the next call takes effect.
+- **"No tool call ran after it" is checked as "the report lists no command at all".** The refusal is the stand-in's first answer, so no call can come before it either.
+- **R3 counts three raw logs, not two.** Windows keeps three for a run: the stream, the error output and the gate's log. It also counts the key's last 20 characters, not only the whole key.
+- **R3's check of the command's output masks that output, and the leak check comes first.** Found while showing R3 able to fail (below): without the mask, a failing check would have printed the key in its own failure message.
+- **Y3's program looks at more than the plan asks:** also every other process's command line and environment it can read, the contents of the files that changed during the run (added after the code review), and it counts the run's token as well as the key. Its walk skips `/proc`, `/sys` and `/mnt` (where Windows drives would be, and which the fence already refuses to read).
+
+### Step 2: the first runs
+
+All five tests were run on Steplet's Linux before anything was planted. The restart test's first run failed on the test's own mistake, not Steplet's: it expected an empty output for the append call, and Claude Code shows a command that printed nothing as `(Bash completed with no output)`. The test now expects those words (`NO_OUTPUT`). After that all five passed. No way past was found, so nothing in the product changed. What each one saw:
+
+- **I2:** run 1 was stopped by you right after its append (root's look: `1` line); run 2's copy held `.git` and `README` when prepared; its program printed `False`, then `1` line; nothing was left.
+- **M2, no other model:** the report's models were `["claude-opus-5[1m]"]`, the refusal's category `cyber` with no model switched to, not completed, no command, no faults. The stand-in was asked by `claude-opus-5` at step 0 only.
+- **M2, another model allowed:** the report's models were `["claude-opus-5[1m]", "claude-opus-4-8[1m]"]`, the refusal switched to the second, completed.
+- **R3:** 6 pieces of progress; the raw logs' sizes `[4093, 0, 156]` bytes; every count `(0, 0)`.
+- **Y3:** the control found the key once; in the run the key and the run's token were found 0 times, in what it wrote about 3 other processes and 89294 file names.
+
+### Showing that the new tests can fail
+
+Each test was run once with the opposite behaviour planted in Steplet's code or scripts, never in Claude Code. Each planted file was copied aside first, with its SHA-256 taken. The plant was made by an exact replace (the old text had to appear exactly once) and carried a `PLANTED` comment line. Afterwards the copy was put back, its SHA-256 compared with the one before, and the `PLANTED` lines counted. After each, the Linux check below was run: no run left in `/work`, the runs folder or `/tmp`; Claude Code's 27 entries and their listing SHA-256 `ea6a12cc…c4c9` unchanged; the steplet account unable to write next to Claude Code.
+
+**M2: the receiver's choice turned round.** In `crates/steplet-run/src/settings.rs`, `"switchModelsOnFlag": allow_model_switch` became `!allow_model_switch`. Both refusal tests failed where they should, on the stand-in's own log:
+
+```
+> python -I plant.py apply plant-m2.json
+before cfd6a248033469ec60d3fd2edc93f3a4437cb751cf961b36f425dce875caae0a  crates/steplet-run/src/settings.rs
+planted 59281c2fa5efc16b0b477c06791fd0510f3b63b7976a472b7276c36595cf1710  crates/steplet-run/src/settings.rs
+> cargo test -p steplet-run --offline --test restart -- --ignored --nocapture --test-threads=1 --exact a_model_refusal_ends_the_run_and_the_report_names_the_model with_another_model_allowed_both_models_are_listed
+exit 101
+--- the stand-in model was asked (agent loop only; model, step, answer):
+    "claude-opus-5" 0 "refusal"
+    "claude-opus-4-8" 0 "text"
+thread 'a_model_refusal_ends_the_run_and_the_report_names_the_model' (11424) panicked at crates\steplet-run\tests\restart.rs:277:5:
+assertion `left == right` failed: the stand-in was asked by one model, and only refused: [("claude-opus-5", "refusal"), ("claude-opus-4-8", "text")]
+  left: 2
+ right: 1
+--- the stand-in model was asked (agent loop only; model, step, answer):
+    "claude-opus-5" 0 "refusal"
+thread 'with_another_model_allowed_both_models_are_listed' (42128) panicked at crates\steplet-run\tests\restart.rs:309:5:
+assertion `left == right` failed: two models, one after the other: [("claude-opus-5", "refusal")]
+  left: 1
+ right: 2
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 1 filtered out; finished in 14.44s
+> python -I plant.py restore plant-m2.json
+after  cfd6a248033469ec60d3fd2edc93f3a4437cb751cf961b36f425dce875caae0a  crates/steplet-run/src/settings.rs  same as before: True  PLANTED lines: 0
+restored cleanly
+```
+
+**R3: hiding switched off.** In `crates/steplet-run/src/report.rs`, the report's and the screen's cleaner (`Scrubber::text`) returned the text without hiding anything, and `raw_log_line` returned each raw log line unchanged. The test failed on its leak check, naming the three places, with counts only. The key's text is in none of the test's output (0 of each form in the log, counted below):
+
+```
+> python -I plant.py apply plant-r3.json
+before 7808a6e6bcfd4426773f6c7b92388b7c1ca928d75e8bddcf826dfd0382dcc32b  crates/steplet-run/src/report.rs
+planted 514dda0cb7e59ab7ef3ac7a8ffa5e8fcef7eddc895e8d408f86f003877492071  crates/steplet-run/src/report.rs
+> cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1 --exact a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs
+exit 101
+--- 6 pieces of progress; the raw logs' sizes in bytes: [4141, 0, 156]
+--- the key and its last 20 characters, counted in each place: [("the report", (1, 1)), ("a piece of progress", (0, 0)), ("a piece of progress", (0, 0)), ("a piece of progress", (0, 0)), ("a piece of progress", (1, 1)), ("a piece of progress", (0, 0)), ("a piece of progress", (0, 0)), ("the stream log", (2, 2)), ("the error log", (0, 0)), ("the gate's log", (0, 0))]
+thread 'a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs' (41504) panicked at crates\steplet-run\tests\contain.rs:1164:5:
+the key's text appears in: [("the report", (1, 1)), ("a piece of progress", (1, 1)), ("the stream log", (2, 2))]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 7.33s
+> python -I count_key_win.py t6-plant-r3.log %LOCALAPPDATA%\Steplet\logs\p5t6r.jsonl
+.superpowers/sdd/2026-10-22-milestone-1-phase-5/t6-plant-r3.log {'key': 0, 'last 20': 0, 'backwards': 0}
+C:/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.jsonl {'key': 2, 'last 20': 2, 'backwards': 1}
+all files, every form: 5
+> rm -v p5t6r.jsonl p5t6r.stderr.txt p5t6r.gate.log      (the planted run's stream log held the key, so all three were deleted)
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.jsonl'
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.stderr.txt'
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.gate.log'
+> python -I plant.py restore plant-r3.json
+after  7808a6e6bcfd4426773f6c7b92388b7c1ca928d75e8bddcf826dfd0382dcc32b  crates/steplet-run/src/report.rs  same as before: True  PLANTED lines: 0
+restored cleanly
+```
+
+Before this run the test was changed so that nothing it prints can hold the key, even when Steplet fails to hide it. Its check of the command's output compared the raw output, so a failing check would have printed the key in its failure message. That check now masks the output, and the leak check comes first.
+
+**Y3: the key put into the agent's environment.** In `crates/steplet-run/src/launch.rs` the first secret was passed to the start script as one more argument, and in `crates/steplet-run/src/start-run.sh` it was put in the agent's environment (`VARS+=("STEPLET_PLANTED_SECRET=${5:-}")`). The test failed on its count:
+
+```
+> python -I plant.py apply plant-y3.json
+before 864a661b128bf7ca36a5c2abb71ddf8de328d1014ec4fd420e5dd092e8ffc267  crates/steplet-run/src/launch.rs
+planted fed44adda8b2a961d361349457928e5c78bd70dcb3232a6c23b05153f3097a88  crates/steplet-run/src/launch.rs
+before a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  crates/steplet-run/src/start-run.sh
+planted 7a2ac39736f2db8641a7f253518181de675ff3831fe557f69113459aed474c53  crates/steplet-run/src/start-run.sh
+> cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1 --exact the_key_is_nowhere_a_program_the_task_runs_can_look
+exit 101
+test the_key_is_nowhere_a_program_the_task_runs_can_look ... --- the control, outside the fence with the key in its environment:
+key: 1 {'/tmp/steplet-p5t6y-control/seen.txt': 1} (files read: 1)
+--- in the run, the key in what it wrote:
+key: 2 {'/work/p5t6y/repo/seen.txt': 2} (files read: 1)
+--- and the run's token:
+key: 0  (files read: 1)
+--- lines on processes: 3; file names: 89294; its own file listed: 1
+thread 'the_key_is_nowhere_a_program_the_task_runs_can_look' (32500) panicked at crates\steplet-run\tests\contain.rs:1246:9:
+the key, in the run: key: 2 {'/work/p5t6y/repo/seen.txt': 2} (files read: 1)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 15.81s
+> python -I plant.py restore plant-y3.json
+after  864a661b128bf7ca36a5c2abb71ddf8de328d1014ec4fd420e5dd092e8ffc267  crates/steplet-run/src/launch.rs  same as before: True  PLANTED lines: 0
+after  a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  crates/steplet-run/src/start-run.sh  same as before: True  PLANTED lines: 0
+restored cleanly
+> python -I count_key_win.py t6-plant-y3.log
+.superpowers/sdd/2026-10-22-milestone-1-phase-5/t6-plant-y3.log {'key': 0, 'last 20': 0, 'backwards': 0}
+all files, every form: 0
+```
+
+Steplet writes its start script into its Linux fresh for every run, so the planted one was still installed after the files were put back. Running the test again, unplanted, installed the real one. It passed, and the installed script's SHA-256 is the repository's own again:
+
+```
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sha256sum /opt/steplet/bin/start-run      (after the restore, before the rerun)
+7a2ac39736f2db8641a7f253518181de675ff3831fe557f69113459aed474c53  /opt/steplet/bin/start-run
+> cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1 --exact the_key_is_nowhere_a_program_the_task_runs_can_look
+exit 0
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 12.63s
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sha256sum /opt/steplet/bin/start-run
+a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  /opt/steplet/bin/start-run
+```
+
+**I2: the last run's copy kept.** In `crates/steplet-run/src/prepare.sh` the first step no longer emptied `/work`, and the clone was skipped when a copy was already there. In `crates/steplet-run/src/discard.sh` the run's copy was no longer removed, nor checked for. The test failed on root's look at run 2's prepared copy:
+
+```
+> python -I plant.py apply plant-i2.json
+before 31975034fc3abedde1992bafd15826f4ad06876e26595d1509b947824fc49821  crates/steplet-run/src/discard.sh
+planted 353afebd16583e5ae5763d363c10b0338b9d90efcec0a82d2161c37237d77233  crates/steplet-run/src/discard.sh
+before 2032c91f7e0692724784dbe093c6aa444f9237bdc2abbbcef730f8a660a0c890  crates/steplet-run/src/prepare.sh
+planted 186a33ee1e85d27dad739b3360df9616643c920dceb1f0b499469a07938e1247  crates/steplet-run/src/prepare.sh
+> cargo test -p steplet-run --offline --test restart -- --ignored --nocapture --test-threads=1 --exact a_run_stopped_after_its_first_change_starts_again_clean
+exit 101
+--- run 1, root's look when Stop was pressed (lines in steps.txt): ["1"]
+--- run 2, root's looks (the prepared copy, then lines in steps.txt): [".git\nREADME\nsteps.txt", "2"]
+--- left: "/var/lib/steplet/runs:\n\n/work:\np5t6i"
+thread 'a_run_stopped_after_its_first_change_starts_again_clean' (42288) panicked at crates\steplet-run\tests\restart.rs:221:5:
+assertion `left == right` failed: run 2's copy was fresh when prepared
+  left: Some(".git\nREADME\nsteps.txt")
+ right: Some(".git\nREADME")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 12.63s
+> python -I plant.py restore plant-i2.json
+after  31975034fc3abedde1992bafd15826f4ad06876e26595d1509b947824fc49821  crates/steplet-run/src/discard.sh  same as before: True  PLANTED lines: 0
+after  2032c91f7e0692724784dbe093c6aa444f9237bdc2abbbcef730f8a660a0c890  crates/steplet-run/src/prepare.sh  same as before: True  PLANTED lines: 0
+restored cleanly
+```
+
+The planted discard left run p5t6i's copy in `/work` (the Linux check said `runs in /work: 1`). It was removed by running the test again unplanted, so Steplet's own prepare and discard did it, not a command typed by hand:
+
+```
+> cargo test -p steplet-run --offline --test restart -- --ignored --nocapture --test-threads=1 --exact a_run_stopped_after_its_first_change_starts_again_clean
+exit 0
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 13.77s
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sh -s < t5-linux-check.sh
+runs in /work: 0
+runs in /var/lib/steplet/runs: 0
+run folders in /tmp: 0
+Claude Code entries: 27
+Claude Code listing SHA-256: ea6a12ccad6678281729d20790f5cebe378ca682c6a022ea31d5b4729b4fc4c9
+can the steplet account write next to Claude Code: no
+```
+
+### Checks, before the code review
+
+The brief's test command, then the format and lint checks. The first format check asked for two long lines to be wrapped; `cargo fmt --all` wrapped them:
+
+```
+> cargo test -p steplet-run --offline --test restart --test contain -- --ignored --nocapture --test-threads=1
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 83.37s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.30s
+> cargo fmt --all -- --check
+Diff in \\?\C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-run\tests\contain.rs:1149:
+-    counts.extend(["the stream log", "the error log", "the gate's log"].into_iter().zip(raw.iter().map(|r| key_count(r))));
++    counts.extend(
++        ["the stream log", "the error log", "the gate's log"].into_iter().zip(raw.iter().map(|r| key_count(r))),
++    );
+Diff in \\?\C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-run\tests\restart.rs:92:
+-    events.iter().any(|u| matches!(u, Event::ToolUse { id: used, input, .. } if used == id && input["command"] == command))
++    events
++        .iter()
++        .any(|u| matches!(u, Event::ToolUse { id: used, input, .. } if used == id && input["command"] == command))
+fmt exit 1
+> cargo fmt --all && cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Checking steplet-run v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-run)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
+clippy exit 0 on try 1
+> cargo test -p steplet-suite --offline
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 14 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+suite unit tests exit 0 on try 1
+```
+
+The whole workspace's ordinary tests could not be built in one go. McAfee locked a freshly built test program each time (Windows error LNK1104), a different one on every try, and also in one more round at one job at a time (`-j 1`), as the brief allows:
+
+```
+> cargo test --workspace --offline -j 2      (three tries)
+try 1 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\record-9280b3e24899c298.exe'
+error: could not compile `steplet-suite` (test "record") due to 1 previous error
+try 2 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\verdict-06a5701e796f89d4.exe'
+error: could not compile `steplet-suite` (test "verdict") due to 1 previous error
+try 3 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\launch-ceaee1f713706118.exe'
+error: could not compile `steplet-run` (test "launch") due to 1 previous error
+> cargo test --workspace --offline -j 1 --no-run
+build exit 101
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\sites-02b7ece10d222252.exe'
+error: could not compile `steplet-run` (test "sites") due to 1 previous error
+> cargo test --workspace --offline -j 1
+test exit 101
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\lock-708be759482b3c46.exe'
+```
+
+So the two crates this task touches were tested one at a time instead. `steplet-run`'s build went through on its third try:
+
+```
+> cargo test -p steplet-run --offline --no-run      (up to three tries)
+try 1 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\prepare-ca0ff602a7cf43dc.exe'
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\settings_live-a27ecfdbe69b9d8d.exe'
+try 2 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\watch_run-76ecdcace2e75d9b.exe'
+build ok on try 3
+> cargo test -p steplet-run --offline
+test exit 0
+passed 133 failed 0 ignored 59          (each "test result" line added up)
+```
+
+### The code review
+
+A fresh code reviewer read the whole change before the commit. It found:
+
+- no way past, and no problem with the timing between the test and the run, with how the key is printed, with the catalogue or with the ports;
+- nothing Critical;
+- 4 Important and 5 Minor findings;
+- 2 questions it set aside: how far the fence keeps a run's programs apart from other programs, and the exit code a refusal leaves.
+
+Each finding was graded again by what a person using Steplet would get. The 4 Important ones stand: each was a gap in a test, through which a real fault in Steplet would have passed unseen. The 5 Minor ones stayed Minor, and all five were fixed too, because each is small and about the brief's own rules: leave the Linux as it was found, never leave the key on disk, and say truly what a test checks.
+
+Each Important gap was first shown, test first: the fault the old test missed was planted in Steplet's code (four plants at once, in `run.rs`, `launch.rs` and `start-run.sh`, each with a `PLANTED` line, in the same way as above), and the old tests were run on it. All five passed, so the gaps were real:
+
+```
+> python -I plant.py apply plant-review.json
+before 864a661b128bf7ca36a5c2abb71ddf8de328d1014ec4fd420e5dd092e8ffc267  crates/steplet-run/src/launch.rs
+planted a127f22159f84dd918c80c6d3635c8cc31769d75a25e501f9e639c67278aad30  crates/steplet-run/src/launch.rs
+before d8bb369809b9afc26dcb8a934fa5b3309ffbbe407930dde20985c1076d8a53a8  crates/steplet-run/src/run.rs
+planted adf18f54044a943b4063f03668ae69428aa0127981c899789dc1804f32c03da0  crates/steplet-run/src/run.rs
+before a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  crates/steplet-run/src/start-run.sh
+planted 3911decc03c69e5e877c87eba369d6d62cc0ac57bce7cf57f5936ae464d9984a  crates/steplet-run/src/start-run.sh
+> cargo test -p steplet-run --offline --test restart -- --ignored --nocapture --test-threads=1      (the old tests)
+--- run 2, root's looks (the prepared copy, then lines in steps.txt): [".git\nREADME", "1"]
+--- left: "/var/lib/steplet/runs:\n\n/work:"
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.87s
+> cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1 --exact a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs the_key_is_nowhere_a_program_the_task_runs_can_look
+--- 6 pieces of progress; the raw logs' sizes in bytes: [4093, 0, 0]
+--- in the run, the key in what it wrote:
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- lines on processes: 3; file names: 89295; its own file listed: 1
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 21.09s
+```
+
+Then each gap was closed in the tests (described in "What was built" above), and the new tests were run on the same plants. Each failed at its new check:
+
+**Important 1: the restart test never checked that Steplet removed the stopped run.** Steplet's preparing empties `/work` before every run anyway, and the test's own clean-up removed what was left, so a stopped run that Steplet left behind went unseen. The plant: Steplet skips the removal after you press Stop. Now root counts what is left of each run as soon as it returns, before the test's clean-up, and report 1 must have no fault:
+
+```
+--- left as soon as the run returned (in /work, the runs folder, /tmp): 1 1 1
+--- run 1, root's look when Stop was pressed (lines in steps.txt): ["1"]
+thread 'a_run_stopped_after_its_first_change_starts_again_clean' (45212) panicked at crates\steplet-run\tests\restart.rs:238:5:
+assertion `left == right` failed: Steplet removed run 1 as soon as it was stopped
+  left: "1 1 1"
+ right: "0 0 0"
+```
+
+**Important 2: both refusal tests would have passed if the run had ended in a fault, as a crash does.** The plant: Steplet adds a fault to every report that has a refusal. Now they also check Claude Code's own record of how the run ended, that no tripwire, Stop or fault ended it, that the copy did not change and that Steplet removed the run:
+
+```
+thread 'a_model_refusal_ends_the_run_and_the_report_names_the_model' (16044) panicked at crates\steplet-run\tests\restart.rs:331:5:
+the run ended without a fault: ["Task 6 planted fault: the agent ended unexpectedly"]
+thread 'with_another_model_allowed_both_models_are_listed' (14824) panicked at crates\steplet-run\tests\restart.rs:385:5:
+the run ended without a fault: ["Task 6 planted fault: the agent ended unexpectedly"]
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.95s
+```
+
+**Important 3: the look for the key read only names, so a key written into a file the program can read went unseen.** The plant: Steplet passes the key to its start script, which writes it into a file of the run's temporary folder. Now the program also reads the contents of every file it can read that changed since just before the run was prepared, and it walks `/dev` too. Its control writes the key into a file as well, and must find it twice:
+
+```
+--- the control, outside the fence with the key in its environment and a file:
+key: 2 {'/tmp/steplet-p5t6y-control/seen.txt': 2} (files read: 1)
+key, last 20 characters: 2 {'/tmp/steplet-p5t6y-control/seen.txt': 2} (files read: 1)
+--- in the run, the key in what it wrote:
+key: 1 {'/work/p5t6y/repo/seen.txt': 1} (files read: 1)
+key, last 20 characters: 1 {'/work/p5t6y/repo/seen.txt': 1} (files read: 1)
+--- lines on processes: 3; file names: 89310; its own file listed: 1; its own file's contents: 1
+--- contents read: 30; too big or unreadable: 2
+thread 'the_key_is_nowhere_a_program_the_task_runs_can_look' (40400) panicked at crates\steplet-run\tests\contain.rs:1292:9:
+the key, in the run: key: 1 {'/work/p5t6y/repo/seen.txt': 1} (files read: 1)
+```
+
+**Important 4: the printed-key test read a missing raw log as empty, and counted it as clean.** The plant: Steplet writes the gate's log under another name (`.gate.txt`). Now each of the three logs must be there, and the stream's and the gate's must have lines:
+
+```
+--- 6 pieces of progress; the raw logs there: [true, true, false]; their sizes in bytes: [4093, 0, 0]
+thread 'a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs' (33936) panicked at crates\steplet-run\tests\contain.rs:1170:5:
+assertion `left == right` failed: each raw log is there: the stream's, the error output's and the gate's
+  left: [true, true, false]
+ right: [true, true, true]
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 10 filtered out; finished in 32.70s
+```
+
+Then the files were put back, the key was counted in the logs the plant had left under the other name, and those were deleted. The planted start script was still installed in Steplet's Linux:
+
+```
+> python -I plant.py restore plant-review.json
+after  864a661b128bf7ca36a5c2abb71ddf8de328d1014ec4fd420e5dd092e8ffc267  crates/steplet-run/src/launch.rs  same as before: True  PLANTED lines: 0
+after  d8bb369809b9afc26dcb8a934fa5b3309ffbbe407930dde20985c1076d8a53a8  crates/steplet-run/src/run.rs  same as before: True  PLANTED lines: 0
+after  a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  crates/steplet-run/src/start-run.sh  same as before: True  PLANTED lines: 0
+restored cleanly
+> grep -c PLANTED crates/steplet-run/src/run.rs crates/steplet-run/src/launch.rs crates/steplet-run/src/start-run.sh
+crates/steplet-run/src/run.rs:0
+crates/steplet-run/src/launch.rs:0
+crates/steplet-run/src/start-run.sh:0
+> python -I count_key_win.py t6-review-new-planted-restart.log t6-review-new-planted-contain.log p5t6i.gate.txt p5t6m.gate.txt p5t6s.gate.txt p5t6r.gate.txt
+.superpowers/sdd/2026-10-22-milestone-1-phase-5/t6-review-new-planted-restart.log {'key': 0, 'last 20': 0, 'backwards': 0}
+.superpowers/sdd/2026-10-22-milestone-1-phase-5/t6-review-new-planted-contain.log {'key': 0, 'last 20': 0, 'backwards': 0}
+C:/Users/RANVIR/AppData/Local/Steplet/logs/p5t6i.gate.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+C:/Users/RANVIR/AppData/Local/Steplet/logs/p5t6m.gate.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+C:/Users/RANVIR/AppData/Local/Steplet/logs/p5t6s.gate.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+C:/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.gate.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+all files, every form: 0
+> rm -v p5t6i.gate.txt p5t6m.gate.txt p5t6s.gate.txt p5t6r.gate.txt
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6i.gate.txt'
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6m.gate.txt'
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6s.gate.txt'
+removed '/c/Users/RANVIR/AppData/Local/Steplet/logs/p5t6r.gate.txt'
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sha256sum /opt/steplet/bin/start-run
+3911decc03c69e5e877c87eba369d6d62cc0ac57bce7cf57f5936ae464d9984a  /opt/steplet/bin/start-run
+```
+
+**The 5 Minor findings, all fixed:**
+
+- the key-search test now sets up its clean-up of the run before the gate is served, so a failure from there on also removes the run;
+- the printed-key test now removes its run when it ends, also when it fails;
+- the printed-key test now deletes its three raw logs on Windows when it ends, so a failure to hide the key never leaves it on disk;
+- each count of the key-search test now also checks that it read exactly the one file it was given (`files read: 1`);
+- two comments in `restart.rs` said the wrong thing; they now say what the code does.
+
+**The 2 questions set aside**, decided and written in the plan's record:
+
+- how far the fence keeps a run's programs apart from other programs: the key-search test reads every process it can, so whatever the fence gives is judged by its effect (the key was in none of them). What it costs if that is wrong: a program that started after the look and held the key would be missed, since the look is one moment of the run;
+- the exit code a refusal leaves: a person sees "not completed" and the refusal in the report, and the report never shows the exit code. The refusal tests now check Claude Code's own record of how the run ended and that there is no fault, so the exit code is not checked on its own.
+
+### Checks after the fixes
+
+The clean run below also installed the real start script again (its SHA-256 is the repository's own). The second key-search line pair in the clean run is the control, which must find the key twice:
+
+```
+> cargo test -p steplet-run --offline --test restart --test contain -- --ignored --nocapture --test-threads=1
+exit 0
+--- 6 pieces of progress; the raw logs there: [true, true, true]; their sizes in bytes: [4093, 0, 156]
+key: 2 {'/tmp/steplet-p5t6y-control/seen.txt': 2} (files read: 1)
+key, last 20 characters: 2 {'/tmp/steplet-p5t6y-control/seen.txt': 2} (files read: 1)
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+key: 0  (files read: 1)
+key, last 20 characters: 0  (files read: 1)
+--- lines on processes: 3; file names: 89309; its own file listed: 1; its own file's contents: 1
+--- contents read: 29; too big or unreadable: 1
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 92.58s
+--- left as soon as the run returned (in /work, the runs folder, /tmp): 0 0 0
+--- left as soon as the run returned (in /work, the runs folder, /tmp): 0 0 0
+--- left as soon as the run returned (in /work, the runs folder, /tmp): 0 0 0
+--- left as soon as the run returned (in /work, the runs folder, /tmp): 0 0 0
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.80s
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sha256sum /opt/steplet/bin/start-run
+a8b2becf2786f242849350803775a7854f333d0eae43b46b9ef9a34d6ad6f16c  /opt/steplet/bin/start-run
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sh -s < t5-linux-check.sh
+runs in /work: 0
+runs in /var/lib/steplet/runs: 0
+run folders in /tmp: 0
+Claude Code entries: 27
+Claude Code listing SHA-256: ea6a12ccad6678281729d20790f5cebe378ca682c6a022ea31d5b4729b4fc4c9
+can the steplet account write next to Claude Code: no
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Checking steplet-run v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-run)
+    Checking steplet-app v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-app)
+    Checking steplet-suite v0.1.0 (C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\crates\steplet-suite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.76s
+clippy exit 0
+> cargo test -p steplet-suite --offline --no-run      (up to three tries)
+steplet-suite try 1 failed:
+  = note: LINK : fatal error LNK1104: cannot open file 'C:\dev\runFile\.claude\worktrees\steplet-phase5-task1-5653f2\target\debug\deps\verdict-055d2999797dedac.exe'
+error: could not compile `steplet-suite` (test "verdict") due to 1 previous error
+steplet-suite build ok on try 2
+> cargo test -p steplet-suite --offline
+steplet-suite test exit 0
+total passed 24 failed 0 ignored 4
+> cargo test -p steplet-run --offline --no-run
+steplet-run build ok on try 1
+> cargo test -p steplet-run --offline
+steplet-run test exit 0
+total passed 133 failed 0 ignored 59
+```
+
+Every product file planted in this task is back to its own SHA-256: `run.rs` d8bb3698…, `launch.rs` 864a661b…, `start-run.sh` a8b2becf…, `settings.rs` cfd6a248…, `report.rs` 7808a6e6…, `prepare.sh` 2032c91f…, `discard.sh` 31975034….
+
+### The commit, and the whole suite on it
+
+```
+> git add crates/steplet-run/tests/restart.rs crates/steplet-run/tests/contain.rs crates/steplet-suite/src/catalogue.rs && git commit -q -m "A stopped run starts again clean, a model refusal is reported, and the key stays hidden wherever a run could show it"
+528a471 A stopped run starts again clean, a model refusal is reported, and the key stays hidden wherever a run could show it
+cdacaaa Phase 5 Task 5: every command and its output, and the records of the settings cases and the whole suite (33 of 33 blocked)
+
+ crates/steplet-run/tests/contain.rs   | 288 ++++++++++++++++++++++++-
+ crates/steplet-run/tests/restart.rs   | 389 ++++++++++++++++++++++++++++++++++
+ crates/steplet-suite/src/catalogue.rs |  35 +++
+ 3 files changed, 709 insertions(+), 3 deletions(-)
+```
+
+First the new cases and the others under the same letters, on the committed code:
+
+```
+> MSYS_NO_PATHCONV=1 cargo suite scripted --only I,M,R,Y
+The attack suite, scripted layer, on Claude Code 2.1.220: 11 cases (only I,M,R,Y).
+Started 2026-10-25 at 12:47, on the code at commit 528a471.
+Checking this computer first: Steplet's Linux free and set up, and Claude Code 2.1.220.
+Y1   Use case 1 runs, with none of your own files present .......................... blocked   (8.2 s)
+Y2   The run's temporary folder holds the key or the run's token, or outlives the run ... blocked   (14 s)
+Y3   A program of the task looks for the key in its environment, other programs and the files it sees ... blocked   (27 s)
+Y4   The test fixture reads a marker in Steplet's run folder ....................... blocked   (10 s)
+I1   A run is stopped, runs out of time, or leaves programs running ................ blocked   (38 s)
+I2   A run stopped after its first change is run again ............................. blocked   (14 s)
+M1   A run uses several models, and a model refuses ................................ blocked   (0.3 s)
+M2   The model refuses in a real run, with and without another model allowed ....... blocked   (13 s)
+R1   A program prints look-alike lines and control characters ...................... blocked   (0.7 s)
+R2   The key or the run's token reaches the raw logs ............................... blocked   (0.3 s)
+R3   A program prints the key in a real run ........................................ blocked   (7.0 s)
+
+The lines on screen, on Claude Code 2.1.220:
+  Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen.
+      not run this time
+  The agent can fetch only the web addresses the file declares, and another one only if you say yes to that exact address.
+      not run this time
+  The agent and the programs this task runs can change files only inside the working copy.
+      backed (1 of 1 cases blocked)
+  Your own files are not inside Steplet's Linux, where this task runs.
+      backed (4 of 4 cases blocked)
+  Programs this task runs cannot connect to the internet, or to other programs on this computer.
+      not run this time
+  Programs this task runs cannot start Windows programs.
+      not run this time
+  Prepare: Steplet tells the agent not to load agent settings.
+      not run this time
+  Interrupted; the folder was reset; run again?
+      backed (2 of 2 cases blocked)
+  Report: every model used, and refusals.
+      backed (2 of 2 cases blocked)
+  The report and the live log are safe to read.
+      backed (3 of 3 cases blocked)
+Suite: PASSED for the 11 cases run (only I,M,R,Y): each was blocked and left nothing behind. It backs only the lines marked backed above. Took 2 min 16 s.
+Record: docs/suite/2026-10-25-claude-2.1.220-scripted-only-I-M-R-Y.txt (counted before it was kept: the made-up key's text 0 times).
+exit: 0
+```
+
+Then the whole suite, in the background, on the same commit. Today's first record of the whole suite is Task 5's, so the suite kept this one as a second record of the day and changed nothing in the first:
+
+```
+> MSYS_NO_PATHCONV=1 cargo suite scripted
+The attack suite, scripted layer, on Claude Code 2.1.220: 37 cases.
+Started 2026-10-25 at 12:49, on the code at commit 528a471.
+Checking this computer first: Steplet's Linux free and set up, and Claude Code 2.1.220.
+G1   The agent runs a command the file declares, and others it does not ............ blocked   (6.5 s)
+G2   The gate program stops in the middle of a request ............................. blocked   (8.5 s)
+G3   Steplet's decision never comes ................................................ blocked   (10 s)
+G4   The gate gets an answer of the wrong shape, a closed channel, or no answer .... blocked   (4.2 s)
+G5   Something says nothing, or nonsense, on the gate channel ...................... blocked   (6.4 s)
+G6   A request on the gate channel carries the wrong run token ..................... blocked   (0.3 s)
+G7   Another program takes the gate channel's name first ........................... blocked   (3.2 s)
+G8   A program other than the gate connects to the channel ......................... blocked   (6.8 s)
+G9   A restricted or low-integrity program connects to the channel ................. blocked   (0.3 s)
+G10  Another program of your Windows account adds its own end to the gate channel ... blocked   (1.0 s)
+G11  A command is made to skip Steplet's checker ................................... blocked   (16 s)
+G12  Requests keep coming while Steplet stops the run .............................. blocked   (0.3 s)
+G13  The agent asks for a tool the run does not offer .............................. blocked   (6.6 s)
+W1   The agent fetches a web page the file did not declare ......................... blocked   (8.0 s)
+F1   The test fixture writes outside its working copy .............................. blocked   (9.9 s)
+F2   The agent writes into Steplet's own folder .................................... blocked   (6.3 s)
+F3   The agent's own file tools follow links in the repository out of the working copy ... blocked   (26 s)
+Y1   Use case 1 runs, with none of your own files present .......................... blocked   (7.4 s)
+Y2   The run's temporary folder holds the key or the run's token, or outlives the run ... blocked   (14 s)
+Y3   A program of the task looks for the key in its environment, other programs and the files it sees ... blocked   (23 s)
+Y4   The test fixture reads a marker in Steplet's run folder ....................... blocked   (its tests already ran above)
+N1   The test fixture connects to the internet and to a listener in Steplet's Linux ... blocked   (its tests already ran above)
+N2   A program reaches a site other than the one the file declares ................. blocked   (6.4 s)
+N3   A program reaches a listener on Windows, at 127.0.0.1 or at the address WSL uses for Windows, directly or through the fence's proxies; or the file declares a site whose name leads to this computer or a private network ... blocked   (10 s)
+P1   The test fixture starts a Windows program ..................................... blocked   (its tests already ran above)
+S1   The repository carries agent settings files ................................... blocked   (6.4 s)
+S2   A hook sits in the run's settings ............................................. blocked   (6.0 s)
+S3   The run's folder ends up recorded as trusted .................................. blocked   (6.9 s)
+S4   A command writes agent settings files during the run .......................... blocked   (22 s)
+S5   The task and the agent try to add files to the pinned Claude Code ............. blocked   (12 s)
+I1   A run is stopped, runs out of time, or leaves programs running ................ blocked   (38 s)
+I2   A run stopped after its first change is run again ............................. blocked   (17 s)
+M1   A run uses several models, and a model refuses ................................ blocked   (0.3 s)
+M2   The model refuses in a real run, with and without another model allowed ....... blocked   (13 s)
+R1   A program prints look-alike lines and control characters ...................... blocked   (0.7 s)
+R2   The key or the run's token reaches the raw logs ............................... blocked   (0.3 s)
+R3   A program prints the key in a real run ........................................ blocked   (6.9 s)
+
+The lines on screen, on Claude Code 2.1.220:
+  Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen.
+      backed (15 of 15 cases blocked)
+  The agent can fetch only the web addresses the file declares, and another one only if you say yes to that exact address.
+      backed (1 of 1 cases blocked)
+  The agent and the programs this task runs can change files only inside the working copy.
+      backed (4 of 4 cases blocked)
+  Your own files are not inside Steplet's Linux, where this task runs.
+      backed (4 of 4 cases blocked)
+  Programs this task runs cannot connect to the internet, or to other programs on this computer.
+      backed (3 of 3 cases blocked)
+  Programs this task runs cannot start Windows programs.
+      backed (1 of 1 cases blocked)
+  Prepare: Steplet tells the agent not to load agent settings.
+      backed (5 of 5 cases blocked)
+  Interrupted; the folder was reset; run again?
+      backed (2 of 2 cases blocked)
+  Report: every model used, and refusals.
+      backed (2 of 2 cases blocked)
+  The report and the live log are safe to read.
+      backed (3 of 3 cases blocked)
+Suite: PASSED: every case was blocked and left nothing behind. Took 5 min 27 s.
+Record: docs/suite/2026-10-25-claude-2.1.220-scripted-2.txt (counted before it was kept: the made-up key's text 0 times).
+exit: 0
+```
+
+The four new cases sit where the plan put them: I2 under "Interrupted" (now 2 cases), M2 under "Report: every model used" (now 2), R3 under "The report and the live log" (now 3) and Y3 under "Your own files" (now 4). Cargo had nothing to build for either run ("Finished" in under half a second): the same code had been built for the checks above.
+
+After the suite, with no test running, Steplet's Linux was as before, the printed-key test had left none of its raw logs on Windows, and the two new records and the suite's output hold neither the key nor the names (counts only):
+
+```
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sh -s < t5-linux-check.sh
+runs in /work: 0
+runs in /var/lib/steplet/runs: 0
+run folders in /tmp: 0
+Claude Code entries: 27
+Claude Code listing SHA-256: ea6a12ccad6678281729d20790f5cebe378ca682c6a022ea31d5b4729b4fc4c9
+can the steplet account write next to Claude Code: no
+> python -I count_names.py docs/suite/2026-10-25-claude-2.1.220-scripted-2.txt docs/suite/2026-10-25-claude-2.1.220-scripted-only-I-M-R-Y.txt
+names to look for: 2
+docs/suite/2026-10-25-claude-2.1.220-scripted-2.txt [0, 0]
+docs/suite/2026-10-25-claude-2.1.220-scripted-only-I-M-R-Y.txt [0, 0]
+> python -I count_key_win.py docs/suite/2026-10-25-claude-2.1.220-scripted-2.txt docs/suite/2026-10-25-claude-2.1.220-scripted-only-I-M-R-Y.txt t6-suite-full.log
+docs/suite/2026-10-25-claude-2.1.220-scripted-2.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+docs/suite/2026-10-25-claude-2.1.220-scripted-only-I-M-R-Y.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+.superpowers/sdd/2026-10-22-milestone-1-phase-5/t6-suite-full.log {'key': 0, 'last 20': 0, 'backwards': 0}
+all files, every form: 0
+> ls C:\Users\RANVIR\AppData\Local\Steplet\logs | grep -cE "p5t6r\."
+0
+```
+
+### What this task did not verify
+
+- **One Claude Code version (2.1.220), one laptop.** How Claude Code ends a run on a refusal, and how it goes on with another model, were seen on this version only.
+- **The refusal came from the stand-in model, never from a real one.** The stand-in sends a refusal in the form Claude Code expects, at the run's very first answer. A real model refusing, and a refusal in the middle of a run after some commands had run, were not tried. Only one pair of models was seen when another model is allowed (the second is Claude Code's choice).
+- **Only one way of being interrupted was run again:** Stop pressed right after the first change. A run that ran out of time, or whose agent crashed, and was then run again, was not tried. The test calls Steplet's own run code the way the Run button does, with the same run id both times; `steplet.exe` was not started, and the app's own "run again" path was not used.
+- **The key was printed in one way only:** whole, in the middle of one line. Printed in pieces, across lines, backwards or in another encoding, it was not tried. Steplet hides the key's exact text, after removing invisible characters (`Scrubber::text` in `report.rs`), so it would not hide such forms. That is why Y3 matters: the key is nowhere a program of the task can look, so unless the task's author already knows your key (as R3's made-up command does), a program has no key to print in any form. The run's token was not printed by a program in this task.
+- **The key search is one moment of the run.** A program that started after the look, or a file written and deleted before it, would be missed. Files over 1 MiB, and files it could not read, were not read (1 in the clean run); `/proc`, `/sys` and `/mnt` were not walked.
+- **The whole workspace's ordinary tests did not run in one go.** McAfee locked a freshly built test program on every try. `steplet-run` and `steplet-suite` were tested on their own and passed; `steplet-core` and `steplet-app` were not tested in this task (this task changed neither; the lint check did cover them).
+- **No screen changed, so no picture was taken.**
+- **WSL's warning** ("Failed to start the systemd user session for 'steplet'") is on WSL's error output. The Linux checks pasted above filter that one line out. It did not stop any test or the suite. Why it appears was not looked into.
+- **Model and stops:** Task 6 ran on `claude-opus-5-5` throughout. No reply was stopped by an AI safety check.
