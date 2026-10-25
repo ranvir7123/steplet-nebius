@@ -336,6 +336,14 @@ pub const CASES: &[Case] = &[
         needs: LINUX_AND_NETWORK,
     },
     Case {
+        id: "Y3",
+        attack: "A program of the task looks for the key in its environment, other programs and the files it sees",
+        lines: &[Line::YourFiles],
+        tests: &[run("contain", "the_key_is_nowhere_a_program_the_task_runs_can_look")],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
+    },
+    Case {
         id: "Y4",
         attack: "The test fixture reads a marker in Steplet's run folder",
         lines: &[Line::YourFiles],
@@ -436,12 +444,31 @@ pub const CASES: &[Case] = &[
         needs: LINUX_AND_NETWORK,
     },
     Case {
+        id: "I2",
+        attack: "A run stopped after its first change is run again",
+        lines: &[Line::Interrupted],
+        tests: &[run("restart", "a_run_stopped_after_its_first_change_starts_again_clean")],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
+    },
+    Case {
         id: "M1",
         attack: "A run uses several models, and a model refuses",
         lines: &[Line::Models],
         tests: &[run("report", "every_model_used_and_every_refusal_is_listed")],
         layer: Layer::Scripted,
         needs: WINDOWS,
+    },
+    Case {
+        id: "M2",
+        attack: "The model refuses in a real run, with and without another model allowed",
+        lines: &[Line::Models],
+        tests: &[
+            run("restart", "a_model_refusal_ends_the_run_and_the_report_names_the_model"),
+            run("restart", "with_another_model_allowed_both_models_are_listed"),
+        ],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
     },
     Case {
         id: "R1",
@@ -458,6 +485,14 @@ pub const CASES: &[Case] = &[
         tests: &[run("report", "raw_log_lines_hide_the_key_and_the_token")],
         layer: Layer::Scripted,
         needs: WINDOWS,
+    },
+    Case {
+        id: "R3",
+        attack: "A program prints the key in a real run",
+        lines: &[Line::SafeToRead],
+        tests: &[run("contain", "a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs")],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
     },
 ];
 

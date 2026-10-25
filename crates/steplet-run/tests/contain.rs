@@ -5,7 +5,9 @@
 //! - milestone 0's test fixture, whose test setup tries to reach outside its working copy and writes down whether each
 //!   try worked (`support/m0_fixture/`); every try must be contained;
 //! - a web fetch is allowed only to a site the file declares;
-//! - a program listening on Windows cannot be reached from inside the fence (phase 5 Task 4).
+//! - a program listening on Windows cannot be reached from inside the fence (phase 5 Task 4);
+//! - a key a program prints is hidden in the report, the live log and the raw logs, and the key is nowhere a program
+//!   of the task can look (phase 5 Task 6).
 //!
 //! The fixture is test data and inert: the secret it looks for is made up for each run, the listener only counts what
 //! reaches it, and the Windows program it tries to start would only write a marker file in Steplet's logs folder.
@@ -17,7 +19,7 @@ mod support;
 
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -30,7 +32,7 @@ use steplet_core::policy::Policy;
 use steplet_run::{
     ApiKey, BACKSTOP, Check, Live, NetworkMode, Report, RunError, RunPaths, RunRequest, RunSetup, Trust, build_report,
     changes, decide, discard, launch, prepare, read_network_mode, read_trust, run, run_config, run_live,
-    run_live_on_pipe, watch_run, wsl,
+    run_live_locked, run_live_on_pipe, watch_run, wsl,
 };
 use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model, serve_gate};
 
@@ -1089,5 +1091,285 @@ fn the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after() {
         assert!(lines[0].starts_with("key: 0 ") && lines[1].starts_with("key, last 20 characters: 0 "), "{counted}");
     }
     assert_eq!(after, "absent", "the run's temporary folder is gone after the run");
+    assert!(outcome.stopped_by.is_none(), "{:?}", outcome.stopped_by);
+}
+
+/// What Steplet writes in a secret's place.
+const HIDDEN: &str = "[hidden by Steplet]";
+
+/// The key's place in a text, for printing: the key, its last 20 characters and the key backwards (as the next test's
+/// command holds it) become a mark, so nothing a test prints holds them, even when Steplet failed to hide them.
+fn masked(text: &str) -> String {
+    let backwards: String = MADE_UP_KEY.chars().rev().collect();
+    text.replace(MADE_UP_KEY, "<the made-up key>")
+        .replace(&MADE_UP_KEY[MADE_UP_KEY.len() - 20..], "<its end>")
+        .replace(&backwards, "<the made-up key, backwards>")
+}
+
+/// How many times the key's text, and its last 20 characters, appear in `text`.
+fn key_count(text: &str) -> (usize, usize) {
+    (text.matches(MADE_UP_KEY).count(), text.matches(&MADE_UP_KEY[MADE_UP_KEY.len() - 20..]).count())
+}
+
+/// R20 item 5: a declared command prints the key, and its text must appear 0 times in the report, in every piece of
+/// progress sent to the screen (the live log) and in the run's raw logs on Windows (its stream, its error output and
+/// the gate's log), with `[hidden by Steplet]` in its place. The command holds the key backwards, so only what the
+/// program prints holds it. Run the way the app's Run button sends it, which gives Steplet's own list of what to
+/// hide. Counts only: nothing here prints the key, and the three raw logs are deleted when the test ends. The
+/// controls: the count finds the key in a text that holds it; each raw log is there, and the stream's and the gate's
+/// have lines, so a log Steplet failed to write is not counted as clean; and the command's output in the report is
+/// exactly the printed line with the mark in the key's place, and the screen and the stream log both carry that line,
+/// so the places counted did receive what the program printed.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let held = support::hold_linux();
+    let distro = support::steplet_linux();
+    let backwards: String = MADE_UP_KEY.chars().rev().collect();
+    let print_key = format!(r#"python3 -c "print('before ' + '{backwards}'[::-1] + ' after')""#);
+    let req = request(&format!("allow:\n  commands:\n    - '{}'\n", print_key.replace('\'', "''")));
+    let paths = RunPaths::new(&distro, "p5t6r").unwrap();
+    let _removed = RunRemovedAtTheEnd(&paths);
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": print_key, "description": "Print a line"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p5t6r", &script.to_string(), 47948);
+    let logs = ["jsonl", "stderr.txt", "gate.log"].map(|ext| logs_dir().join(format!("p5t6r.{ext}")));
+    // Each log holds this run only, and none is left once the test ends.
+    let _logs_gone = FilesRemovedAtTheEnd(&logs);
+    for log in &logs {
+        let _ = std::fs::remove_file(log);
+    }
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let keep = seen.clone();
+    let live = Arc::new(Live { on_progress: Box::new(move |p| keep.lock().unwrap().push(p)), ..Live::unattended() });
+    let report = run_live_locked(&held, &req, &paths, &policy, &setup(&distro, 47948), live).unwrap();
+    let progress: Vec<String> = seen.lock().unwrap().iter().map(|p| format!("{p:?}")).collect();
+    let present: Vec<bool> = logs.iter().map(|l| l.is_file()).collect();
+    let raw: Vec<String> =
+        logs.iter().map(|l| String::from_utf8_lossy(&std::fs::read(l).unwrap_or_default()).into_owned()).collect();
+    let printed = format!("before {HIDDEN} after");
+
+    let mut counts = vec![("the report", key_count(&format!("{report:?}")))];
+    counts.extend(progress.iter().map(|p| ("a piece of progress", key_count(p))));
+    counts.extend(
+        ["the stream log", "the error log", "the gate's log"].into_iter().zip(raw.iter().map(|r| key_count(r))),
+    );
+    println!("--- the report:\n{}", masked(&format!("{report:#?}")));
+    println!(
+        "--- {} pieces of progress; the raw logs there: {present:?}; their sizes in bytes: {:?}",
+        progress.len(),
+        raw.iter().map(String::len).collect::<Vec<_>>()
+    );
+    println!("--- the key and its last 20 characters, counted in each place: {counts:?}");
+
+    // The controls: the count finds the key where it is, and each raw log was written.
+    assert_eq!(key_count(&format!("x{MADE_UP_KEY}y")), (1, 1));
+    assert_eq!(present, [true; 3], "each raw log is there: the stream's, the error output's and the gate's");
+    assert!(!raw[0].is_empty() && !raw[2].is_empty(), "the stream's and the gate's logs have lines");
+    let leaks: Vec<&(&str, (usize, usize))> = counts.iter().filter(|(_, n)| *n != (0, 0)).collect();
+    assert!(leaks.is_empty(), "the key's text appears in: {leaks:?}");
+    // The controls: each place received the printed line (masked, so a failure here prints no key either).
+    let calls: Vec<(&str, &Check, Option<i32>, String)> =
+        report.commands.iter().map(|c| (c.tool.as_str(), &c.check, c.exit_code, masked(&c.output))).collect();
+    assert_eq!(calls, [("Bash", &Check::Allowed, Some(0), printed.clone())], "the program printed its line");
+    assert!(progress.iter().any(|p| p.contains(&printed)), "the screen was sent the printed line, with the mark");
+    assert!(raw[0].contains(&printed), "the stream log holds the printed line, with the mark");
+}
+
+/// Test data for the next test (made up, inert): writes into `seen.txt`, in the folder it runs in, what a program can
+/// see that could hold a key: its own environment; the command line and environment of every other process it can
+/// read; the name of every file and folder it can see (`/proc`, `/sys` and `/mnt`, where Windows drives would be,
+/// aside); and the contents of each of those files that changed since the time in `since.txt` (with 2 seconds to
+/// spare) and that it can read, up to 1 MiB each, with how many it read and how many were too big or unreadable.
+const LOOK: &str = r#"import os
+import stat
+
+since = float(open("since.txt").read()) - 2
+mine = os.path.abspath("seen.txt")
+with open(mine, "w", encoding="utf-8", errors="replace") as out:
+    out.write("environment:\n")
+    for name, value in os.environ.items():
+        out.write(name + "=" + value + "\n")
+    out.write("processes:\n")
+    for pid in sorted(p for p in os.listdir("/proc") if p.isdigit()):
+        if pid == str(os.getpid()):
+            continue  # its own environment is above
+        for part in ("cmdline", "environ"):
+            try:
+                data = open("/proc/" + pid + "/" + part, "rb").read()
+            except OSError:
+                continue
+            out.write(pid + " " + part + ": " + data.replace(b"\0", b" ").decode("utf-8", "replace") + "\n")
+    out.write("files:\n")
+    files = []
+    for root, dirs, names in os.walk("/"):
+        if root in ("/proc", "/sys", "/mnt"):
+            dirs[:] = []
+            continue
+        for name in dirs + names:
+            out.write(os.path.join(root, name) + "\n")
+        files.extend(os.path.join(root, name) for name in names)
+    out.write("contents:\n")
+    read = skipped = 0
+    for path in files:
+        try:
+            st = os.lstat(path)
+            if not stat.S_ISREG(st.st_mode) or max(st.st_mtime, st.st_ctime) < since or path == mine:
+                continue  # only regular files (no devices, pipes or links) changed since, and not this one
+            if st.st_size > 1 << 20:
+                skipped += 1
+                continue
+            data = open(path, "rb").read()
+        except OSError:
+            skipped += 1
+            continue
+        read += 1
+        out.write("file " + path + ":\n" + data.decode("utf-8", "replace") + "\n")
+    out.write("contents read: %d; too big or unreadable: %d\n" % (read, skipped))
+"#;
+
+/// Removes a folder from Steplet's Linux when the test ends, whether it passed or failed.
+struct FolderRemovedAtTheEnd<'a> {
+    distro: &'a str,
+    path: &'a str,
+}
+
+impl Drop for FolderRemovedAtTheEnd<'_> {
+    fn drop(&mut self) {
+        let _ = wsl::run(self.distro, "root", &["/usr/bin/rm", "-rf", "--", self.path], b"");
+    }
+}
+
+/// Removes a run when the test ends, whether it passed or failed.
+struct RunRemovedAtTheEnd<'a>(&'a RunPaths);
+
+impl Drop for RunRemovedAtTheEnd<'_> {
+    fn drop(&mut self) {
+        let _ = discard(self.0);
+    }
+}
+
+/// Removes files on Windows when the test ends, whether it passed or failed.
+struct FilesRemovedAtTheEnd<'a>(&'a [PathBuf]);
+
+impl Drop for FilesRemovedAtTheEnd<'_> {
+    fn drop(&mut self) {
+        for file in self.0 {
+            let _ = std::fs::remove_file(file);
+        }
+    }
+}
+
+/// R20 item 5, Y line: the key is nowhere a program the task runs can look. A declared command runs `LOOK`, which
+/// writes into the copy its own environment, what it can read of every other process's command line and
+/// environment, the names of the files it can see, and the contents of each one it can read that changed since just
+/// before the run was prepared. Pass: the key and the run's token appear 0 times in what it wrote, counted by root
+/// before the run is removed (`support/count_key.py`: the secret goes in on standard input, only counts come out).
+/// The controls: the same command, run by the steplet account outside the fence with the key placed in its
+/// environment and in a file of its folder, finds it twice; and in the run, what it wrote has an environment, at
+/// least one other process, its own file among the names and that file's contents, so it did look.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn the_key_is_nowhere_a_program_the_task_runs_can_look() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let _linux = support::hold_linux();
+    let distro = support::steplet_linux();
+    support::install(&distro, include_bytes!("support/count_key.py"), "/opt/steplet-test/count_key.py", "644");
+    let count = |secret: &str, file: &str| {
+        let argv = ["/usr/bin/python3", "-I", "/opt/steplet-test/count_key.py", file];
+        let out = wsl::run(&distro, "root", &argv, secret.as_bytes()).unwrap();
+        assert_eq!(out.status, Some(0), "{}", out.stderr);
+        out.stdout.trim_end().to_owned()
+    };
+    // Each count is of the one file it was given.
+    let counted = |what: &str, counted: &str, times: usize| {
+        let lines: Vec<&str> = counted.lines().collect();
+        let (whole, end) = (format!("key: {times} "), format!("key, last 20 characters: {times} "));
+        let one_file = lines.iter().all(|l| l.ends_with("(files read: 1)"));
+        assert!(
+            lines.len() == 2 && lines[0].starts_with(&whole) && lines[1].starts_with(&end) && one_file,
+            "{what}: {counted}"
+        );
+    };
+
+    // The control: outside the fence, with the key in its environment and in a file of its folder (given to it on
+    // standard input, so no command line holds it), the same command finds it twice. Its folder is removed before
+    // the run.
+    let control = "/tmp/steplet-p5t6y-control";
+    let _control_gone = FolderRemovedAtTheEnd { distro: &distro, path: control };
+    let since = root_sh(&distro, "date +%s.%N");
+    root_sh(&distro, &format!("rm -rf {control} && install -d -o steplet -g steplet -m 700 {control}"));
+    put_as_steplet(&distro, LOOK.as_bytes(), &format!("{control}/look.py"), "644");
+    put_as_steplet(&distro, since.as_bytes(), &format!("{control}/since.txt"), "644");
+    let with_key = "import os, subprocess, sys; key = sys.stdin.read(); \
+                    open(os.path.join(sys.argv[1], 'a-key.txt'), 'w').write(key); \
+                    env = dict(os.environ, STEPLET_TEST_KEY=key); \
+                    sys.exit(subprocess.run([sys.executable, 'look.py'], env=env, cwd=sys.argv[1]).returncode)";
+    let argv = ["/usr/bin/python3", "-I", "-c", with_key, control];
+    let out = wsl::run(&distro, "steplet", &argv, MADE_UP_KEY.as_bytes()).unwrap();
+    assert_eq!(out.status, Some(0), "{}", out.stderr);
+    let control_count = count(MADE_UP_KEY, &format!("{control}/seen.txt"));
+    root_sh(&distro, &format!("rm -rf {control}"));
+    println!("--- the control, outside the fence with the key in its environment and a file:\n{control_count}");
+
+    let paths = RunPaths::new(&distro, "p5t6y").unwrap();
+    let _removed = RunRemovedAtTheEnd(&paths);
+    let req = request("allow:\n  commands:\n    - python3 look.py\n");
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let checker = support::checker(&distro, policy.clone());
+    let deciding = checker.clone();
+    let (link, gate) = serve_gate(&distro, "p5t6y", Duration::from_secs(10), move |r| decide(&deciding, r));
+    let script = json!({"steps": [
+        {"tool": "Bash", "input": {"command": "python3 look.py", "description": "Look around"}},
+        {"text": THE_END}]});
+    let _model = scripted_model(&distro, "p5t6y", &script.to_string(), 47949);
+    let since = root_sh(&distro, "date +%s.%N");
+    prepare(&req, &paths, &link).unwrap();
+    let files: [(&str, &[u8]); 2] = [("look.py", LOOK.as_bytes()), ("since.txt", since.as_bytes())];
+    support::plant(&distro, &paths, &files, "", "A program that writes down what it sees");
+    let secrets = [MADE_UP_KEY, link.token()];
+    let handle = launch(&req, &paths, &logs_dir(), Some("http://127.0.0.1:47949"), &secrets).unwrap();
+    let outcome =
+        watch_run(handle, gate, &checker, paths.work_repo(), req.deadline + BACKSTOP, &Live::unattended(), &secrets);
+    let seen = format!("{}/seen.txt", paths.work_repo());
+    let (key, token) = (count(MADE_UP_KEY, &seen), count(link.token(), &seen));
+    // Only names and counts: the environment's names, how many process lines and file names it wrote, whether its
+    // own file is among the names and its contents among the contents, and how many contents it read.
+    let shape = root_sh(
+        &distro,
+        &format!(
+            "sed -n '/^environment:$/,/^processes:$/p' {seen} | sed '1d;$d' | cut -d= -f1 | sort | tr '\\n' ' '; echo
+sed -n '/^processes:$/,/^files:$/p' {seen} | sed '1d;$d' | wc -l
+sed -n '/^files:$/,/^contents:$/p' {seen} | sed '1d;$d' | wc -l
+grep -cxF {repo}/look.py {seen}
+grep -cxF 'file {repo}/look.py:' {seen}
+tail -n 1 {seen}",
+            repo = paths.work_repo()
+        ),
+    );
+    discard(&paths).unwrap();
+    let report = build_report(&outcome, None, Trust::Unknown, &secrets);
+    println!("--- the report:\n{}", masked(&format!("{report:#?}")));
+    println!("--- in the run, the key in what it wrote:\n{key}\n--- and the run's token:\n{token}");
+    let shape: Vec<&str> = shape.lines().collect();
+    println!(
+        "--- the names in its environment: {}\n--- lines on processes: {}; file names: {}; its own file listed: {}; \
+         its own file's contents: {}\n--- {}",
+        shape[0], shape[1], shape[2], shape[3], shape[4], shape[5]
+    );
+
+    counted("the control", &control_count, 2);
+    let calls: Vec<(&str, &str, &Check, Option<i32>)> =
+        report.commands.iter().map(|c| (c.tool.as_str(), c.command.as_str(), &c.check, c.exit_code)).collect();
+    assert_eq!(calls, [("Bash", "python3 look.py", &Check::Allowed, Some(0))], "the program ran in the fence");
+    assert!(shape[0].split(' ').any(|n| n == "PATH"), "it wrote its environment: {}", shape[0]);
+    assert!(shape[1].parse::<u32>().unwrap() >= 1, "it saw at least one other process");
+    assert_eq!(shape[3], "1", "its own file is among the names it saw");
+    assert_eq!(shape[4], "1", "its own file's contents are among the contents it read");
+    counted("the key, in the run", &key, 0);
+    counted("the run's token, in the run", &token, 0);
     assert!(outcome.stopped_by.is_none(), "{:?}", outcome.stopped_by);
 }
