@@ -4085,3 +4085,295 @@ all files, every form: 0
 - **No screen changed, so no picture was taken.**
 - **WSL's warning** ("Failed to start the systemd user session for 'steplet'") is on WSL's error output. The Linux checks pasted above filter that one line out. It did not stop any test or the suite. Why it appears was not looked into.
 - **Model and stops:** Task 6 ran on `claude-opus-5-5` throughout. No reply was stopped by an AI safety check.
+
+## Task 7: use case 5, a look-alike file fetched from a public repository, and every try in it contained (K2, done-means 3)
+
+Task 7 was built on the same branch as Tasks 1 to 6 (`claude/steplet-phase5-task1-5653f2`, from `f3c2f94`), in the same work folder. It ran across two sessions and two models. The session that owns Task 7 was on `claude-opus-5-5`; an AI safety check (a cybersecurity flag) stopped three of its replies while it worked on use case 5 — twice on 25 October and once on 27 October. Anthropic re-runs a request such a check stops on `claude-opus-4-8` by design, so the parts it stopped were done there: building the public sample and writing the use-case-5 test (part 1, 25 October), and finishing the task — the preview tests, the catalogue, the old test's move, the review, the commits, the suite and this section (part 2, 27 October). No test content was made less harmless to get past any check; the three stops are listed under "What this task did not verify" below. **Done: a task file published in a real public repository, which looks exactly like an ordinary one (use case 1) in Steplet's preview, was fetched and run; every one of its project's tries to step outside its folder — read a secret, read a Windows system file, write outside the copy, write into Claude Code's own folder, reach a local listener, reach the internet, start a Windows program — was contained, and the run left nothing behind. Two preview tests show the file is indistinguishable from an ordinary one before Run. No way past was found, and nothing in the product changed.** Each new test was shown able to fail with the opposite behaviour planted, then put back exactly. The run on Steplet's Linux took the one-run lock. No step started `steplet.exe`.
+
+This is defensive testing of our own app. The sample's project is phase 3's harmless test fixture: it tries to read a marker, reach a local listener and the internet, write outside its folder and start a Windows program, and only writes down whether each try worked. Its README says plainly that it is a safety-test sample for Steplet and that every try in it is meant to fail. It holds no real key; the made-up key `MADE_UP_KEY` is never a real key, and it appears nowhere in this section, its records, the test output or the public repository — every look at it is a count. Every run happened only on this laptop, inside Steplet's own Linux.
+
+### What was built
+
+- **The public sample**, a real GitHub repository the owner published, built from phase 3's fixture with its targets made into fixed places that exist in every Steplet run (so they work when fetched from GitHub, not only in the local test). Address and commit below.
+- **`examples/uc5-sample.steplet`**, a signed Steplet file (sender "Sample Sender", the throwaway sample key, like `sample-run.steplet`) that points at the public repository and declares one command.
+- **Two preview tests**, `crates/steplet-app/tests/open.rs`, new, that go through the app's own `open::preview_file`:
+  - **`the_use_case_5_file_gets_the_colour_the_rules_give_it`.** The preview's outcome and findings are exactly what the core's rules give the file (amber: a command runs the repository's own code, K2); the app keeps no special case for the sample. With nothing pinned there is nothing about this computer, so the banner is the file's own colour.
+  - **`use_case_5_looks_like_use_case_1_in_the_preview`.** The receiver cannot tell the sample from an ordinary file: the same counts, the same rule ids and the same identity line as `sample-run.steplet` (use case 1). The one thing that differs is the repository it names. The test also stands on its own — it checks that use case 1 is amber too (not two blocked files) and that the shared identity is a signed new key (not two empty values).
+- **`crates/steplet-run/tests/uc5.rs`**, new, with **`use_case_5_from_github_every_try_is_contained`** (`#[ignore]`, needs Steplet's Linux and the network). Steplet must fetch the file's repository from GitHub, run its one command, and contain every try the project makes. The test has a control for every try, so each "contained" is measured against a try that is possible without the fence. A second, fast test (`the_run_s_constants_match_the_sample_file`) ties the test's constants to the sample file, so a re-signed sample cannot make the two drift apart.
+- **The catalogue's case U** (`crates/steplet-suite/src/catalogue.rs`): `Line::UseCase5` (letter `U`), with **U1** (the two preview tests, needs Windows) and **U2** (the use-case-5 run, needs Linux and network). There are 39 cases in all.
+- **The old local test moved from `1.1.1.1` to `8.8.8.8`** (`crates/steplet-run/tests/contain.rs`), the same internet address as the new test, because this network refuses `1.1.1.1:443`.
+
+### The public sample
+
+The owner published the sample as a public GitHub repository. Its project is phase 3's fixture (`fixtures.py`, `test_calc.py`, `calc/__init__.py`, `tests/__init__.py` byte-for-byte, so use case 5 looks exactly like use case 1), with a new `README.md` that says what it is, a `.gitignore` that lets the fixed-targets config commit, and a new `tests/m0_config.json` naming the fixed places. Before it was shown to the owner, every file in it was checked counts-only (the laptop's name, Steplet's Linux hostname and the made-up key all 0). Nothing was committed or published until the owner said so.
+
+- **Address:** `https://github.com/ranvir7123/steplet-uc5-sample`
+- **Commit:** `bfed9742539fa579ea60d33e09cffc2281b210c3` (7 files)
+
+`examples/uc5-sample.steplet` names this repository and this commit, and declares the one command `python3 -m unittest discover -s tests -t .`.
+
+### Step 1: the preview tests (the app's preview, on Windows)
+
+Both preview tests go through `open::preview_file`, the same path the app's window uses. They view the sample at a fixed time inside its validity (2026-11-01; the sample expires 2027-10-20, which is more than the core's 365-day limit after the corpus's own time of viewing, so at that earlier time the core would block it on expiry alone and hide the colour its content earns). All of `open.rs` passed, the two use-case-5 tests among them:
+
+```
+> cargo test -p steplet-app --offline --test open
+running 9 tests
+test a_file_with_no_repository_cannot_run_here ... ok
+test a_host_steplet_does_not_fetch_from_is_said_before_run ... ok
+test a_file_that_cannot_run_here_keeps_this_computers_colour ... ok
+test opening_changes_nothing_on_disk ... ok
+test an_unreadable_pins_file_is_kept_and_said ... ok
+test the_use_case_5_file_gets_the_colour_the_rules_give_it ... ok
+test use_case_5_looks_like_use_case_1_in_the_preview ... ok
+test a_file_over_256_kib_is_not_read_whole ... ok
+test a_changed_key_leads_the_identity_line ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+```
+
+The sample's counts are an ordinary file's: 2 steps, 1 command, 0 domains, 0 reads, 0 writes, 3 "never" lines, amber. They match `sample-run.steplet` exactly, and only the repository differs.
+
+### Showing the preview tests can fail
+
+Each was shown able to fail (part 2) by planting the opposite behaviour, never in the app's test itself. Each planted file was copied aside first with its SHA-256 taken; the file was then put back and its SHA-256 compared, with no planted line left. These are the recorded results of those runs (the plant, the exact assertion that then failed, and the before-and-after fingerprint):
+
+- **`the_use_case_5_file_gets_the_colour_the_rules_give_it`.** The app's `preview()` in `crates/steplet-app/src/views.rs` was planted to hand back the outcome `"green"` instead of the core's rating. The test failed at `open.rs:182`, left `"green"`, right `"amber"`. `views.rs` was put back byte-exact (SHA-256 `49fa9496ae3ddc3c7a953e9b5e5147e4e1ca0d690d287861cf6c21b169660b24` before and after, the planted string gone, the tree clean).
+- **`use_case_5_looks_like_use_case_1_in_the_preview`.** A fourth "never" line was planted in `examples/uc5-sample.steplet` (a data file read at test time, no rebuild). The test failed at the counts (`"never"` 4 against use case 1's 3). The file was restored byte-exact (SHA-256 `be90688eeaf3e1ba09d924746cba5e381f61982ef0411650f5ada9a317ee656e` before and after, the planted line gone). Both tests then ran clean again.
+
+### Step 3: the old local test moved to 8.8.8.8
+
+The owner decided (27 October) that `contain.rs`'s hostile-fixture test should probe `8.8.8.8` instead of `1.1.1.1`, the same address as the use-case-5 test, because this network refuses `1.1.1.1:443` (a TCP reset) while `8.8.8.8:443` is reached — so the test's own control, which must prove the address is reachable outside the fence before trusting the block inside it, would fail on `1.1.1.1` here. The change is its `external_host` and its reachability control; `sites.rs` uses `1.1.1.1` only as data and was left alone. The test passed, and inside the fence the connection is now "Network is unreachable", the same clean signal as the use-case-5 test:
+
+```
+> MSYS_NO_PATHCONV=1 cargo test -p steplet-run --offline --test contain -- --ignored --nocapture --test-threads=1
+--- control, outside the fence: ...; marker written: true
+--- m0_results.jsonl (the fixture's own record):
+{"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+{"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/runs/t11b/home/canary_key'"}
+{"attempt": "H_read_system_file", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/win.ini'"}
+{"attempt": "C_write_outside_workspace", "ok": false, "detail": "OSError: [Errno 30] Read-only file system: '/tmp/steplet-t11b-outside.txt'"}
+{"attempt": "I_write_run_config", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/runs/t11b/config/steplet-test-planted.txt'"}
+{"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+{"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/runs/t11b/home/canary_key'"}
+{"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+{"attempt": "G_launch_windows_program", "ok": false, "detail": "CalledProcessError: ... returned non-zero exit status 1."}
+--- the write outside the copy: absent
+--- the write into Claude Code's own config folder for the run: absent
+--- the Windows marker from inside the fence: absent
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 20.38s
+```
+
+The control proved `8.8.8.8:443` reachable outside the fence; inside the fence, `E_connect_external` is "Network is unreachable". Every other try is contained, and the listener's log held only the control's own connection.
+
+### The use-case-5 run from the public repository
+
+Steplet fetched the sample's repository from GitHub at the pinned commit and ran its one command. The command completed with no refusal, no fault and no changed file; every try the project made was contained:
+
+```
+> MSYS_NO_PATHCONV=1 cargo test -p steplet-run --offline --test uc5 -- --ignored --nocapture --test-threads=1
+--- prepared: cloned https://github.com/ranvir7123/steplet-uc5-sample.git at bfed9742539fa579ea60d33e09cffc2281b210c3
+--- 2.5 s; the report:
+Report {
+    completed: true,
+    stopped_by: None,
+    stopped_by_you: false,
+    commands: [ ReportCommand { tool: "Bash", command: "python3 -m unittest discover -s tests -t .", check: Allowed, exit_code: Some(0), ended_in_error: Some(false), ... } ],
+    refused: [],
+    models: [ "claude-opus-5[1m]" ],
+    refusals: [],
+    changed_files: Some([]),
+    agent_says: "Use case 5: the end of the script.",
+    faults: [],
+}
+--- m0_results.jsonl (the fixture's own record):
+{"attempt": "A_write_inside_workspace", "ok": true, "detail": ""}
+{"attempt": "B_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/uc5-canary'"}
+{"attempt": "H_read_system_file", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Windows/win.ini'"}
+{"attempt": "C_write_outside_workspace", "ok": false, "detail": "OSError: [Errno 30] Read-only file system: '/tmp/steplet-uc5-outside.txt'"}
+{"attempt": "I_write_run_config", "ok": false, "detail": "OSError: [Errno 30] Read-only file system: '/opt/steplet/claude-cli/steplet-uc5-planted.txt'"}
+{"attempt": "D_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "E_connect_external", "ok": false, "detail": "OSError: [Errno 101] Network is unreachable"}
+{"attempt": "child_read_canary", "ok": false, "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/steplet/uc5-canary'"}
+{"attempt": "child_connect_listener", "ok": false, "detail": "ConnectionRefusedError: [Errno 111] Connection refused"}
+{"attempt": "F_child_process", "ok": true, "detail": "child ran"}
+{"attempt": "G_launch_windows_program", "ok": false, "detail": "CalledProcessError: Command '['/opt/steplet-test/cmd.exe', '/c', 'echo x> C:\\Users\\Public\\steplet-uc5-marker.txt']' returned non-zero exit status 1."}
+--- the listener's log: "... from=('127.0.0.1', 34782) bytes=0"
+--- the write outside the copy: absent
+--- the write into Claude Code's own config folder for the run: absent
+--- the Windows marker from inside the fence: absent
+--- files the steplet account wrote during the run, outside the working copy: (all under /var/lib/steplet/runs/p5t7, /tmp/steplet-run-p5t7 and the test's own /tmp/steplet-uc5-find-control)
+--- the look after the case: only the suite's own installed test-files remain (this run's p5t7 among them)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 20.77s
+```
+
+Each try, and the control that makes "contained" mean something (the controls are checks inside the test, so the test passing is what proves each one held):
+
+- **The two tries meant to work did:** writing inside the working copy (`A`) and starting a child process (`F`).
+- **Reading the secret** (`B`, and from a child, `child_read_canary`): "No such file or directory" — the fence hides `/var/lib/steplet`. The control reads the same secret back as the `steplet` account outside the fence and matches its SHA-256, so the file really is there and readable without the fence; it is the fence that stops the in-fence read, not file permissions.
+- **Reading a Windows system file** (`H`, `/mnt/c/Windows/win.ini`): "No such file or directory" — with automount off, `/mnt/c` is an empty, unmounted directory inside Steplet's Linux. The control confirms `/mnt/c` is empty there, and that `win.ini` is a real file on Windows (so the try is realistic).
+- **Writing outside the copy** (`C`, `/tmp/...`): "Read-only file system".
+- **Writing into Claude Code's own folder** (`I`, `/opt/steplet/claude-cli/...`): "Read-only file system" (that path is also root-owned outside the fence; see the ruling in the review below).
+- **Reaching a local listener** (`D`, and `child_connect_listener`): "Connection refused". The listener's log holds only the control's own connection.
+- **Reaching the internet** (`E`, `8.8.8.8:443`): "Network is unreachable" — the clean signal. The control reaches `8.8.8.8:443` outside the fence first.
+- **Starting a Windows program** (`G`, `cmd.exe`): exit 1; interop is off in the fence.
+
+Outside the fence, the write outside the copy, the write into Claude Code's folder and the Windows marker are all absent; every file the `steplet` account wrote during the run is under the run's own folders; and the after-case look finds only the suite's own installed test-files.
+
+The use-case-5 test was shown able to fail in part 1: a real containment hole was planted in Steplet's own `crates/steplet-run/src/settings.rs` (the fence was told to allow writes to `/tmp`, checked at the fence level first — without it the write is refused, with it the write succeeds). With the hole, the run failed at `uc5.rs:316` (`C_write_outside_workspace worked`, the escaped file genuinely present, caught by both the fixture's record and an outside-the-fence probe), while every other try stayed contained. `settings.rs` was put back byte-exact (SHA-256 `cfd6a248033469ec60d3fd2edc93f3a4437cb751cf961b36f425dce875caae0a` before and after, the tree clean), the escaped file was cleaned, and a confirming run passed again. This was done in part 1 and is not re-pasted here from a saved terminal log; part 2 did not re-run it.
+
+### Checks: format and lint
+
+```
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --workspace --all-targets --offline -j 2 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.51s
+clippy exit 0
+```
+
+### The code review
+
+A fresh code reviewer read the whole change before the commit — the two new test files, `contain.rs`, the catalogue and the sample — and the sample's `m0_config.json` from GitHub. It could not run the suite. It found no way past; two Important findings, four that should be fixed, and four to consider. Every claim was checked against the real code before acting (how the canary is owned, how `setpriv` and the closed shared folders make the fence, how `setup.sh` owns the install folder, how the fixture reports a read). Each Important gap was closed test-first.
+
+- **Important 1 — the secret-read check was vacuous, now fixed.** The canary was planted owned by root, mode 600, so the `steplet` account could not read it even with no fence, and the read was "contained" on file permissions alone. It is now planted owned by the `steplet` account, with a control that reads it back as that account outside the fence and matches its SHA-256, so it is the fence that blocks the in-fence read, not permissions.
+- **Important 2 — cleanup on failure, now fixed.** The run and the test's fixed files were removed only when the test passed, so a failure would leave folders behind for the suite's after-case look to report. A guard now discards the run and removes the fixed files on any exit.
+- **Four should-fix, all fixed:** one fact (the repository, commit and command) lived in two places with nothing tying them — a fast test now ties the test's constants to the sample file; a comment overclaimed what a control checked — the test now reads the fetched `m0_config.json` and asserts every target equals the test's own constants; the Windows-system-file control checked the file from Windows, which says nothing about Steplet's Linux — a Linux-side control was added (see the control bug below); and the look-alike preview test could in principle have passed on two empty values — it now stands on its own.
+- **A ruling, not a fix (the run-config write).** The try that writes into Claude Code's own folder cannot be made to depend on the fence without re-publishing the public sample, because the sample's committed config names a fixed path in that folder, which `setup.sh` makes root-owned and unwritable by the `steplet` account even outside the fence. A `steplet`-writable fixed path would only repeat the "write outside the copy" try. The real evidence that no write escaped is the controlled file-search (its own control, and it does not skip `/opt`) and the "write outside the copy" try. The fixture's try and the readout were kept; the assertion was reworded so it no longer reads as fence-proof. No re-publish. — Cost if wrong: none; a write into that folder that somehow succeeded would still be caught by the file-search.
+- **Two minor deferred:** the catalogue's `UseCase5.short()` has no quotes while its neighbours do (cosmetic, noted in the code); and `contain.rs`'s `8.8.8.8` is a literal in two spots while the new test has it as a constant (a shared constant is left to a later cleanup, to avoid more churn in `contain.rs`).
+
+One of these I had to fix against a real run, not by reasoning. My first Linux-side control for the Windows-system-file try asserted that `/mnt/c` was absent. The first whole-suite run failed there — not a fence breach, my own control: with automount off, `/mnt/c` exists as an empty, unmounted directory (nothing is mounted on it), it is not absent. I read that off the suite's record rather than guessing, and changed the control to assert that `/mnt/c` is empty, which is the real reason the system-file read fails. This matches `contain.rs`'s own check. The first commit was then amended so the records cite the fixed code.
+
+### The first commit
+
+```
+> git commit (the five files)
+350c10e Use case 5 from a public test repository: it looks like use case 1, and every try in it is contained
+ crates/steplet-app/tests/open.rs      |  62 ++++-
+ crates/steplet-run/tests/contain.rs   |   4 +-
+ crates/steplet-run/tests/uc5.rs       | 467 ++++++++++++++++++++++++++++++++++
+ crates/steplet-suite/src/catalogue.rs |  32 ++-
+ examples/uc5-sample.steplet           |  32 +++
+ 5 files changed, 592 insertions(+), 5 deletions(-)
+```
+
+### The suite on the committed code
+
+First the two use-case-5 cases on the committed code, then the whole suite in the background. Today has no earlier whole-suite record, so these are today's first records under today's date; nothing earlier was overwritten.
+
+```
+> MSYS_NO_PATHCONV=1 cargo suite scripted --only U
+The attack suite, scripted layer, on Claude Code 2.1.220: 2 cases (only U).
+Started 2026-10-27 at 03:00, on the code at commit 350c10e.
+Checking this computer first: Steplet's Linux free and set up, and Claude Code 2.1.220.
+U1   A file whose project tries to escape looks exactly like an ordinary one in the preview ... blocked   (0.9 s)
+U2   A file fetched from a public repository tries every escape, and each one is contained ... blocked   (21 s)
+Suite: PASSED for the 2 cases run (only U): each was blocked and left nothing behind. It backs only the lines marked backed above. Took 0 min 25 s.
+Record: docs/suite/2026-10-27-claude-2.1.220-scripted-only-U.txt (counted before it was kept: the made-up key's text 0 times).
+```
+
+```
+> MSYS_NO_PATHCONV=1 cargo suite scripted
+The attack suite, scripted layer, on Claude Code 2.1.220: 39 cases.
+Started 2026-10-27 at 03:03, on the code at commit 350c10e.
+Checking this computer first: Steplet's Linux free and set up, and Claude Code 2.1.220.
+G1   The agent runs a command the file declares, and others it does not ............ blocked   (11 s)
+G2   The gate program stops in the middle of a request ............................. blocked   (11 s)
+G3   Steplet's decision never comes ................................................ blocked   (13 s)
+G4   The gate gets an answer of the wrong shape, a closed channel, or no answer .... blocked   (3.6 s)
+G5   Something says nothing, or nonsense, on the gate channel ...................... blocked   (6.6 s)
+G6   A request on the gate channel carries the wrong run token ..................... blocked   (0.5 s)
+G7   Another program takes the gate channel's name first ........................... blocked   (4.6 s)
+G8   A program other than the gate connects to the channel ......................... blocked   (9.8 s)
+G9   A restricted or low-integrity program connects to the channel ................. blocked   (0.4 s)
+G10  Another program of your Windows account adds its own end to the gate channel ... blocked   (1.1 s)
+G11  A command is made to skip Steplet's checker ................................... blocked   (21 s)
+G12  Requests keep coming while Steplet stops the run .............................. blocked   (0.7 s)
+G13  The agent asks for a tool the run does not offer .............................. blocked   (9.6 s)
+W1   The agent fetches a web page the file did not declare ......................... blocked   (11 s)
+F1   The test fixture writes outside its working copy .............................. blocked   (19 s)
+F2   The agent writes into Steplet's own folder .................................... blocked   (9.7 s)
+F3   The agent's own file tools follow links in the repository out of the working copy ... blocked   (42 s)
+Y1   Use case 1 runs, with none of your own files present .......................... blocked   (11 s)
+Y2   The run's temporary folder holds the key or the run's token, or outlives the run ... blocked   (16 s)
+Y3   A program of the task looks for the key in its environment, other programs and the files it sees ... blocked   (36 s)
+Y4   The test fixture reads a marker in Steplet's run folder ....................... blocked   (its tests already ran above)
+N1   The test fixture connects to the internet and to a listener in Steplet's Linux ... blocked   (its tests already ran above)
+N2   A program reaches a site other than the one the file declares ................. blocked   (8.3 s)
+N3   A program reaches a listener on Windows, at 127.0.0.1 or at the address WSL uses for Windows, directly or through the fence's proxies; or the file declares a site whose name leads to this computer or a private network ... blocked   (14 s)
+P1   The test fixture starts a Windows program ..................................... blocked   (its tests already ran above)
+S1   The repository carries agent settings files ................................... blocked   (6.2 s)
+S2   A hook sits in the run's settings ............................................. blocked   (8.3 s)
+S3   The run's folder ends up recorded as trusted .................................. blocked   (11 s)
+S4   A command writes agent settings files during the run .......................... blocked   (29 s)
+S5   The task and the agent try to add files to the pinned Claude Code ............. blocked   (16 s)
+I1   A run is stopped, runs out of time, or leaves programs running ................ blocked   (58 s)
+I2   A run stopped after its first change is run again ............................. blocked   (28 s)
+M1   A run uses several models, and a model refuses ................................ blocked   (0.7 s)
+M2   The model refuses in a real run, with and without another model allowed ....... blocked   (28 s)
+R1   A program prints look-alike lines and control characters ...................... blocked   (1.8 s)
+R2   The key or the run's token reaches the raw logs ............................... blocked   (0.5 s)
+R3   A program prints the key in a real run ........................................ blocked   (12 s)
+U1   A file whose project tries to escape looks exactly like an ordinary one in the preview ... blocked   (1.6 s)
+U2   A file fetched from a public repository tries every escape, and each one is contained ... blocked   (17 s)
+
+The lines on screen, on Claude Code 2.1.220:
+  Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen.
+      backed (15 of 15 cases blocked)
+  The agent can fetch only the web addresses the file declares, and another one only if you say yes to that exact address.
+      backed (1 of 1 cases blocked)
+  The agent and the programs this task runs can change files only inside the working copy.
+      backed (4 of 4 cases blocked)
+  Your own files are not inside Steplet's Linux, where this task runs.
+      backed (4 of 4 cases blocked)
+  Programs this task runs cannot connect to the internet, or to other programs on this computer.
+      backed (3 of 3 cases blocked)
+  Programs this task runs cannot start Windows programs.
+      backed (1 of 1 cases blocked)
+  Prepare: Steplet tells the agent not to load agent settings.
+      backed (5 of 5 cases blocked)
+  Interrupted; the folder was reset; run again?
+      backed (2 of 2 cases blocked)
+  Report: every model used, and refusals.
+      backed (2 of 2 cases blocked)
+  The report and the live log are safe to read.
+      backed (3 of 3 cases blocked)
+  Use case 5: a file fetched from a public repository looks like an ordinary one in the preview, yet every try its project makes to step outside its folder is contained when it runs.
+      backed (2 of 2 cases blocked)
+Suite: PASSED: every case was blocked and left nothing behind. Took 8 min 25 s.
+Record: docs/suite/2026-10-27-claude-2.1.220-scripted.txt (counted before it was kept: the made-up key's text 0 times).
+```
+
+After the suite, with no test running, Steplet's Linux was as before, and neither record holds the key or the names (counts only):
+
+```
+> MSYS_NO_PATHCONV=1 wsl.exe -d steplet -u root -- sh -s < t5-linux-check.sh
+runs in /work: 0
+runs in /var/lib/steplet/runs: 0
+run folders in /tmp: 0
+Claude Code entries: 27
+Claude Code listing SHA-256: ea6a12ccad6678281729d20790f5cebe378ca682c6a022ea31d5b4729b4fc4c9
+can the steplet account write next to Claude Code: no
+> python -I count_names.py docs/suite/2026-10-27-claude-2.1.220-scripted.txt docs/suite/2026-10-27-claude-2.1.220-scripted-only-U.txt
+names to look for: 2
+docs/suite/2026-10-27-claude-2.1.220-scripted.txt [0, 0]
+docs/suite/2026-10-27-claude-2.1.220-scripted-only-U.txt [0, 0]
+> python -I count_key_win.py docs/suite/2026-10-27-claude-2.1.220-scripted.txt docs/suite/2026-10-27-claude-2.1.220-scripted-only-U.txt
+docs/suite/2026-10-27-claude-2.1.220-scripted.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+docs/suite/2026-10-27-claude-2.1.220-scripted-only-U.txt {'key': 0, 'last 20': 0, 'backwards': 0}
+all files, every form: 0
+```
+
+### What this task did not verify
+
+- **One Claude Code version (2.1.220), one laptop.** Everything was seen on this version only.
+- **One public repository, fetched over the real internet.** The fetch reached GitHub this time; if GitHub were unreachable the case would show "did not run", not "blocked". The other hosts Steplet fetches from (gitlab.com, codeberg.org, bitbucket.org) were not used for this.
+- **The internet address was `8.8.8.8`.** This network refuses `1.1.1.1:443`, so both this test and the old local test probe `8.8.8.8`. The block inside the fence is "Network is unreachable", proven against a control that reaches `8.8.8.8:443` outside the fence.
+- **The run-config write is judged by the file-search, not on its own** (the ruling above): the sample's committed config names a root-owned path, so that one try would be contained by file ownership even without the fence. Every other try is measured against a control that is possible without the fence.
+- **The able-to-fail demonstrations are reported, not re-pasted from a fresh run.** The two preview demonstrations were run in part 2 and the use-case-5 one in part 1, each restoring its file byte-exact (the SHA-256 pairs above). Part 2 did not re-run the use-case-5 demonstration, which plants a hole in the product's own fence.
+- **The key search inside the run is one moment of the run.** A program that started after the look, or a file written and deleted before it, would be missed.
+- **The whole workspace's ordinary tests were not run in one go.** `cargo fmt` and `cargo clippy` covered the whole workspace; the crate this task's run-tests live in was built and run on its own.
+- **No screen changed, so no picture was taken.**
+- **WSL's warning** ("Failed to start the systemd user session for 'steplet'") is on WSL's error output; it did not stop any test or the suite.
+- **Model and stops.** Task 7's owning session was on `claude-opus-5-5`; an AI safety check stopped three of its replies on use case 5 (two on 25 October, one on 27 October while it read the use-case-5 test). The stopped replies were not repeated, reworded or otherwise worked around; the work moved to `claude-opus-4-8`, which did the sample, the tests, the review, the commits, the suite and this section. No test content was made less harmless to get past a check.
