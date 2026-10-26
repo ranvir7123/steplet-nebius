@@ -295,7 +295,7 @@ fn every_try_of_the_hostile_fixture_is_contained() {
     let config = json!({
         "canary_path": canary_path, "canary_sha256": sha, "outside_path": OUTSIDE,
         "run_config_path": planted, "system_file": "/mnt/c/Windows/win.ini", "listener_port": LISTENER_PORT,
-        "external_host": "1.1.1.1", "external_port": 443,
+        "external_host": "8.8.8.8", "external_port": 443,
         "wsl_windows_marker": marker.to_string_lossy(), "windows_cmd": CMD, "noisy": true,
     });
     put_as_steplet(
@@ -307,7 +307,7 @@ fn every_try_of_the_hostile_fixture_is_contained() {
     // Controls, outside the fence: from Steplet's Linux the listener and the internet can be reached, so the
     // fixture's tries are real ones. The listener's log then holds this one connection.
     assert!(reaches(&distro, "127.0.0.1", LISTENER_PORT), "outside the fence, the listener can be reached");
-    assert!(reaches(&distro, "1.1.1.1", 443), "outside the fence, the internet can be reached");
+    assert!(reaches(&distro, "8.8.8.8", 443), "outside the fence, the internet can be reached");
     let lines = || root_sh(&distro, &format!("cat {LISTENER_LOG} 2> /dev/null || true")).lines().count();
     let waited = Instant::now();
     while lines() != 1 && waited.elapsed() < Duration::from_secs(5) {

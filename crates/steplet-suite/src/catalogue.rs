@@ -2,7 +2,8 @@
 //! lines on screen it backs, and the tests that replay it. Each case is described by what its tests check; the tests
 //! themselves are in `steplet-run`, `steplet-gate` and `steplet-app`.
 
-/// The lines on screen the suite backs: section 7 of the milestone plan.
+/// The lines on screen the suite backs (section 7 of the milestone plan), and use case 5 (done-means 3), which is not
+/// a screen line but a whole-journey check the catalogue tracks the same way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Line {
     Checks,
@@ -15,10 +16,11 @@ pub enum Line {
     Interrupted,
     Models,
     SafeToRead,
+    UseCase5,
 }
 
 impl Line {
-    pub const ALL: [Line; 10] = [
+    pub const ALL: [Line; 11] = [
         Line::Checks,
         Line::Fetch,
         Line::ChangeFiles,
@@ -29,6 +31,7 @@ impl Line {
         Line::Interrupted,
         Line::Models,
         Line::SafeToRead,
+        Line::UseCase5,
     ];
 
     /// The first letter of the ids of the line's cases.
@@ -44,6 +47,7 @@ impl Line {
             Line::Interrupted => 'I',
             Line::Models => 'M',
             Line::SafeToRead => 'R',
+            Line::UseCase5 => 'U',
         }
     }
 
@@ -71,6 +75,10 @@ impl Line {
             Line::Interrupted => "Interrupted; the folder was reset; run again?",
             Line::Models => "Report: every model used, and refusals.",
             Line::SafeToRead => "The report and the live log are safe to read.",
+            Line::UseCase5 => {
+                "Use case 5: a file fetched from a public repository looks like an ordinary one in the preview, yet \
+                 every try its project makes to step outside its folder is contained when it runs."
+            }
         }
     }
 
@@ -87,6 +95,7 @@ impl Line {
             Line::Interrupted => "\"Interrupted…\"",
             Line::Models => "\"every model used, and refusals\"",
             Line::SafeToRead => "\"…safe to read\"",
+            Line::UseCase5 => "Use case 5: looks ordinary, still contained",
         }
     }
 }
@@ -491,6 +500,25 @@ pub const CASES: &[Case] = &[
         attack: "A program prints the key in a real run",
         lines: &[Line::SafeToRead],
         tests: &[run("contain", "a_printed_key_is_hidden_in_the_report_the_live_log_and_the_raw_logs")],
+        layer: Layer::Scripted,
+        needs: LINUX_AND_NETWORK,
+    },
+    Case {
+        id: "U1",
+        attack: "A file whose project tries to escape looks exactly like an ordinary one in the preview",
+        lines: &[Line::UseCase5],
+        tests: &[
+            app("open", "the_use_case_5_file_gets_the_colour_the_rules_give_it"),
+            app("open", "use_case_5_looks_like_use_case_1_in_the_preview"),
+        ],
+        layer: Layer::Scripted,
+        needs: WINDOWS,
+    },
+    Case {
+        id: "U2",
+        attack: "A file fetched from a public repository tries every escape, and each one is contained",
+        lines: &[Line::UseCase5],
+        tests: &[run("uc5", "use_case_5_from_github_every_try_is_contained")],
         layer: Layer::Scripted,
         needs: LINUX_AND_NETWORK,
     },

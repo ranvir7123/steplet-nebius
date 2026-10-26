@@ -7,11 +7,18 @@ use std::time::SystemTime;
 
 use steplet_app::open::{MAX_READ, preview_file, read_file};
 use steplet_app::pins::{self, Pins};
-use steplet_app::views::{RunStatus, not_fetched_from_here};
+use steplet_app::views::{FindingView, RunStatus, finding_view, not_fetched_from_here};
 use steplet_core::identity::Pin;
 
 /// The corpus's own time of viewing (crates/steplet-core/tests/corpus.rs).
 const NOW: i64 = 1_791_720_000;
+
+/// A time of viewing for the use-case-5 and use-case-1 sample files (examples/): 2026-11-01, inside their validity
+/// (they expire 2027-10-20). The corpus's NOW is 2026-10-11, and the samples expire 374 days after it, which is more
+/// than the 365-day limit, so at NOW the core would block them on expiry alone and hide the colour their own content
+/// earns. Viewed when they are current, as a receiver would, they show that colour. This is a fixed time, so after the
+/// samples really expire these tests keep passing on it: a stale sample is not caught here.
+const SAMPLE_NOW: i64 = 1_793_491_200;
 
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("open-{name}-{}", std::process::id()));
@@ -154,4 +161,57 @@ fn an_unreadable_pins_file_is_kept_and_said() {
     assert_eq!(view.run_status, RunStatus::Amber, "the warning raises a green file to amber");
     assert!(pins::record(&pins_path, "Ana Lee", "SHA256:tVgKaRjITaHHfnNKaCKzbMxCYl3SuTLHuORBTjsI9xk").is_err());
     assert_eq!(std::fs::read(&pins_path).unwrap(), junk, "the file is not overwritten");
+}
+
+// Use case 5 (Task 7): the use-case-5 sample file, which looks like an ordinary one (use case 1) but whose project
+// tries to step outside its folder, and the use-case-1 sample it mirrors.
+fn uc5() -> Vec<u8> {
+    std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/uc5-sample.steplet")).unwrap()
+}
+
+fn sample_run() -> Vec<u8> {
+    std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sample-run.steplet")).unwrap()
+}
+
+#[test]
+fn the_use_case_5_file_gets_the_colour_the_rules_give_it() {
+    // The preview's outcome and findings are exactly what the core's rules give the file: the app keeps no special
+    // case for the use-case-5 sample.
+    let raw = uc5();
+    let report = steplet_core::report::check(&raw, SAMPLE_NOW);
+    let view = preview_file(&raw, SAMPLE_NOW, &Pins::Known(Vec::new()));
+    assert_eq!(view.outcome, report.rating.outcome.name(), "the file's own outcome is the core's rating");
+    let from_rules: Vec<FindingView> = report.rating.findings.iter().map(finding_view).collect();
+    assert_eq!(view.findings, from_rules, "the findings are the core's, unchanged");
+    // The rules rate it amber: a command runs the repository's own code (K2).
+    assert_eq!(view.outcome, "amber");
+    // Nothing is pinned, so there is nothing about this computer and the banner is the file's own colour.
+    assert!(view.here.is_empty(), "nothing about this computer with empty pins");
+    assert_eq!(view.colour, view.outcome, "the banner is the file's own colour");
+}
+
+#[test]
+fn use_case_5_looks_like_use_case_1_in_the_preview() {
+    // The receiver cannot tell the use-case-5 file from an ordinary one: the same counts, the same rule ids and the
+    // same identity line as sample-run.steplet (use case 1). The one thing that differs is the repository it names.
+    let pins = Pins::Known(Vec::new());
+    let five = preview_file(&uc5(), SAMPLE_NOW, &pins);
+    let one = preview_file(&sample_run(), SAMPLE_NOW, &pins);
+
+    assert_eq!(five.counts, one.counts, "the same counts");
+    let rule_ids = |v: &steplet_app::views::PreviewView| v.findings.iter().map(|f| f.rule.clone()).collect::<Vec<_>>();
+    assert_eq!(rule_ids(&five), rule_ids(&one), "the same rule ids");
+    // Both stand on their own: use case 1 is amber too (not two blocked files), and the shared identity is a signed
+    // new key (not two unsigned or unchecked ones), so the equality below is a real match, not two empty values.
+    assert_eq!(one.outcome, "amber", "use case 1 is amber too");
+    assert!(
+        matches!(five.identity, steplet_app::views::IdentityView::NewKey { .. }),
+        "a signed file from a new key: {:?}",
+        five.identity
+    );
+    assert_eq!(five.identity, one.identity, "the same identity line: both signed by the same key");
+
+    let repository =
+        |v: &steplet_app::views::PreviewView| v.file.as_ref().unwrap().repository.as_ref().unwrap().clone();
+    assert_ne!(repository(&five), repository(&one), "the repository is the one thing that differs");
 }
