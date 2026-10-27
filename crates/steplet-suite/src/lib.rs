@@ -3,6 +3,7 @@
 //! not, and keeps the whole output as a record in `docs/suite/`. `cargo suite list | scripted | live`.
 
 pub mod catalogue;
+pub mod live;
 pub mod record;
 pub mod runner;
 pub mod verdict;

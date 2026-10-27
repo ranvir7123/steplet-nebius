@@ -124,11 +124,25 @@ pub fn install_gate(distro: &str) -> String {
 pub const MADE_UP_KEY: &str = "sk-ant-api03-STEPLET-TEST-MADE-UP-NOT-A-KEY";
 
 /// The gate for run `run_id`: the gate program on Steplet's Linux disk, and the service on Windows answering with
-/// `decide` within `deadline` and serving the made-up key.
+/// `decide` within `deadline` and serving the made-up key (the scripted layer; the live layer serves the real key
+/// through `serve_gate_with_key`).
 pub fn serve_gate(
     distro: &str,
     run_id: &str,
     deadline: Duration,
+    decide: impl Fn(&GateRequest) -> GateAnswer + Send + Sync + 'static,
+) -> (GateLink, GateService) {
+    serve_gate_with_key(distro, run_id, deadline, ApiKey::new(MADE_UP_KEY.into()), decide)
+}
+
+/// `serve_gate`, but serving `key` instead of the made-up key: the live attack suite (phase 5 Task 8) serves the real
+/// Anthropic key, so the run reaches the real model, while the scripted layer serves the made-up key. Everything else —
+/// a fresh gate copy of its own, the run's pipe name and a fresh token — is the same.
+pub fn serve_gate_with_key(
+    distro: &str,
+    run_id: &str,
+    deadline: Duration,
+    key: ApiKey,
     decide: impl Fn(&GateRequest) -> GateAnswer + Send + Sync + 'static,
 ) -> (GateLink, GateService) {
     // Like a product run, each test run starts the gate from a fresh copy of its own (gate_for_run); the run's
@@ -139,8 +153,7 @@ pub fn serve_gate(
     // At least 20 characters, so `count_key.py` can count it.
     let token = format!("{run_id}-token-{nanos:016x}");
     let link = GateLink::new(&exe, &format!("steplet-{run_id}"), &token, &gate_log(run_id), deadline).unwrap();
-    let service =
-        serve(&link, &gate_on_windows("steplet", &exe), Some(ApiKey::new(MADE_UP_KEY.into())), decide).unwrap();
+    let service = serve(&link, &gate_on_windows("steplet", &exe), Some(key), decide).unwrap();
     (link, service)
 }
 

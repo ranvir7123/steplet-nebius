@@ -48,8 +48,11 @@ impl ApiKey {
         ApiKey(key)
     }
 
-    /// The key's text, for the report to hide it (F48).
-    pub(crate) fn text(&self) -> &str {
+    /// The key's text, for building the list of secrets to hide from the report, the live log and the raw logs (F48).
+    /// The run path uses it so (`run_live_locked`); the live attack suite (phase 5 Task 8) uses it the same way, to
+    /// hide the real key from a live run's records and to check it leaked nowhere. Never printed; `Debug` keeps the key
+    /// hidden whatever is logged.
+    pub fn text(&self) -> &str {
         &self.0
     }
 

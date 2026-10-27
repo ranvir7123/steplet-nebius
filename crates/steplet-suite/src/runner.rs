@@ -387,6 +387,9 @@ const TEST_VARIABLES: &[&str] = &[
     "CARGO_HOME",
     "RUSTUP_HOME",
     "RUSTUP_TOOLCHAIN",
+    // The live layer passes each live case its spending cap through this variable; without it a live case spends
+    // nothing. The suite's `live --yes-spend` command sets it before it runs the cases.
+    crate::live::CAP_VAR,
 ];
 
 /// The variables of `vars` a test program gets, by name without regard to case (as Windows reads them).

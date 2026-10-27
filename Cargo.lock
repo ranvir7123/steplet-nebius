@@ -3138,6 +3138,7 @@ dependencies = [
  "sha2",
  "steplet-core",
  "steplet-run",
+ "steplet-suite",
  "tauri",
  "tauri-build",
  "ts-rs",

@@ -29,3 +29,9 @@ sha2 = "=0.10.9"
 tauri = { version = "=2.12.1", features = ["custom-protocol"] }
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_UI_Controls_Dialogs", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 ts-rs = "=12.0.1"
+
+[dev-dependencies]
+# The attack suite's live layer drives its real-model runs from steplet-app's own tests (`tests/suite_live.rs`), where
+# it reads the spending cap through the suite's `live` module. Test-only, a path dependency inside the workspace, so the
+# lock file gains only the internal edge from steplet-app to steplet-suite, no new crates.
+steplet-suite = { path = "../steplet-suite" }

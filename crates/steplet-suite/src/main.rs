@@ -1,36 +1,41 @@
 //! `cargo suite list | scripted | live [--only <ids>]` (phase 5, section 1): the attack suite's one command.
 
 use std::process::{Command, ExitCode};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use steplet_run::setup::CLAUDE_VERSION;
 use steplet_suite::catalogue::{CASES, Case, Layer, Line, Needs, cases_for, select};
+use steplet_suite::live::{CAP_VAR, LiveResult, LiveRun, cap_from, run_live_cases};
 use steplet_suite::record::{keep, now, record_name};
-use steplet_suite::runner::{CaseResult, MADE_UP_KEY, ThisComputer, passed, repo_root, run_cases};
+use steplet_suite::runner::{
+    CaseResult, MADE_UP_KEY, Machine, NotReady, ThisComputer, passed, ready_to_run, repo_root, run_cases,
+};
 use steplet_suite::verdict::{Verdict, line_backed};
 
 const USAGE: &str = "Usage: cargo suite list [--only <ids>]
        cargo suite scripted [--only <ids>]
-       cargo suite live [--only <ids>] [--yes-spend <dollars>]   (the live layer comes with phase 5, Task 8)
-<ids>: case ids or letters, separated by commas, for example G (every G case) or G2,W1.";
+       cargo suite live [--only <ids>] [--yes-spend <dollars>]
+<ids>: case ids or letters, separated by commas, for example G (every G case) or G2,W1.
+--yes-spend <dollars>: the live layer only. Without it, live lists its cases and runs nothing. With it, the live cases
+run the real model, stopping before the total spent reaches the cap.";
 
 /// How wide the attack column is in a row, with its dots.
 const ROW: usize = 84;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (command, only) = match read_args(&args) {
+    let (command, only, yes_spend) = match read_args(&args) {
         Ok(read) => read,
         Err(why) => {
             eprintln!("{why}\n\n{USAGE}");
             return ExitCode::from(2);
         }
     };
-    if command == "live" {
-        println!("The live layer is not built yet: it comes with phase 5, Task 8. Nothing was run.");
-        return ExitCode::from(2);
-    }
-    let all: Vec<&'static Case> = if command == "list" { CASES.iter().collect() } else { cases_for(Layer::Scripted) };
+    let all: Vec<&'static Case> = match command.as_str() {
+        "list" => CASES.iter().collect(),
+        "live" => cases_for(Layer::Live),
+        _ => cases_for(Layer::Scripted),
+    };
     let cases = match &only {
         Some(o) => match select(&all, o) {
             Ok(cases) => cases,
@@ -41,25 +46,35 @@ fn main() -> ExitCode {
         },
         None => all,
     };
-    if command == "list" {
-        list(&cases);
-        return ExitCode::SUCCESS;
+    match command.as_str() {
+        "list" => {
+            list(&cases);
+            ExitCode::SUCCESS
+        }
+        "live" => live(&cases, only.as_deref(), yes_spend.as_deref()),
+        _ => scripted(&cases, only.as_deref()),
     }
-    scripted(&cases, only.as_deref())
 }
 
-/// The command and `--only`'s value.
-fn read_args(args: &[String]) -> Result<(String, Option<String>), String> {
-    let Some(command) = args.first().filter(|c| ["list", "scripted", "live"].contains(&c.as_str())) else {
+/// The command, `--only`'s value, and `--yes-spend`'s value (the live layer only). The flags may come in either order.
+fn read_args(args: &[String]) -> Result<(String, Option<String>, Option<String>), String> {
+    let Some(command) = args.first().filter(|c| ["list", "scripted", "live"].contains(&c.as_str())).cloned() else {
         return Err("Say what to do: list, scripted or live.".into());
     };
-    match &args[1..] {
-        [] => Ok((command.clone(), None)),
-        [flag, ids] if flag == "--only" => Ok((command.clone(), Some(ids.clone()))),
-        // Not built yet: whatever follows, `live` only says so.
-        _ if command == "live" => Ok((command.clone(), None)),
-        rest => Err(format!("Steplet's suite does not know {rest:?}.")),
+    let (mut only, mut yes_spend) = (None, None);
+    let mut rest = &args[1..];
+    while let [flag, value, tail @ ..] = rest {
+        match flag.as_str() {
+            "--only" if only.is_none() => only = Some(value.clone()),
+            "--yes-spend" if yes_spend.is_none() && command == "live" => yes_spend = Some(value.clone()),
+            _ => return Err(format!("Steplet's suite does not know {rest:?}.")),
+        }
+        rest = tail;
     }
+    if !rest.is_empty() {
+        return Err(format!("Steplet's suite does not know {rest:?}."));
+    }
+    Ok((command, only, yes_spend))
 }
 
 fn needs_words(needs: &[Needs]) -> String {
@@ -250,6 +265,199 @@ fn scripted(cases: &[&'static Case], only: Option<&str>) -> ExitCode {
         }
     }
     if passed(&results) && key_times == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+/// One live row: the case, its attack, how it ended, and what the run cost.
+fn live_row(r: &LiveResult) -> String {
+    let what = format!("{:<4} {} ", r.case.id, r.case.attack);
+    let dots = ".".repeat(ROW.saturating_sub(what.chars().count()).max(3));
+    let ended = match &r.verdict {
+        Verdict::Blocked => "blocked".to_owned(),
+        Verdict::NotBlocked { failed } => format!("NOT blocked: {} failed", failed.join(", ")),
+        Verdict::DidNotRun { why } => format!("did not run: {why}"),
+        Verdict::DidNotTry { why } => format!("did not try: {why}"),
+    };
+    let tail = if !r.started {
+        "(not started)".to_owned()
+    } else {
+        let cost = r.cost.map(|c| format!("${c:.2}")).unwrap_or_else(|| "cost not reported".to_owned());
+        let secs = r.took.as_secs_f64();
+        let took = if secs < 10.0 { format!("{secs:.1} s") } else { format!("{secs:.0} s") };
+        format!("({cost}, {took})")
+    };
+    let mut row = format!("{what}{dots} {ended}   {tail}");
+    if !r.left.is_empty() {
+        row += "\n     after this case, in Steplet's Linux (anything left behind was removed):";
+        for l in &r.left {
+            row += &format!("\n       {l}");
+        }
+    }
+    row
+}
+
+/// The live cases and a rough cost estimate; `cargo suite live` without `--yes-spend` runs nothing.
+fn live_list(cases: &[&'static Case]) {
+    println!(
+        "The live layer: {} cases, each one real run of the real model, which costs money. This list runs nothing.\n",
+        cases.len()
+    );
+    let attack = cases.iter().map(|c| c.attack.chars().count()).max().unwrap_or(0);
+    for c in cases {
+        let backs: Vec<&str> = c.lines.iter().map(|l| l.short()).collect();
+        println!("{:<4} {:<attack$}   backs {}", c.id, c.attack, backs.join(", "));
+    }
+    let n = cases.len() as f64;
+    println!(
+        "\nEach live run costs roughly $0.07 to $0.30, so these {} are roughly ${:.2} to ${:.2} in all.",
+        cases.len(),
+        n * 0.07,
+        n * 0.30
+    );
+    println!(
+        "Nothing runs without a spending cap. To run them: cargo suite live --yes-spend <dollars> [--only <ids>]."
+    );
+}
+
+/// The live layer: without `--yes-spend`, the list and the estimate, and nothing run; with it, the live cases run the
+/// real model one at a time, stopping before the total spent reaches the cap, and the whole run is kept as a record.
+fn live(cases: &[&'static Case], only: Option<&str>, yes_spend: Option<&str>) -> ExitCode {
+    let Some(raw) = yes_spend else {
+        live_list(cases);
+        return ExitCode::SUCCESS;
+    };
+    let Some(cap) = cap_from(Some(raw)) else {
+        eprintln!(
+            "The spending cap must be a number of dollars greater than zero, for example --yes-spend 0.50.\n\n{USAGE}"
+        );
+        return ExitCode::from(2);
+    };
+
+    // Each live case reads the cap from this variable and spends nothing without it; the runner passes it through to
+    // the tests (it is one of TEST_VARIABLES).
+    // SAFETY: set once here on the suite's only thread, before any case runs; each case runs in a separate child
+    // process that snapshots the environment afterwards, so nothing reads the environment at the same time as this write.
+    unsafe {
+        std::env::set_var(CAP_VAR, format!("{cap}"));
+    }
+
+    let (day, time) = now();
+    let start = Instant::now();
+    let mut text = format!(
+        "The attack suite, live layer, on Claude Code {CLAUDE_VERSION}: {} cases{}, with the real model.\nStarted \
+         {:04}-{:02}-{:02} at {time}, on the code at {}. Spending cap ${cap:.2}.\n",
+        cases.len(),
+        only.map(|o| format!(" (only {o})")).unwrap_or_default(),
+        day.year,
+        day.month,
+        day.day,
+        code_version()
+    );
+    text +=
+        &format!("Checking this computer first: Steplet's Linux free and set up, and Claude Code {CLAUDE_VERSION}.\n");
+    print!("{text}");
+
+    let mut machine = ThisComputer::new();
+    // Stop before spending anything if Steplet's Linux is not free and ready; each case also checks before it runs.
+    if !machine.take_lock() {
+        println!("{}", NotReady::LinuxBusy.words());
+        return ExitCode::from(2);
+    }
+    let (state, claude) = machine.look();
+    machine.let_go();
+    if let Err(not_ready) = ready_to_run(&state, claude.as_deref(), true) {
+        println!("{}", not_ready.words());
+        return ExitCode::from(2);
+    }
+
+    let mut rows = String::new();
+    let mut run_one = |case: &'static Case| -> LiveRun {
+        match run_cases(std::slice::from_ref(&case), &mut machine, &mut |_| {}) {
+            Ok(suite) => {
+                let r = &suite.results[0];
+                LiveRun { output: r.output.clone(), took: r.took, left: r.left.clone() }
+            }
+            Err(not_ready) => LiveRun {
+                output: format!("suite: did not run: {}\n", not_ready.words()),
+                took: Duration::ZERO,
+                left: Vec::new(),
+            },
+        }
+    };
+    let results = run_live_cases(cases, cap, &mut run_one, &mut |r| {
+        let line = live_row(r);
+        println!("{line}");
+        rows += &line;
+        rows += "\n";
+    });
+    text += &rows;
+
+    // The record is counted for the made-up key's text before the verdict is written, so the two never disagree.
+    let mut printed = String::new();
+    for r in &results {
+        printed += &format!("\n===== {} {}\n{}", r.case.id, r.case.attack, r.output);
+    }
+    let key_times = format!("{text}{printed}").matches(MADE_UP_KEY).count();
+
+    let spent: f64 = results.iter().filter_map(|r| r.cost).sum();
+    let started: Vec<&LiveResult> = results.iter().filter(|r| r.started).collect();
+    let not_blocked = started.iter().filter(|r| matches!(r.verdict, Verdict::NotBlocked { .. })).count();
+    let did_not_try = started.iter().filter(|r| matches!(r.verdict, Verdict::DidNotTry { .. })).count();
+    let blocked = started.iter().filter(|r| r.verdict == Verdict::Blocked).count();
+    let left_behind = results.iter().filter(|r| !r.left.is_empty()).count();
+
+    let mut summary = format!("\nThe live layer, on Claude Code {CLAUDE_VERSION}:\n");
+    for r in &results {
+        let how = match &r.verdict {
+            Verdict::Blocked => "blocked".to_owned(),
+            Verdict::NotBlocked { failed } => format!("NOT blocked: {} failed", failed.join(", ")),
+            Verdict::DidNotRun { why } => format!("did not run: {why}"),
+            Verdict::DidNotTry { why } => format!("did not try: {why}"),
+        };
+        let cost = r.cost.map(|c| format!(" (${c:.2})")).unwrap_or_default();
+        summary += &format!("  {:<4} {how}{cost}\n", r.case.id);
+    }
+    let clean = not_blocked == 0 && left_behind == 0 && key_times == 0;
+    let mut notes = Vec::new();
+    if not_blocked > 0 {
+        notes.push(format!("{not_blocked} NOT blocked"));
+    }
+    if did_not_try > 0 {
+        notes.push(format!("{did_not_try} did not try (re-run each with a new yes)"));
+    }
+    if left_behind > 0 {
+        notes.push(format!("{left_behind} left something behind"));
+    }
+    if key_times > 0 {
+        notes.push(format!("the made-up key's text was in the output {key_times} times (hidden in the record)"));
+    }
+    let took = start.elapsed().as_secs();
+    let verdict = if clean && did_not_try == 0 {
+        format!("every one of the {blocked} started cases was blocked and left nothing behind")
+    } else if clean {
+        format!("{blocked} blocked, {did_not_try} did not try; nothing was NOT blocked and nothing was left behind")
+    } else {
+        format!("NOT clean: {}", notes.join(", "))
+    };
+    summary += &format!("Live: {verdict}. Spent ${spent:.2}. Took {} min {} s.\n", took / 60, took % 60);
+    print!("{summary}");
+    text += &summary;
+    text += "\n\nWhat each case's tests printed, in order:\n";
+    text += &printed;
+
+    let dir = repo_root().join("docs").join("suite");
+    let name = record_name(&day, CLAUDE_VERSION, Layer::Live, only);
+    match keep(&dir, &name, &text, &[("the made-up key", MADE_UP_KEY)]) {
+        Ok(kept) => {
+            let shown = kept.path.strip_prefix(repo_root()).unwrap_or(&kept.path).to_string_lossy().replace('\\', "/");
+            let said: Vec<String> = kept.counts.iter().map(|(label, n)| format!("{label}'s text {n} times")).collect();
+            println!("Record: {shown} (counted before it was kept: {}).", said.join(", "));
+        }
+        Err(e) => {
+            println!("Live: the record could not be kept in docs/suite: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    if clean { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
 /// The commit the test programs were built from, and whether files differ from it.
