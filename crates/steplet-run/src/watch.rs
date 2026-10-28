@@ -122,7 +122,7 @@ impl<'a> Watcher<'a> {
     fn harmless(&self, tool: &str, input: &Value) -> bool {
         match tool {
             "Bash" => matches!(
-                command::assess(text(input, "command")),
+                command::assess_in(text(input, "command"), &self.work),
                 Assessment::Words { kind: Kind::ReadOnly, outside: false, .. }
             ),
             // The checker's own answer, as the gate would have given it, where the path really leads (rows 29, 30).

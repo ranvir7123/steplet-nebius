@@ -1,5 +1,5 @@
 use steplet_core::command::{
-    Assessment, Blocked, Danger, Kind, NotUnderstood, assess, danger, downloads_into_shell, kind, split,
+    Assessment, Blocked, Danger, Kind, NotUnderstood, assess, assess_in, danger, downloads_into_shell, kind, split,
 };
 
 fn k(line: &str) -> Kind {
@@ -173,4 +173,59 @@ fn one_reading_in_a_fixed_order() {
         assess("cargo test"),
         Assessment::Words { words: words(&["cargo", "test"]), kind: Kind::RunsCode, outside: false }
     );
+}
+
+/// During a run the working copy is known, so a full path into it is inside, as its short form is (phase 5 wrap-up:
+/// the real model's first move was `ls -la /work/p5l1/repo`, and every such run stopped there).
+#[test]
+fn a_full_path_into_the_working_copy_is_inside_it() {
+    const WORK: &str = "/work/p5l1/repo";
+    let outside = |line: &str| match assess_in(line, WORK) {
+        Assessment::Words { outside, .. } => outside,
+        other => panic!("{line}: {other:?}"),
+    };
+    for line in [
+        "ls -la /work/p5l1/repo",
+        "ls -la /work/p5l1/repo/",
+        "ls /work/p5l1/repo/tests",
+        "cat /work/p5l1/repo/./README.md",
+        "grep -f/work/p5l1/repo/words x",
+        "wc --files0-from=/work/p5l1/repo/list",
+        "ls //work/p5l1/repo",
+        "ls /work//p5l1/./repo/.",
+        "grep -I/work/p5l1/repo x",
+    ] {
+        assert!(!outside(line), "{line}");
+    }
+    for line in [
+        // Climbs out, once the `..` is worked out.
+        "ls /work/p5l1/repo/../other",
+        "ls /work/p5l1/repo/tests/../..",
+        // Any `..` stays outside, even one that seems to land back inside: `tests` could be a link out of the copy,
+        // and then `tests/..` is its target's parent (as `ls tests/..` is outside).
+        "ls /work/p5l1/repo/tests/..",
+        "cat /work/p5l1/repo/a/../README.md",
+        "ls --hide=/work/p5l1/repo/../y",
+        // A `:` or `,` can join a second path into one word, for a program that reads lists.
+        "ls --ignore=/work/p5l1/repo/x:/etc/hostname",
+        "grep -I/work/p5l1/repo/a,/etc/hostname x",
+        // Only starts with the same letters.
+        "ls /work/p5l1/repo2",
+        "ls /work/p5l1",
+        "wc -l /etc/hostname",
+        "ls ../x",
+        // One word inside does not make another one inside.
+        "diff /work/p5l1/repo/a /etc/hostname",
+    ] {
+        assert!(outside(line), "{line}");
+    }
+    // The rest of the reading is the same as without a working copy.
+    assert_eq!(assess_in("cat ~/.ssh/config", WORK), assess("cat ~/.ssh/config"));
+    assert_eq!(assess_in("cargo test | tail", WORK), assess("cargo test | tail"));
+    assert_eq!(
+        assess_in("ls -la /work/p5l1/repo", WORK),
+        Assessment::Words { words: words(&["ls", "-la", "/work/p5l1/repo"]), kind: Kind::ReadOnly, outside: false }
+    );
+    // Rating a file before any run knows no working copy: a full path there stays outside.
+    assert!(matches!(assess("ls -la /work/p5l1/repo"), Assessment::Words { outside: true, .. }));
 }

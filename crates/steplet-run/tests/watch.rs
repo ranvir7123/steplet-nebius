@@ -76,7 +76,16 @@ fn stopped(tool: &str, what: &str, why: Tripwire) -> Verdict {
 
 #[test]
 fn a_harmless_read_command_that_skipped_the_gate_is_recorded_and_the_run_goes_on() {
-    for command in ["ls", "ls src", "cat README", "git status --short", "pwd"] {
+    for command in [
+        "ls",
+        "ls src",
+        "cat README",
+        "git status --short",
+        "pwd",
+        // The working copy by its full path: the real model's first move in both paid live runs (phase 5 wrap-up).
+        "ls -la /work/r1/repo",
+        "cat /work/r1/repo/src/main.rs",
+    ] {
         assert_eq!(judge("Bash", json!({"command": command}), None, false), harmless("Bash", command), "{command}");
     }
     // A harmless read that failed (here there is no `src` folder) is just as harmless.
@@ -92,6 +101,9 @@ fn any_other_command_that_skipped_the_gate_stops_the_run() {
         "cat README | wc -l",
         // A read outside the working copy.
         "ls /var/lib/steplet",
+        "ls /work/r1/repo/../r2",
+        "ls /work/r1/repo2",
+        "ls /work/r1/repo/src/..",
         // Declared by the file, but it runs the repository's code: it had to ask.
         "cargo test",
         "",

@@ -30,6 +30,10 @@ fn commands() {
     assert!(asks(check("cargo test | tail")));
     assert_eq!(check("ls -la src"), Decision::Allow, "G2: harmless, inside the repository");
     assert!(asks(check("cat /etc/passwd")), "harmless, but outside the repository");
+    assert_eq!(check(&format!("ls -la {WORK}")), Decision::Allow, "G2: the working copy by its full path");
+    assert_eq!(check(&format!("cat {WORK}/src/main.rs")), Decision::Allow, "G2: a full path inside the repository");
+    assert!(asks(check(&format!("ls {WORK}/../r2"))), "a full path that climbs out");
+    assert!(asks(check(&format!("ls {WORK}2"))), "a folder whose name only starts the same");
     assert!(asks(check("ls ../x")), "harmless, but climbs out of the repository");
     assert!(asks(check("ls\nsrc")), "a line break: not understood, so not matched");
     assert!(denies(check("sudo make install"), "block.admin"), "declared, but never allowed");

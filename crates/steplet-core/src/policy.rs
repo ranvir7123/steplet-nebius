@@ -1,5 +1,6 @@
 //! The one checker (decision row 29): every action an agent proposes during a run is decided here, with the same
-//! reading of commands as the rating (`command::assess`). Anything the file did not ask for goes to the receiver
+//! reading of commands as the rating (`command::assess`; during a run `command::assess_in`, which also knows a full
+//! path into the working copy is inside it). Anything the file did not ask for goes to the receiver
 //! (R7); the always-blocked list and protected folders are refused without a question (row 24, G8, G14).
 
 use alloc::string::String;
@@ -90,7 +91,7 @@ impl Policy {
     }
 
     fn command(&self, line: &str) -> Decision {
-        match command::assess(line) {
+        match command::assess_in(line, &self.work) {
             Assessment::Blocked(why) => refuse(why),
             Assessment::NotUnderstood(_) => {
                 ask("Steplet cannot read this command exactly, so it cannot match it with the file")

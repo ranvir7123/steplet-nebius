@@ -305,7 +305,9 @@ pub enum Blocked {
 }
 
 /// What Steplet makes of one command. The rating (the file's own commands) and the checker (the agent's commands
-/// during a run) both use this, so they cannot disagree (row 29).
+/// during a run) both use this, so they cannot disagree (row 29) — with one exception: during a run the working
+/// copy is known, so a full path into it counts as inside (`assess_in`), while the rating, which knows no copy yet,
+/// still counts it as outside. The rating is the stricter of the two.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Assessment {
     Blocked(Blocked),
@@ -319,6 +321,18 @@ pub enum Assessment {
 }
 
 pub fn assess(text: &str) -> Assessment {
+    assess_with(text, None)
+}
+
+/// As `assess`, for a command proposed during a run in the working copy `work` (an absolute path, as the checker's):
+/// a full path to the working copy or into it is inside, as its short form is. A model writes the copy's full path
+/// (phase 5 wrap-up: `ls -la /work/p5l1/repo` was its first move in both paid live runs).
+pub fn assess_in(text: &str, work: &str) -> Assessment {
+    debug_assert!(work != "/" && paths::normalize(work).as_deref() == Some(work), "not a working copy: {work}");
+    assess_with(text, Some(work))
+}
+
+fn assess_with(text: &str, work: Option<&str>) -> Assessment {
     if text.chars().any(is_invisible) {
         return Assessment::Blocked(Blocked::Invisible);
     }
@@ -338,10 +352,20 @@ pub fn assess(text: &str) -> Assessment {
         None => {}
     }
     // A path can hide after `=` (`--file=/etc/x`) or be joined to a short option (`-f/etc/x`, `-I~/x`).
+    // A full path counts as inside only when it is the working copy or below it, with no `..` (a part before it
+    // could be a link out of the copy, as for a short path) and no `:` or `,` (which can join a second path).
+    let is_outside = |path: &str| {
+        paths::is_outside(path)
+            && !work.is_some_and(|work| {
+                !path.contains([':', ',', '\\'])
+                    && !path.split('/').any(|p| p == "..")
+                    && paths::normalize(path).is_some_and(|p| paths::below(work, &p).is_some())
+            })
+    };
     let outside = words[1..].iter().any(|w| {
-        paths::is_outside(w)
-            || w.split_once('=').is_some_and(|(_, value)| paths::is_outside(value))
-            || (w.starts_with('-') && w.find(['/', '\\', '~']).is_some_and(|i| paths::is_outside(&w[i..])))
+        is_outside(w)
+            || w.split_once('=').is_some_and(|(_, value)| is_outside(value))
+            || (w.starts_with('-') && w.find(['/', '\\', '~']).is_some_and(|i| is_outside(&w[i..])))
     });
     let k = kind(&words);
     Assessment::Words { words, kind: k, outside }
