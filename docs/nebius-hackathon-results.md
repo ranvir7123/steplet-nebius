@@ -326,3 +326,141 @@ There is no Nebius key in Setup. Type it into Setup's Nebius box first.
 
 The normal build was then rebuilt for the owner, and its debugging port checked closed (`window running: True;
 debugging port open: False`).
+## Task 5: The agent's moves, inside the fence (29 Oct 2026)
+
+Each move Steplet's own agent asks for now runs in Steplet's Linux through `start-hands.sh`, one at a time: as the
+steplet account with no powers, inside the run's fence, with a time limit. The fence is `srt-hands.json`, which
+`prepare_own` writes from `fence_json`; `the_hands_fence_matches_claude_codes_fence` holds it to the same reading
+rules and sites as Claude Code's. Whatever a move leaves running is ended before its answer comes back. The answer is
+root's own first line (`steplet-hands exit=<n> timed_out=<0|1> bytes=<total>`), then at most 1 MiB of what the move
+printed. The file tools (read, write, edit, list, find, search) are `hands.py`, run inside the same fence; they judge
+nothing, because the checker has already decided. `root-common.sh` holds what `start-run.sh` (Claude Code) and
+`start-hands.sh` share.
+
+Not as the plan wrote it (rows N14 to N20 in `docs/decisions.md`):
+
+- `LinuxHands::new` takes the run's `&RunPaths`, not two strings; `HandsError` has a fourth case, `Stopped`; and
+  `start-hands.sh` has a fourth exit code, 33, for a program that would not stop.
+- `hands.rs` installs `start-hands` and `hands.py` itself, before a run's first move; `launch.rs` installs only
+  `root-common.sh`, beside `start-run`.
+- What a move prints goes through a pipe that root reads, not straight into a file: the first 1 MiB is kept and the
+  rest only counted, so a move that prints without end never fills the disk.
+- The fence program starts in the run's temporary folder, and the move steps into the working copy from there.
+- The fence holds the agent settings file names with empty placeholder files while a move runs, and normally removes
+  them when it ends. If a move had to be killed, `start-hands.sh` removes any placeholders left behind, and `hands.py`
+  leaves such files out of its lists.
+- Two checks use different targets from the plan. The `/mnt` read uses a marker file in `/mnt`, because Windows' C:
+  drive is never mounted in Steplet's Linux, so a read of `/mnt/c` would fail even without the fence. The network
+  check uses two public sites, `example.org` (declared) and `example.net` (not), not the listener: a file declares
+  sites by name, and the listener is an address on this computer.
+
+Run 1, with all nine tests written first: the fence program would not start at all.
+
+```
+> cargo test -p steplet-run --offline --test hands -- --ignored --nocapture --test-threads=1
+    exit Some(1), timed out false, 77 bytes: "bwrap: Can't create file at /work/n5a/repo/.git/hooks: Read-only file system\n"
+test result: FAILED. 1 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 116.01s
+```
+
+The fence program guards some file names in the folder it starts in. Started in the working copy, it tried to put one
+inside `.git`, which the fence keeps read-only. It now starts in the run's temporary folder (N17).
+
+Run 2: two failures left.
+
+```
+thread 'a_command_runs_in_the_copy_and_its_exit_code_is_steplets' panicked at crates\steplet-run\tests\hands.rs:179:5:
+assertion `left == right` failed: the steplet account, the run's own folder, no input
+  left: "steplet\n/tmp/steplet-run-n5b /tmp/claude\nend\n"
+ right: "steplet\n/tmp/steplet-run-n5b /tmp/steplet-run-n5b\nend\n"
+thread 'a_command_cannot_forge_its_exit_code' panicked at crates\steplet-run\tests\hands.rs:190:5:
+  left: "steplet-hands exit=0 timed_out=0 bytes=1\n/bin/bash: line 1: /dev/stdout: Permission denied\n"
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 131.73s
+```
+
+The fence program set the move's temporary folder to `/tmp/claude`, which the fence keeps read-only; it now names the
+run's own (N18). A move could not open its own output a second time, as `> /dev/stdout` does, because root's pipe
+let only root write to it; the move may now write to it, and still only root can read it (N16).
+
+Run 3:
+
+```
+> cargo test -p steplet-run --offline --test hands -- --ignored --nocapture --test-threads=1
+     Running tests\hands.rs (target\debug\deps\hands-c857ad0f19d638b2.exe)
+--- control, outside the fence: {"proxy": "none", "https://example.org/": "reached", "https://example.net/": "reached"}
+--- Command { line: "python3 -I probe.py probe_results.json" }
+    exit Some(0), timed out false, 153 bytes: "{\"proxy\": \"set\", \"https://example.org/\": \"reached\", \"https://example.net/\": \"failed: URLError: <urlopen error Tunnel connection failed: 403 Fo
+    "sleep 60" came back after 3.5 s
+    "trap '' TERM; sleep 60" came back after 3.6 s
+test the_fence_holds_without_the_checker ... --- control, outside the fence: "grep -q steplet-marker-hidden /mnt/steplet-marker-n5d": Some(0)
+--- control, outside the fence: "test -w /tmp/steplet-marker-n5d": Some(0)
+--- control, outside the fence: "touch /work/n5d/repo/.git/steplet-control": Some(0)
+--- Read { path: "/mnt/steplet-marker-n5d", offset: None, limit: None }
+    exit Some(1), timed out false, 37 bytes: "There is no /mnt/steplet-marker-n5d.\n"
+--- Write { path: "/tmp/steplet-marker-n5d", content: "changed" }
+    exit Some(1), timed out false, 48 bytes: "/tmp/steplet-marker-n5d: Read-only file system.\n"
+--- Command { line: "echo changed >> .git/HEAD; echo changed >> .git/config" }
+    exit Some(1), timed out false, 106 bytes: "/bin/bash: line 1: .git/HEAD: Read-only file system\n/bin/bash: line 1: .git/config: Read-only file system\n"
+--- Write { path: ".mcp.json", content: "{}" }
+    exit Some(1), timed out false, 24 bytes: "Not allowed: .mcp.json.\n"
+--- Write { path: "inside.txt", content: "inside" }
+    exit Some(0), timed out false, 29 bytes: "Wrote 6 bytes to inside.txt.\n"
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 99.84s
+```
+
+(Lines cut from that output: the other moves of each test, each also as expected.) The moves in
+`the_fence_holds_without_the_checker` go straight to the hands, with no checker in front, so what stopped them is the
+fence alone.
+
+The tests were then shown to catch a missing fence: the fence program was taken out of the move's line in
+`start-hands.sh`, the three fence tests were run, and the script was put back (`cmp` against a copy: identical).
+
+```
+--- the deliberate break:
+64c64
+<     "$SRT" --settings "$R/srt-hands.json" -- /usr/bin/env -C "/work/$ID/repo" "${MOVE[@]}" < "$INPUT" >&3 2>&3 3>&-
+---
+>     /usr/bin/env -C "/work/$ID/repo" "${MOVE[@]}" < "$INPUT" >&3 2>&3 3>&-
+> cargo test -p steplet-run --offline --test hands -- --ignored --test-threads=1 the_fence_holds the_run_folder a_command_reaches
+a site the file does not declare: reached
+assertion `left != right` failed: Read { path: "/mnt/steplet-marker-n5d", offset: None, limit: None } must fail inside the fence:      1	steplet-marker-hidden
+assertion `left != right` failed: Read { path: "/var/lib/steplet/runs/n5i/srt-hands.json", offset: None, limit: None } must fail inside the fence:      1	{
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 6 filtered out; finished in 18.41s
+```
+
+Afterwards nothing was left in Steplet's Linux: `/work`, the runs folder and `/tmp` held no run or marker, and no
+program of the steplet account was running.
+
+The Claude Code runner still works after the shared root helpers moved into `root-common.sh` and prepare learned the
+`own` mode: every Linux test of Claude Code's runs was run again (no run held `Local\Steplet-run` at 18:29).
+
+```
+> cargo test -p steplet-run --offline --test ask_live --test contain --test gate --test launch --test links --test prepare --test report --test restart --test settings_live --test sites --test tripwires --test uc5 -- --ignored --nocapture --test-threads=1
+     Running tests\ask_live.rs
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 122.98s
+     Running tests\contain.rs
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 182.55s
+     Running tests\gate.rs
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 58.34s
+     Running tests\launch.rs
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 75.48s
+     Running tests\links.rs
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 93.19s
+     Running tests\prepare.rs
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 38.65s
+     Running tests\report.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 30.37s
+     Running tests\restart.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 76.52s
+     Running tests\settings_live.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 75.11s
+     Running tests\sites.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 9.14s
+     Running tests\tripwires.rs
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 50.85s
+     Running tests\uc5.rs
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 29.17s
+```
+
+(56 passed, none failed.) Then `cargo fmt --all`, `cargo clippy -p steplet-run --offline --all-targets -- -D warnings`
+(`Finished`, no warnings) and `cargo test -p steplet-run --offline`: every test binary `ok`, none failed (the Linux
+tests are ignored in that run and were run above).

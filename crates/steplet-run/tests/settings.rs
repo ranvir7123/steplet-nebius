@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
-use steplet_run::{GateLink, RunPaths, mcp_json, settings_json};
+use steplet_run::{GateLink, RunPaths, fence_json, mcp_json, settings_json};
 
 fn steplet(allow: &str) -> Steplet {
     let f = format!("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n{allow}---\n");
@@ -102,6 +102,47 @@ fn the_settings_match_the_file_the_task_2_runs_used() {
     used["apiKeyHelper"] = helper.into();
     used["permissions"]["deny"].as_array_mut().unwrap().push("Edit(//var/lib/steplet/**)".into());
     assert_eq!(read(&settings_json(&steplet(""), &paths("p2"), &g, false)), used);
+}
+
+/// The Nebius plan, Task 5: Steplet's own agent runs every move inside a fence of its own, with the same read rules and
+/// the same sites as Claude Code's fence; it may write the working copy and the run's temporary folder, but not the
+/// copy's `.git` or any agent settings file.
+#[test]
+fn the_hands_fence_matches_claude_codes_fence() {
+    let s = steplet(
+        "allow:
+  domains:
+    - pypi.org
+    - files.pythonhosted.org
+",
+    );
+    let g = gate("/opt/steplet/gate/steplet-gate.exe", "steplet-r1", "0123abcd");
+    let claude = read(&settings_json(&s, &paths("r1"), &g, false))["sandbox"].clone();
+    let fence = read(&fence_json(&s, &paths("r1")));
+    assert_eq!(fence["filesystem"]["denyRead"], claude["filesystem"]["denyRead"]);
+    assert_eq!(fence["filesystem"]["allowRead"], claude["filesystem"]["allowRead"]);
+    assert_eq!(fence["network"]["allowedDomains"], claude["network"]["allowedDomains"]);
+    assert_eq!(
+        fence,
+        json!({
+            "filesystem": {
+                "denyRead": ["/mnt", "/var/lib/steplet", "/work"],
+                "allowRead": ["/work/r1/repo"],
+                "allowWrite": ["/work/r1/repo", "/tmp/steplet-run-r1"],
+                "denyWrite": [
+                    "/work/r1/repo/.git",
+                    "/work/r1/repo/.claude",
+                    "/work/r1/repo/.codex",
+                    "/work/r1/repo/.cursor",
+                    "/work/r1/repo/.gemini",
+                    "/work/r1/repo/.mcp.json"
+                ]
+            },
+            "network": {"allowedDomains": ["pypi.org", "files.pythonhosted.org"], "deniedDomains": []}
+        })
+    );
+    let none = read(&fence_json(&steplet(""), &paths("r1")));
+    assert_eq!(none["network"]["allowedDomains"], json!([]), "no declared site, no network");
 }
 
 #[test]
@@ -214,6 +255,8 @@ fn the_scripts_and_the_paths_name_the_same_temporary_folder() {
         ("prepare.sh", include_str!("../src/prepare.sh")),
         ("start-run.sh", include_str!("../src/start-run.sh")),
         ("discard.sh", include_str!("../src/discard.sh")),
+        ("root-common.sh", include_str!("../src/root-common.sh")),
+        ("start-hands.sh", include_str!("../src/start-hands.sh")),
     ] {
         assert!(script.contains(&format!("{prefix}$")), "{name} names the run's temporary folder as {prefix}<id>");
     }

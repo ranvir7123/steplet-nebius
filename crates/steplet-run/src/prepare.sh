@@ -1,10 +1,14 @@
 #!/bin/bash
 # Prepares one run inside Steplet's own Linux (plan Task 6, decision D6), in the layout of plan section 3. Runs as
 # root, sent on standard input by prepare.rs, which has checked every argument; nothing here is installed.
-# Two entries, named by the first argument:
-#   prepare <run id> <repository address (plain https)> <commit> <settings.json> <mcp.json> (both in base64)
+# Three entries, named by the first argument:
+#   prepare <run id> <repository address (plain https)> <commit> <settings.json> <mcp.json> (both in base64), for
+#   Claude Code;
+#   own <run id> <repository address (plain https)> <commit> <srt-hands.json> (in base64), for Steplet's own agent
+#   (the Nebius plan, Task 5): the same working copy, with the moves' fence and their folder instead of Claude Code's
+#   files;
 #   strip <run id>: only the removal of the agent settings files from that run's working copy (phase 4 Task 2),
-#   which prepare also runs.
+#   which prepare and own also run.
 # Each agent settings file removed is said on standard output as "removed: <name>", and a ready copy as
 # "steplet-prepare: ready at <commit>"; prepare.rs reads both. Nothing else this script starts writes to standard
 # output: git's and the fence's output goes to the error output, so nothing the repository holds can add a line. A failed step exits with its own code, which
@@ -28,8 +32,10 @@ stop_steplet() {
     return 1
 }
 
-main() {
-    local ID=$1 URL=$2 COMMIT=$3 SETTINGS=$4 MCP=$5
+# Steps 1 to 5, shared by prepare and own: the fresh working copy at the declared commit, without agent settings files,
+# and the run's private folders.
+copy() {
+    local ID=$1 URL=$2 COMMIT=$3
     local W=/work/$ID R=/var/lib/steplet/runs/$ID T=/tmp/steplet-run-$ID
     local REPO=$W/repo C=$R/checkout
     local SRT=/opt/steplet/srt/node_modules/.bin/srt
@@ -86,11 +92,30 @@ EOF
     # 5. The agent settings files the repository carries are removed (D3), by the steplet account.
     strip "$ID"
 
+    cd / && rm -rf -- "$C" "$R/srt-checkout.json" || fail 15 "could not remove the checkout's folder"
+}
+
+main() {
+    local ID=$1 URL=$2 COMMIT=$3 SETTINGS=$4 MCP=$5
+    local R=/var/lib/steplet/runs/$ID
+    copy "$ID" "$URL" "$COMMIT"
     # 6. The run's settings file and MCP config, owned by root so the agent cannot change them.
-    cd / && rm -rf -- "$C" "$R/srt-checkout.json" &&
-        printf '%s' "$SETTINGS" | base64 -d > "$R/settings.json" &&
+    printf '%s' "$SETTINGS" | base64 -d > "$R/settings.json" &&
         printf '%s' "$MCP" | base64 -d > "$R/mcp.json" &&
         chmod 644 "$R/settings.json" "$R/mcp.json" ||
+        fail 15 "could not write the run's settings"
+    echo "steplet-prepare: ready at $COMMIT"
+}
+
+# For Steplet's own agent: the same working copy, then the moves' fence, owned by root so no move can change it, and
+# the moves' own folder, root's alone, where start-hands keeps each move's input and output.
+own() {
+    local ID=$1 URL=$2 COMMIT=$3 FENCE=$4
+    local R=/var/lib/steplet/runs/$ID
+    copy "$ID" "$URL" "$COMMIT"
+    printf '%s' "$FENCE" | base64 -d > "$R/srt-hands.json" &&
+        chmod 644 "$R/srt-hands.json" &&
+        install -d -o root -g root -m 700 "$R/hands" ||
         fail 15 "could not write the run's settings"
     echo "steplet-prepare: ready at $COMMIT"
 }
@@ -121,6 +146,7 @@ strip() {
 entry() {
     case "${1-}" in
         prepare) shift && main "$@" ;;
+        own) shift && own "$@" ;;
         strip) shift && strip "$@" ;;
         *) fail 10 "no such entry: ${1-}" ;;
     esac

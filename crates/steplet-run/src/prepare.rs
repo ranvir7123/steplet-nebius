@@ -7,11 +7,11 @@ use std::time::Duration;
 use steplet_core::hosts;
 
 use crate::report::changed_files;
-use crate::settings::{mcp_json, settings_json};
+use crate::settings::{fence_json, mcp_json, settings_json};
 use crate::types::{BadValue, GateLink, RunPaths, RunRequest};
 use crate::wsl;
 
-const PREPARE: &str = include_str!("prepare.sh");
+pub(crate) const PREPARE: &str = include_str!("prepare.sh");
 const DISCARD: &str = include_str!("discard.sh");
 const AFTER: &str = include_str!("after.sh");
 /// The longest Steplet waits for `prepare.sh`: its clone may take 10 minutes and its checkout 5 (their own limits).
@@ -65,12 +65,28 @@ pub struct Prepared {
 }
 
 /// The agent settings files and folders `prepare.sh` knows, in the order it removes them.
-const AGENT_FILES: &[&str] = &[".claude", ".codex", ".cursor", ".gemini", ".mcp.json"];
+pub(crate) const AGENT_FILES: &[&str] = &[".claude", ".codex", ".cursor", ".gemini", ".mcp.json"];
 
 /// Prepares run `paths` for `req`. The repository address and the commit go into a script run as root, so they are
 /// checked here first: the address must be a plain `https://` address on one of `REPOSITORY_HOSTS`, and the commit
 /// 40 or 64 lower-case hexadecimal digits.
 pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Prepared, PrepareError> {
+    check_source(req)?;
+    let settings = base64(settings_json(&req.steplet, paths, gate, req.allow_model_switch).as_bytes());
+    let mcp = base64(mcp_json(gate).as_bytes());
+    ready(req, paths, &["prepare", paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp])
+}
+
+/// Prepares run `paths` for Steplet's own agent (the Nebius plan, Task 5): the same working copy as `prepare`, checked
+/// the same way, then the moves' fence (`fence_json`) and their own folder, instead of Claude Code's files.
+pub fn prepare_own(req: &RunRequest, paths: &RunPaths) -> Result<Prepared, PrepareError> {
+    check_source(req)?;
+    let fence = base64(fence_json(&req.steplet, paths).as_bytes());
+    ready(req, paths, &["own", paths.run_id(), &req.repo_url, &req.commit, &fence])
+}
+
+/// The repository address and the commit go into a script run as root, so they are checked first.
+fn check_source(req: &RunRequest) -> Result<(), PrepareError> {
     if !is_plain_https(&req.repo_url) {
         return Err(PrepareError::Refused(BadValue("repository address")));
     }
@@ -80,10 +96,12 @@ pub fn prepare(req: &RunRequest, paths: &RunPaths, gate: &GateLink) -> Result<Pr
     if !is_commit(&req.commit) {
         return Err(PrepareError::Refused(BadValue("commit")));
     }
-    let settings = base64(settings_json(&req.steplet, paths, gate, req.allow_model_switch).as_bytes());
-    let mcp = base64(mcp_json(gate).as_bytes());
-    let args = ["prepare", paths.run_id(), &req.repo_url, &req.commit, &settings, &mcp];
-    let out = as_root(paths, PREPARE, &args, PREPARE_LIMIT)?;
+    Ok(())
+}
+
+/// Runs `prepare.sh` with `args`, and holds it to saying the copy is ready at the declared commit.
+fn ready(req: &RunRequest, paths: &RunPaths, args: &[&str]) -> Result<Prepared, PrepareError> {
+    let out = as_root(paths, PREPARE, args, PREPARE_LIMIT)?;
     let ready = format!("steplet-prepare: ready at {}", req.commit);
     if !out.stdout.lines().any(|line| line == ready) {
         let detail = "the script ended without saying the copy was ready at the declared commit".into();

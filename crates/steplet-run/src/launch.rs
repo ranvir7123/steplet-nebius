@@ -19,8 +19,11 @@ use crate::wsl;
 
 const START_RUN: &str = include_str!("start-run.sh");
 const START_RUN_PATH: &str = "/opt/steplet/bin/start-run";
-/// The longest Steplet waits for one call into its Linux while stopping a run, or for the start script's install.
-const QUICK_CALL: Duration = Duration::from_secs(10);
+/// What `start-run.sh` shares with `start-hands.sh`, which both read first (the Nebius plan, Task 5).
+pub(crate) const ROOT_COMMON: &str = include_str!("root-common.sh");
+pub(crate) const ROOT_COMMON_PATH: &str = "/opt/steplet/bin/root-common.sh";
+/// The longest Steplet waits for one call into its Linux while stopping a run, or for a start script's install.
+pub(crate) const QUICK_CALL: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub enum LaunchError {
@@ -72,13 +75,10 @@ pub fn launch(
     let stream_log = log("jsonl").map_err(|e| start("could not open the stream log", e))?;
     let error_log = log("stderr.txt").map_err(|e| start("could not open the error log", e))?;
 
-    // The start script is written fresh for every run, so the one in Linux is always this program's.
-    let install = ["/usr/bin/install", "-D", "-o", "root", "-g", "root", "-m", "755", "/dev/stdin", START_RUN_PATH];
-    let out = wsl::run_within(paths.distro_id(), "root", &install, START_RUN.as_bytes(), QUICK_CALL)
-        .map_err(|e| start("could not reach Steplet's Linux", e))?;
-    if out.status != Some(0) {
-        return Err(LaunchError::Start(format!("could not install the start script: {}", out.stderr.trim())));
-    }
+    // The start script, and what it shares with start-hands, are written fresh for every run, so the ones in Linux
+    // are always this program's.
+    install(paths.distro_id(), &[(ROOT_COMMON, ROOT_COMMON_PATH, "644"), (START_RUN, START_RUN_PATH, "755")])
+        .map_err(LaunchError::Start)?;
 
     let (secs, turns) = (seconds.to_string(), req.max_turns.to_string());
     let mut argv = vec![START_RUN_PATH, paths.run_id(), &secs, &turns];
@@ -110,6 +110,19 @@ pub fn launch(
         marker: paths.settings().into(),
         finished: false,
     })
+}
+
+/// Writes each of Steplet's own scripts, `(text, path, mode)`, into its Linux, owned by root, replacing what is there.
+pub(crate) fn install(distro_id: &str, files: &[(&str, &str, &str)]) -> Result<(), String> {
+    for (text, path, mode) in files {
+        let argv = ["/usr/bin/install", "-D", "-o", "root", "-g", "root", "-m", mode, "/dev/stdin", path];
+        let out = wsl::run_within(distro_id, "root", &argv, text.as_bytes(), QUICK_CALL)
+            .map_err(|e| format!("could not reach Steplet's Linux: {e}"))?;
+        if out.status != Some(0) {
+            return Err(format!("could not install {path}: {}", out.stderr.trim()));
+        }
+    }
+    Ok(())
 }
 
 impl RunHandle {

@@ -4,6 +4,7 @@
 use serde_json::{Value, json};
 use steplet_core::header::Steplet;
 
+use crate::prepare::AGENT_FILES;
 use crate::types::{GateLink, RunPaths, STATE_ROOT, WORK_ROOT};
 
 /// The gate's name as an MCP server; Claude Code calls its tool `mcp__gate__decide`.
@@ -52,6 +53,26 @@ pub fn settings_json(s: &Steplet, paths: &RunPaths, gate: &GateLink, allow_model
             gate.deadline_ms(),
             gate.steplet_pid()
         ),
+    }))
+}
+
+/// The fence of one run of `s` by Steplet's own agent (the Nebius plan, Task 5), as srt's settings file: every move
+/// runs inside it, the file tools as well as the commands. Its read rules and its sites are Claude Code's fence's
+/// (`settings_json`); it may write the working copy and the run's temporary folder (the moves' `HOME` and `TMPDIR`),
+/// but not the copy's `.git` or any agent settings file (D3).
+pub fn fence_json(s: &Steplet, paths: &RunPaths) -> String {
+    let repo = paths.work_repo();
+    let domains: Vec<&str> = s.allow.domains.iter().map(|d| d.text.as_str()).collect();
+    let deny_write: Vec<String> =
+        std::iter::once(".git").chain(AGENT_FILES.iter().copied()).map(|f| format!("{repo}/{f}")).collect();
+    pretty(&json!({
+        "filesystem": {
+            "denyRead": [MOUNTS, STATE_ROOT, WORK_ROOT],
+            "allowRead": [repo],
+            "allowWrite": [repo, paths.run_tmp()],
+            "denyWrite": deny_write,
+        },
+        "network": { "allowedDomains": domains, "deniedDomains": [] },
     }))
 }
 
