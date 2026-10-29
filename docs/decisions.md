@@ -383,6 +383,9 @@ Choices made while building (Claude's, each one open to the user's change):
 |---|---|---|
 | N9 | **The screen tests run in Microsoft Edge 156, through a local settings file `web/playwright.edge.config.ts` kept out of git (`.git/info/exclude`),** not in Playwright's own Chromium. | Playwright 1.63.0 needs its Chromium build 1243, which is no longer on this computer; Edge is already installed and is the engine inside WebView2, the real window. No test compares pixels. Cost: about 35 minutes for all 330 tests with eight Edge windows at once (one click timed out under that load and passed when run again); the committed setup still names Chromium, so anyone else needs `npx playwright install chromium`. |
 | N10 | **The model's answer type is `ModelReply`,** not `Reply` as the plan wrote it. | `steplet_run::Reply` already names the receiver's answer to a question. |
+| N11 | **A saved key may be up to 2,048 bytes,** up from the original's 512 characters. | Nebius keys are long signed tokens, and a real one could pass 512. Windows Credential Manager holds up to 2,560 bytes per entry, so 2,048 leaves room. Cost: a pasted paragraph of up to 2,048 bytes with no spaces would be saved as a "key" and fail only when used. |
+| N12 | **Pictures of screens this copy changes go to `docs/screens/nebius/`;** `docs/screens/phase-4/` keeps the original's. | The original's pictures stay as they were for comparison. Cost: two folders to look in. |
+| N13 | **"Setup is ready" still means ready for Claude Code (Steplet's Linux plus the Anthropic key), until Task 8 makes it per runner. The Anthropic box is titled "Anthropic key, for Claude Code", and the Nebius box comes first.** | Changing what "ready" means before the chooser knows about runners would break the original's run flow. Nebius first because Steplet's own agent is this copy's default. Cost: until Task 8, a user with only a Nebius key is told Setup is not finished. |
 
 ## Background
 

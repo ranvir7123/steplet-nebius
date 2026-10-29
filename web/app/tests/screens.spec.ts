@@ -2,12 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 
 // Every screen in every state the plan lists (Task 14, the plan's section 8), in light and dark, 1100 and 560 pixels
-// wide. Each picture is saved as docs/screens/phase-4/<screen>-<state>-<light|dark>-<1100|560>.png, to be looked at.
+// wide. Each picture is saved as docs/screens/phase-4/<screen>-<state>-<light|dark>-<1100|560>.png, to be looked at;
+// a screen the Nebius copy changed is saved in docs/screens/nebius/ instead, and phase-4 keeps the original's pictures.
 // Each state also fails on clipped text, sideways page scroll, a control that shows no focus ring when tabbed to, and
 // any request that leaves the page's own server. Against the screens build and its stand-in backend, which replays
 // data saved from real Rust output (web/app/tests/fixtures).
 
 const SHOTS = fileURLToPath(new URL("../../../docs/screens/phase-4/", import.meta.url));
+const NEBIUS_SHOTS = fileURLToPath(new URL("../../../docs/screens/nebius/", import.meta.url));
+/** The screens the Nebius copy changed. */
+const CHANGED_IN_NEBIUS_COPY = new Set(["setup"]);
 const EXAMPLE = fileURLToPath(new URL("../../../examples/run-tests.steplet", import.meta.url));
 const SENTENCE = "I understand the risks and want to run this file";
 
@@ -138,9 +142,29 @@ const states: State[] = [
     scenario: `chooser-${state}`,
     reach: chooser,
   })),
-  ...["nothing-done", "wsl-missing", "wsl-too-old", "could-not-look", "all-ready", "key-saved", "switch-broken"].map(
-    (state) => ({ screen: "setup", state, scenario: `setup-${state}`, reach: setup }),
-  ),
+  ...[
+    "nothing-done",
+    "wsl-missing",
+    "wsl-too-old",
+    "could-not-look",
+    "all-ready",
+    "key-saved",
+    "nebius-key-saved",
+    "switch-broken",
+  ].map((state) => ({ screen: "setup", state, scenario: `setup-${state}`, reach: setup })),
+  {
+    screen: "setup",
+    state: "key-refused",
+    scenario: "setup-key-refused",
+    reach: async (page) => {
+      await setup(page);
+      const nebius = page.getByRole("region", { name: "Nebius Token Factory key" });
+      await nebius.getByLabel("Nebius API key").fill("two words");
+      await nebius.getByRole("button", { name: "Save key", exact: true }).click();
+      await expect(nebius.getByRole("alert")).toBeVisible();
+      await settled(page);
+    },
+  },
   {
     screen: "setup",
     state: "installing",
@@ -367,18 +391,31 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
   "chooser-needs-setup": { shows: ["Steplet's own Linux or your key is not ready yet."] },
   "chooser-wsl-missing": { shows: ["Steplet's own Linux or your key is not ready yet."] },
   "setup-nothing-done": {
-    shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux"],
-    hides: [/^Windows may still ask which app to use/],
+    shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux", "Nebius Token Factory key"],
+    hides: [/^Windows may still ask which app to use/, /Saved/],
   },
   "setup-wsl-missing": { shows: ["wsl --install --no-distribution"] },
   "setup-wsl-too-old": { shows: ["wsl --update"] },
   "setup-could-not-look": { shows: [/^Steplet could not look at its own Linux/] },
   // With the switch on, Setup says what to do if Windows' "Select an app" box leaves Steplet out (Task 15, final review).
   "setup-all-ready": {
-    shows: [/^Its tools are there/, "Saved", /^Windows may still ask which app to use the first time/],
+    shows: [
+      /^Its tools are there/,
+      /^Saved$/,
+      "Steplet sends it only to api.tokenfactory.nebius.com.",
+      /^Windows may still ask which app to use the first time/,
+    ],
     hides: [/^Missing$/],
   },
-  "setup-key-saved": { shows: [/^Missing in Steplet's Linux: Claude Code/, "Saved"] },
+  // The Anthropic key only.
+  "setup-key-saved": {
+    shows: [/^Missing in Steplet's Linux: Claude Code/, /^Saved$/],
+    hides: ["Steplet sends it only to api.tokenfactory.nebius.com."],
+  },
+  "setup-nebius-key-saved": { shows: ["Steplet sends it only to api.tokenfactory.nebius.com."], hides: [/^Saved$/] },
+  "setup-key-refused": {
+    shows: ["Steplet did not save this: a key has no spaces, line breaks or hidden characters inside it."],
+  },
   "setup-switch-broken": { shows: [/Windows' setting for it is out of date/] },
   "setup-installing": { shows: ["Steplet is changing its Linux. This can take several minutes…"] },
   "setup-install-failed": { shows: [/^Setup stopped while trying to set up Steplet's Linux/] },
@@ -513,7 +550,8 @@ for (const s of states) {
         // A page the log scrolled to its newest row is pictured as the window shows it: a whole-page picture would
         // draw the bar that stays at the top of the window in the middle of the page.
         const scrolled = await page.evaluate(() => window.scrollY > 0);
-        await page.screenshot({ path: `${SHOTS}${name}.png`, fullPage: !scrolled, animations: "disabled" });
+        const folder = CHANGED_IN_NEBIUS_COPY.has(s.screen) ? NEBIUS_SHOTS : SHOTS;
+        await page.screenshot({ path: `${folder}${name}.png`, fullPage: !scrolled, animations: "disabled" });
 
         expect(await clipped(page), "text cut off").toEqual([]);
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

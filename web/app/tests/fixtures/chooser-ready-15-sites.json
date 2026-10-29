@@ -3302,7 +3302,10 @@
       "text": "The gate program for this Steplet is in its Linux.",
       "detail": null
     },
-    "key_saved": true,
+    "keys": {
+      "nebius": true,
+      "anthropic": true
+    },
     "opens_steplet_files": "off",
     "ready": true,
     "wsl_fix": null,
@@ -3320,5 +3323,6 @@
   "saved_to": null,
   "save_error": null,
   "switch_error": null,
+  "key_error": null,
   "allowed_switch": []
 }

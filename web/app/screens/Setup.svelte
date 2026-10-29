@@ -1,12 +1,13 @@
 <script lang="ts">
   // Screen 4: setup, once. A checklist of what a run needs (Windows' Linux feature, Steplet's own Linux, its tools,
   // its gate program), each with its state as a word and an icon; one button that installs Steplet's Linux, with what
-  // it printed; the receiver's key; and the switch for opening .steplet files. Steplet never runs Windows' own
-  // install for the receiver: it shows the command to type. Every line's words come from Rust; what setup's programs
-  // print is file text.
+  // it printed; the receiver's two keys, each in a box of its own; and the switch for opening .steplet files. Steplet
+  // never runs Windows' own install for the receiver: it shows the command to type. Every line's words come from Rust;
+  // what setup's programs print is file text.
   import { getContext, onMount } from "svelte";
   import FileText from "../../shared/FileText.svelte";
   import Icon from "../../shared/Icon.svelte";
+  import type { KeyFor } from "../../shared/types/KeyFor";
   import type { LineView } from "../../shared/types/LineView";
   import type { SetupView } from "../../shared/types/SetupView";
   import type { Backend } from "../lib/backend";
@@ -19,9 +20,47 @@
   let looking = $state(true);
   let lookError = $state<string | null>(null);
   let askRemove = $state(false);
-  let key = $state("");
-  let keyError = $state<string | null>(null);
+  let typed = $state<Record<KeyFor, string>>({ nebius: "", anthropic: "" });
+  let keyError = $state<Record<KeyFor, string | null>>({ nebius: null, anthropic: null });
   let switchError = $state<string | null>(null);
+
+  interface KeyBox {
+    which: KeyFor;
+    title: string;
+    help: string;
+    /** Where Steplet sends the key, said once it is saved. */
+    sentTo: string | null;
+    label: string;
+    topic: string;
+    link: string;
+  }
+
+  /** Nebius's first: Steplet's own agent, which uses it, is the first choice to run a file. */
+  const keyBoxes: KeyBox[] = [
+    {
+      which: "nebius",
+      title: "Nebius Token Factory key",
+      help:
+        "Steplet's own agent uses NVIDIA Nemotron models on Nebius Token Factory. Create a key at " +
+        "tokenfactory.nebius.com, under API keys, and paste it here. It is kept in Windows Credential Manager on this " +
+        "computer and sent only to Nebius.",
+      sentTo: "Steplet sends it only to api.tokenfactory.nebius.com.",
+      label: "Nebius API key",
+      topic: "nebius-key",
+      link: "Get a key from Nebius",
+    },
+    {
+      which: "anthropic",
+      title: "Anthropic key, for Claude Code",
+      help:
+        "Claude Code works with your own Anthropic API key. Steplet keeps it in Windows' Credential Manager, locked to " +
+        "your Windows account, and never shows it again.",
+      sentTo: null,
+      label: "Anthropic API key",
+      topic: "anthropic-key",
+      link: "Get a key from Anthropic",
+    },
+  ];
 
   /** A refusal from Rust is Steplet's own sentence. */
   const sentence = (e: unknown) => (typeof e === "string" ? e : "Steplet could not do that.");
@@ -53,23 +92,23 @@
     if (after) view = after;
   }
 
-  async function saveKey() {
-    keyError = null;
-    const typed = key;
-    key = "";
+  async function saveKey(which: KeyFor) {
+    keyError[which] = null;
+    const key = typed[which];
+    typed[which] = "";
     try {
-      view = await backend.saveKey(typed);
+      view = await backend.saveKey(which, key);
     } catch (e) {
-      keyError = sentence(e);
+      keyError[which] = sentence(e);
     }
   }
 
-  async function forgetKey() {
-    keyError = null;
+  async function forgetKey(which: KeyFor) {
+    keyError[which] = null;
     try {
-      view = await backend.forgetKey();
+      view = await backend.forgetKey(which);
     } catch (e) {
-      keyError = sentence(e);
+      keyError[which] = sentence(e);
     }
   }
 
@@ -101,6 +140,38 @@
       {#if l.detail}<div class="printed"><FileText text={l.detail} block /></div>{/if}
     </div>
   </li>
+{/snippet}
+
+{#snippet keyBox(k: KeyBox, saved: boolean)}
+  <section class="panel" aria-labelledby="{k.which}-key-title">
+    <h2 id="{k.which}-key-title">{k.title}</h2>
+    <p class="muted">{k.help}</p>
+    {#if saved}
+      <p class="saved"><Icon kind="green" />{#if k.sentTo}<span><strong>Saved.</strong> {k.sentTo}</span>{:else}Saved{/if}</p>
+    {/if}
+    <label class="label" for="{k.which}-key">{k.label}</label>
+    <div class="key-row">
+      <input
+        id="{k.which}-key"
+        class="field"
+        type="password"
+        autocomplete="off"
+        spellcheck="false"
+        placeholder={saved ? "Paste a new key to replace it" : "Paste your key"}
+        bind:value={typed[k.which]}
+      />
+      <button
+        class="button primary"
+        type="button"
+        disabled={typed[k.which].trim() === ""}
+        onclick={() => saveKey(k.which)}>Save key</button>
+      {#if saved}
+        <button class="button" type="button" onclick={() => forgetKey(k.which)}>Forget key</button>
+      {/if}
+    </div>
+    {#if keyError[k.which]}<p class="message error" role="alert">{keyError[k.which]}</p>{/if}
+    <button class="link" type="button" onclick={() => backend.openHelp(k.topic)}>{k.link}</button>
+  </section>
 {/snippet}
 
 <article class="setup">
@@ -204,34 +275,9 @@
       {/if}
     </section>
 
-    <section class="panel" aria-labelledby="key-title">
-      <h2 id="key-title">Your Anthropic key</h2>
-      <p class="muted">
-        Claude Code works with your own Anthropic API key. Steplet keeps it in Windows' Credential Manager, locked to your
-        Windows account, and never shows it again.
-      </p>
-      {#if view.key_saved}
-        <p class="saved"><Icon kind="green" />Saved</p>
-      {/if}
-      <label class="label" for="key">Anthropic API key</label>
-      <div class="key-row">
-        <input
-          id="key"
-          class="field"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder={view.key_saved ? "Paste a new key to replace it" : "Paste your key"}
-          bind:value={key}
-        />
-        <button class="button primary" type="button" disabled={key.trim() === ""} onclick={saveKey}>Save key</button>
-        {#if view.key_saved}
-          <button class="button" type="button" onclick={forgetKey}>Forget key</button>
-        {/if}
-      </div>
-      {#if keyError}<p class="message error" role="alert">{keyError}</p>{/if}
-      <button class="link" type="button" onclick={() => backend.openHelp("anthropic-key")}>Get a key from Anthropic</button>
-    </section>
+    {#each keyBoxes as k (k.which)}
+      {@render keyBox(k, view.keys[k.which])}
+    {/each}
 
     <section class="panel" aria-labelledby="switch-title">
       <h2 id="switch-title">Opening .steplet files</h2>
@@ -437,6 +483,17 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    color: var(--green-fg);
+    font-weight: 600;
+  }
+
+  /* Where the key goes, after "Saved.": a plain sentence, not part of the green word. */
+  .saved span {
+    color: var(--text);
+    font-weight: 400;
+  }
+
+  .saved strong {
     color: var(--green-fg);
     font-weight: 600;
   }

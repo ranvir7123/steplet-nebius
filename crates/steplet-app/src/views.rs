@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use steplet_core::display::{self, Segment};
@@ -454,15 +454,46 @@ pub enum Switch {
     Broken,
 }
 
+/// Which of the receiver's keys a Setup command is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyFor {
+    /// Nebius Token Factory's, for Steplet's own agent.
+    Nebius,
+    /// Anthropic's, for Claude Code.
+    Anthropic,
+}
+
+/// Which of the receiver's keys are saved; never the keys.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct Keys {
+    pub nebius: bool,
+    pub anthropic: bool,
+}
+
+impl Keys {
+    pub const NONE: Keys = Keys { nebius: false, anthropic: false };
+    pub const BOTH: Keys = Keys { nebius: true, anthropic: true };
+
+    /// These keys, with the key `which` saved or not.
+    pub fn with(self, which: KeyFor, saved: bool) -> Keys {
+        match which {
+            KeyFor::Nebius => Keys { nebius: saved, ..self },
+            KeyFor::Anthropic => Keys { anthropic: saved, ..self },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct SetupView {
     pub wsl: LineView,
     pub linux: LineView,
     pub tools: LineView,
     pub gate: LineView,
-    pub key_saved: bool,
+    pub keys: Keys,
     pub opens_steplet_files: Switch,
-    /// Everything a run needs is there (the switch is not needed to run).
+    /// Everything a run with Claude Code needs is there: Steplet's Linux and the Anthropic key (the switch is not
+    /// needed to run).
     pub ready: bool,
     /// When Windows' Linux feature is missing or too old: what to do about it, with the command the receiver types
     /// in a terminal opened as administrator. Steplet never runs it.
@@ -515,8 +546,8 @@ fn check_words(check: &str) -> &str {
     CHECK_WORDS.iter().find(|(c, _)| *c == check).map_or(check, |(_, words)| words)
 }
 
-/// The setup checklist from what `steplet_run::setup::look` saw, whether a key is saved, and the switch.
-pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Switch) -> SetupView {
+/// The setup checklist from what `steplet_run::setup::look` saw, which keys are saved, and the switch.
+pub fn setup_view(state: &steplet_run::setup::State, keys: Keys, switch: Switch) -> SetupView {
     use steplet_run::setup::Wsl;
     let said = |status: LineStatus, text: String| LineView { status, text, detail: None };
     let wsl = match &state.wsl {
@@ -568,7 +599,7 @@ pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Sw
     } else {
         said(LineStatus::Missing, "The gate program for this Steplet is not in its Linux yet.".into())
     };
-    let ready = [&wsl, &linux, &tools, &gate].iter().all(|l| l.status == LineStatus::Ready) && key_saved;
+    let ready = [&wsl, &linux, &tools, &gate].iter().all(|l| l.status == LineStatus::Ready) && keys.anthropic;
     let fix =
         |why: &str, command: &str, then: &str| WslFix { why: why.into(), command: command.into(), then: then.into() };
     let wsl_fix = match state.wsl {
@@ -595,7 +626,7 @@ pub fn setup_view(state: &steplet_run::setup::State, key_saved: bool, switch: Sw
     } else {
         Offer::None
     };
-    SetupView { wsl, linux, tools, gate, key_saved, opens_steplet_files: switch, ready, wsl_fix, install }
+    SetupView { wsl, linux, tools, gate, keys, opens_steplet_files: switch, ready, wsl_fix, install }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -797,8 +828,10 @@ pub fn reply_words(r: &Reply) -> &'static str {
 /// The setup screen after each change the receiver can make on it, for the stand-in backend (it decides nothing).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct SetupChanges {
-    pub key_saved: SetupView,
-    pub key_forgotten: SetupView,
+    pub nebius_key_saved: SetupView,
+    pub nebius_key_forgotten: SetupView,
+    pub anthropic_key_saved: SetupView,
+    pub anthropic_key_forgotten: SetupView,
     pub switch_on: SetupView,
     pub switch_off: SetupView,
     /// After "Start over": Steplet's Linux removed.
@@ -806,12 +839,14 @@ pub struct SetupChanges {
 }
 
 impl SetupChanges {
-    pub fn of(state: &steplet_run::setup::State, key_saved: bool, switch: Switch) -> SetupChanges {
+    pub fn of(state: &steplet_run::setup::State, keys: Keys, switch: Switch) -> SetupChanges {
         SetupChanges {
-            key_saved: setup_view(state, true, switch),
-            key_forgotten: setup_view(state, false, switch),
-            switch_on: setup_view(state, key_saved, Switch::On),
-            switch_off: setup_view(state, key_saved, Switch::Off),
+            nebius_key_saved: setup_view(state, keys.with(KeyFor::Nebius, true), switch),
+            nebius_key_forgotten: setup_view(state, keys.with(KeyFor::Nebius, false), switch),
+            anthropic_key_saved: setup_view(state, keys.with(KeyFor::Anthropic, true), switch),
+            anthropic_key_forgotten: setup_view(state, keys.with(KeyFor::Anthropic, false), switch),
+            switch_on: setup_view(state, keys, Switch::On),
+            switch_off: setup_view(state, keys, Switch::Off),
             removed: setup_view(
                 &steplet_run::setup::State {
                     linux: None,
@@ -820,7 +855,7 @@ impl SetupChanges {
                     trouble: None,
                     ..state.clone()
                 },
-                key_saved,
+                keys,
                 switch,
             ),
         }
@@ -1322,6 +1357,8 @@ pub struct Fixture {
     pub save_error: Option<String>,
     /// `set_opens_steplet_files`'s refusal instead, in Steplet's words (Windows would not change the entry).
     pub switch_error: Option<String>,
+    /// `save_key`'s refusal instead, in Steplet's words (what was typed is not a key).
+    pub key_error: Option<String>,
     /// What the run sends when the receiver pressed "Run again, allowing another model" (E1).
     pub allowed_switch: Vec<ProgressView>,
 }

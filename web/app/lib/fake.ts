@@ -100,12 +100,16 @@ export const backend: Backend = {
     setup = (await changes()).removed;
     return setup;
   },
-  async saveKey() {
-    setup = (await changes()).key_saved;
+  async saveKey(which) {
+    const f = await fixture();
+    if (f.key_error) throw f.key_error;
+    const c = await changes();
+    setup = which === "nebius" ? c.nebius_key_saved : c.anthropic_key_saved;
     return setup;
   },
-  async forgetKey() {
-    setup = (await changes()).key_forgotten;
+  async forgetKey(which) {
+    const c = await changes();
+    setup = which === "nebius" ? c.nebius_key_forgotten : c.anthropic_key_forgotten;
     return setup;
   },
   async setOpensStepletFiles(on) {

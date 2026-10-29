@@ -1,0 +1,262 @@
+{
+  "screen": "setup",
+  "preview": null,
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0).",
+      "detail": null
+    },
+    "linux": {
+      "status": "ready",
+      "text": "Steplet's own Linux is installed.",
+      "detail": null
+    },
+    "tools": {
+      "status": "ready",
+      "text": "Its tools are there: git, Python, Claude Code and the rest.",
+      "detail": null
+    },
+    "gate": {
+      "status": "ready",
+      "text": "The gate program for this Steplet is in its Linux.",
+      "detail": null
+    },
+    "keys": {
+      "nebius": true,
+      "anthropic": false
+    },
+    "opens_steplet_files": "off",
+    "ready": false,
+    "wsl_fix": null,
+    "install": "none"
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "setup_changes": {
+    "nebius_key_saved": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "nebius_key_forgotten": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "anthropic_key_saved": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": true
+      },
+      "opens_steplet_files": "off",
+      "ready": true,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "anthropic_key_forgotten": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "switch_on": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
+      "opens_steplet_files": "on",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "switch_off": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "ready",
+        "text": "Steplet's own Linux is installed.",
+        "detail": null
+      },
+      "tools": {
+        "status": "ready",
+        "text": "Its tools are there: git, Python, Claude Code and the rest.",
+        "detail": null
+      },
+      "gate": {
+        "status": "ready",
+        "text": "The gate program for this Steplet is in its Linux.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "none"
+    },
+    "removed": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "install"
+    }
+  },
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null,
+  "switch_error": null,
+  "key_error": null,
+  "allowed_switch": []
+}

@@ -224,7 +224,10 @@
       "text": "Steplet can look at its gate program once its Linux is installed.",
       "detail": null
     },
-    "key_saved": false,
+    "keys": {
+      "nebius": false,
+      "anthropic": false
+    },
     "opens_steplet_files": "off",
     "ready": false,
     "wsl_fix": null,
@@ -242,5 +245,6 @@
   "saved_to": null,
   "save_error": null,
   "switch_error": null,
+  "key_error": null,
   "allowed_switch": []
 }

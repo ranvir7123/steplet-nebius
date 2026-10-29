@@ -3,6 +3,7 @@
 // from real Rust output). The screens import `backend` from "$backend"; the build picks the version (vite.config.ts),
 // so the app never holds the stand-in.
 import type { ChooserView } from "../../shared/types/ChooserView";
+import type { KeyFor } from "../../shared/types/KeyFor";
 import type { PreviewView } from "../../shared/types/PreviewView";
 import type { ProgressView } from "../../shared/types/ProgressView";
 import type { Seg } from "../../shared/types/Seg";
@@ -31,8 +32,10 @@ export interface Backend {
   setupInstall(): Promise<void>;
   /** "Start over": removes Steplet's own Linux and everything in it. A failure rejects with a FailureView. */
   setupRemove(): Promise<SetupView>;
-  saveKey(key: string): Promise<SetupView>;
-  forgetKey(): Promise<SetupView>;
+  /** Saves the receiver's key `which`; a refusal rejects with Steplet's sentence. */
+  saveKey(which: KeyFor, key: string): Promise<SetupView>;
+  /** Removes the receiver's key `which`, and only that one. */
+  forgetKey(which: KeyFor): Promise<SetupView>;
   setOpensStepletFiles(on: boolean): Promise<SetupView>;
   /** Starts the run of the file previewed with this SHA-256; `typed` is the red file's sentence;
    * `allowModelSwitch` is "Run again, allowing another model" (E1). */

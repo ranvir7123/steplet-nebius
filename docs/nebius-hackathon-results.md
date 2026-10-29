@@ -190,3 +190,119 @@ test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 ```
 
 Not shown by these tests: a call to the real Nebius (Task 4), and WinHTTP through a proxy (this computer has none).
+
+## Task 3: The Nebius key box (29 Oct 2026)
+
+Setup now has two key boxes, Nebius first, then Anthropic, each with its own Credential Manager entry:
+`Steplet/nebius-api-key` (new) and `Steplet/anthropic-api-key` (the original's, unchanged so a saved key still
+works). `save_key` and `forget_key` take `which` (`KeyFor::Nebius` or `KeyFor::Anthropic`), and the setup screen's
+data says which keys are saved (`keys: { nebius, anthropic }`), never the keys themselves.
+
+Not as the plan wrote it: the screen's data holds `keys: Keys` rather than a lone `nebius_key: bool`, so the two boxes
+read the same way; `scenarios.ts` did not change, because the new states are saved fixtures (`setup-nebius-key-saved`,
+`setup-key-refused`); the size limit is 2,048 bytes rather than 512 characters (N11); and "Setup is ready" still means
+ready for Claude Code (N13).
+
+Before the code was connected:
+
+```
+> cargo test -p steplet-app --offline --test key --no-run
+error[E0432]: unresolved import `steplet_app::key::Entries`
+error[E0432]: unresolved import `steplet_app::views::KeyFor`
+error[E0425]: cannot find function `check` in module `key`
+error[E0425]: cannot find value `ENTRIES` in module `key`
+error[E0609]: no field `keys` on type `SetupView`
+error: could not compile `steplet-app` (test "key") due to 12 previous errors
+```
+
+After, every test in the app crate (the ignored ones need Steplet's Linux and run only on request):
+
+```
+> cargo test -p steplet-app --offline
+     Running tests\fixtures.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+     Running tests\help.rs
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\key.rs
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\open.rs
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests\pins.rs
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\register.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+     Running tests\save.rs
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\session.rs
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+     Running tests\session_live.rs
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\setup.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\shell.rs
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\suite_live.rs
+test result: ok. 0 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\views.rs
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+```
+
+The six key tests are `key_is_stored_read_and_forgotten`, `what_is_not_a_key_is_refused_and_nothing_is_saved`,
+`a_pasted_key_is_trimmed` (a 2,048-character key with spaces around it is saved without them),
+`an_empty_key_is_refused`, `the_nebius_key_has_its_own_entry` (saving or forgetting one key leaves the other alone)
+and `the_setup_view_never_holds_the_key`. They save only made-up keys, under made-up entry names, and remove them.
+
+The web side:
+
+```
+> npm --prefix web run check
+COMPLETED 161 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+> npx --offline playwright test --config playwright.edge.config.ts setup.spec.ts
+  9 passed
+> npx --offline playwright test --config playwright.edge.config.ts screens.spec.ts -g "(?<!needs-)setup-|every_state_has_its_proof"
+  53 passed (55.5s)
+> npx --offline playwright test --config playwright.edge.config.ts      (every web test, after a fresh build:screens)
+  341 passed (5.9m)
+```
+
+That last run also redraws the original's pictures in Edge, so `docs/screens/phase-4/` was put back with
+`git restore` afterwards.
+
+The web tests were written after the web code, so the code was broken on purpose once to see them catch it: every
+Save button was made to save the Anthropic key, then the file was put back (it compared equal to the original).
+
+```
+> npx --offline playwright test --config playwright.edge.config.ts setup.spec.ts      (Save broken on purpose)
+  x  4 [screens] › app\tests\setup.spec.ts:60:1 › the_nebius_key_has_its_own_box_first (5.3s)
+  x  6 [screens] › app\tests\setup.spec.ts:101:1 › a_refused_key_says_why_in_its_own_box (5.3s)
+  2 failed
+  7 passed (19.5s)
+restored: True
+```
+
+The first `screens.spec.ts` run also caught a real fault: the exact match for "Saved" failed in 8 pictures, because
+the saved line's markup carried stray spaces. The line was put on one line and all 53 passed.
+
+Format, lint and lock files:
+
+```
+> cargo fmt --all -- --check          (after cargo fmt --all rewrapped five calls in tests/fixtures.rs and tests/views.rs)
+fmt exit: 0
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.05s
+clippy exit: 0
+> git status --short -- Cargo.lock web/package-lock.json
+(nothing printed: neither lock file changed)
+```
+
+Looked at in dark mode at 1100 and 560 wide (`docs/screens/nebius/`): nothing set up, all ready, only the Nebius key
+saved, only the Anthropic key saved, and a refused key. The Nebius box sits between Steplet's Linux and the Anthropic
+box, the "Saved." line fits on one line at 560, and the refusal stays inside the Nebius box. Nothing needed fixing.
+The original's pictures in `docs/screens/phase-4/` are unchanged.
+
+Not shown yet: the saved line says "Steplet sends it only to api.tokenfactory.nebius.com." Task 2's
+`sends_the_key_as_a_bearer_header_and_nowhere_else` shows the key goes only in the request header to the address it
+is given; that the key never reaches Steplet's Linux is Task 9's `the_nebius_key_never_reaches_linux`. A real key
+typed into the real window is Task 4.

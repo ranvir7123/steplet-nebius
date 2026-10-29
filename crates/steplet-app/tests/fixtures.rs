@@ -15,8 +15,8 @@ use steplet_app::open::preview_file;
 use steplet_app::pins::Pins;
 use steplet_app::session::{ASK_LIMIT, RUN_LIMIT, Relay};
 use steplet_app::views::{
-    self, ChooserView, Fixture, Limits, PreviewView, ProgressView, Replies, ReportView, SetupChanges, SetupView,
-    Switch, failure, report_view, setup_view,
+    self, ChooserView, Fixture, KeyFor, Keys, Limits, PreviewView, ProgressView, Replies, ReportView, SetupChanges,
+    SetupView, Switch, failure, report_view, setup_view,
 };
 use steplet_core::header::Steplet;
 use steplet_core::identity::Pin;
@@ -152,7 +152,7 @@ fn ready_wsl() -> Wsl {
 }
 
 fn setup_all_ready(switch: Switch) -> SetupView {
-    setup_view(&state(ready_wsl(), true, &[], true, None), true, switch)
+    setup_view(&state(ready_wsl(), true, &[], true, None), Keys::BOTH, switch)
 }
 
 /// Lines as Linux programs print them during setup, escape codes and all, as the Setup log shows them (file text).
@@ -407,6 +407,7 @@ fn fixture(screen: &str) -> Fixture {
         saved_to: None,
         save_error: None,
         switch_error: None,
+        key_error: None,
         allowed_switch: Vec::new(),
     }
 }
@@ -516,28 +517,36 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert("chooser-ready-15-sites", chooser(longest.as_bytes(), true, Some(setup_all_ready(Switch::Off))));
     s.insert(
         "chooser-needs-setup",
-        chooser(&example, false, Some(setup_view(&state(ready_wsl(), false, &[], false, None), false, Switch::Off))),
+        chooser(
+            &example,
+            false,
+            Some(setup_view(&state(ready_wsl(), false, &[], false, None), Keys::NONE, Switch::Off)),
+        ),
     );
     s.insert(
         "chooser-wsl-missing",
-        chooser(&example, false, Some(setup_view(&state(Wsl::Missing, false, &[], false, None), false, Switch::Off))),
+        chooser(
+            &example,
+            false,
+            Some(setup_view(&state(Wsl::Missing, false, &[], false, None), Keys::NONE, Switch::Off)),
+        ),
     );
 
     // Setup
-    let setup = |st: State, key: bool, switch: Switch| Fixture {
-        setup: Some(setup_view(&st, key, switch)),
-        setup_changes: Some(SetupChanges::of(&st, key, switch)),
+    let setup = |st: State, keys: Keys, switch: Switch| Fixture {
+        setup: Some(setup_view(&st, keys, switch)),
+        setup_changes: Some(SetupChanges::of(&st, keys, switch)),
         ..fixture("setup")
     };
     let nothing = || state(ready_wsl(), false, &[], false, None);
     let all_ready = || state(ready_wsl(), true, &[], true, None);
-    s.insert("setup-nothing-done", setup(nothing(), false, Switch::Off));
-    s.insert("setup-wsl-missing", setup(state(Wsl::Missing, false, &[], false, None), false, Switch::Off));
+    s.insert("setup-nothing-done", setup(nothing(), Keys::NONE, Switch::Off));
+    s.insert("setup-wsl-missing", setup(state(Wsl::Missing, false, &[], false, None), Keys::NONE, Switch::Off));
     s.insert(
         "setup-wsl-too-old",
-        setup(state(Wsl::TooOld { version: "2.0.9.0".into() }, false, &[], false, None), false, Switch::Off),
+        setup(state(Wsl::TooOld { version: "2.0.9.0".into() }, false, &[], false, None), Keys::NONE, Switch::Off),
     );
-    s.insert("setup-installing", Fixture { setup_lines: setup_lines(), ..setup(nothing(), false, Switch::Off) });
+    s.insert("setup-installing", Fixture { setup_lines: setup_lines(), ..setup(nothing(), Keys::NONE, Switch::Off) });
     s.insert(
         "setup-install-failed",
         Fixture {
@@ -549,15 +558,28 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
                          Temporary failure resolving 'archive.ubuntu.com'"
                         .into(),
             })),
-            ..setup(nothing(), false, Switch::Off)
+            ..setup(nothing(), Keys::NONE, Switch::Off)
         },
     );
-    s.insert("setup-all-ready", setup(all_ready(), true, Switch::On));
+    s.insert("setup-all-ready", setup(all_ready(), Keys::BOTH, Switch::On));
+    // The Anthropic key only, as before the Nebius copy.
     s.insert(
         "setup-key-saved",
-        setup(state(ready_wsl(), true, &["claude-code", "srt"], true, None), true, Switch::Off),
+        setup(
+            state(ready_wsl(), true, &["claude-code", "srt"], true, None),
+            Keys::NONE.with(KeyFor::Anthropic, true),
+            Switch::Off,
+        ),
     );
-    s.insert("setup-switch-broken", setup(all_ready(), true, Switch::Broken));
+    s.insert("setup-nebius-key-saved", setup(all_ready(), Keys::NONE.with(KeyFor::Nebius, true), Switch::Off));
+    s.insert(
+        "setup-key-refused",
+        Fixture {
+            key_error: Some(steplet_app::key::check("two words").unwrap_err()),
+            ..setup(all_ready(), Keys::NONE, Switch::Off)
+        },
+    );
+    s.insert("setup-switch-broken", setup(all_ready(), Keys::BOTH, Switch::Broken));
     s.insert(
         "setup-switch-fails",
         Fixture {
@@ -565,12 +587,16 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
                 "Steplet could not change what opens .steplet files. {}",
                 steplet_app::views::windows_says("Access is denied. (os error 5)")
             )),
-            ..setup(all_ready(), true, Switch::Off)
+            ..setup(all_ready(), Keys::BOTH, Switch::Off)
         },
     );
     s.insert(
         "setup-could-not-look",
-        setup(state(ready_wsl(), false, &[], false, Some("WSL did not answer within 60 seconds")), true, Switch::Off),
+        setup(
+            state(ready_wsl(), false, &[], false, Some("WSL did not answer within 60 seconds")),
+            Keys::BOTH,
+            Switch::Off,
+        ),
     );
 
     // Prepare
@@ -931,6 +957,8 @@ fn the_screen_types_are_current() {
     let _ = std::fs::remove_dir_all(&out);
     let cfg = Config::new().with_out_dir(&out).with_large_int("number");
     Fixture::export_all(&cfg).unwrap();
+    // The screens send this one to Rust, so no fixture holds it.
+    KeyFor::export_all(&cfg).unwrap();
     let wanted: BTreeMap<String, String> = std::fs::read_dir(&out)
         .unwrap()
         .map(|e| {

@@ -102,7 +102,7 @@ impl AppState {
     /// The Setup screen, from the last look (or a new one if there was none).
     fn setup_view(&self) -> views::SetupView {
         let last = self.looked.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        setup::view(&last.unwrap_or_else(|| self.look()), key::TARGET, setup::switch())
+        setup::view(&last.unwrap_or_else(|| self.look()), key::ENTRIES, setup::switch())
     }
 }
 
@@ -213,7 +213,7 @@ fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> 
     let file = steplet_core::report::check(&raw, open::now_unix())
         .steplet
         .ok_or("Steplet could not read this file, so it cannot run.")?;
-    let ready = setup::view(&state.look(), key::TARGET, setup::switch()).ready;
+    let ready = setup::view(&state.look(), key::ENTRIES, setup::switch()).ready;
     let network = steplet_run::read_network_mode(std::env::var_os("USERPROFILE").as_deref().map(std::path::Path::new));
     Ok(views::chooser(&steplet_run::promises(&file, network), ready))
 }
@@ -221,7 +221,7 @@ fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> 
 /// The Setup screen, from a new look at this computer ("Check again" too).
 #[tauri::command(async)]
 fn setup_status(state: tauri::State<AppState>) -> views::SetupView {
-    setup::view(&state.look(), key::TARGET, setup::switch())
+    setup::view(&state.look(), key::ENTRIES, setup::switch())
 }
 
 /// Installs Steplet's Linux, or finishes an install that stopped; each line it prints is a `setup-line` event.
@@ -239,19 +239,20 @@ fn setup_install(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result
 #[tauri::command(async)]
 fn setup_remove(state: tauri::State<AppState>) -> Result<views::SetupView, views::FailureView> {
     state.busy.run(setup::remove)?;
-    Ok(setup::view(&state.look(), key::TARGET, setup::switch()))
+    Ok(setup::view(&state.look(), key::ENTRIES, setup::switch()))
 }
 
-/// Saves the receiver's key in Credential Manager. The answer says only that a key is saved.
+/// Saves the receiver's key `which` in Credential Manager. The answer says only which keys are saved.
 #[tauri::command(async)]
-fn save_key(state: tauri::State<AppState>, key: String) -> Result<views::SetupView, String> {
-    key::save(key::TARGET, &key)?;
+fn save_key(state: tauri::State<AppState>, which: views::KeyFor, key: String) -> Result<views::SetupView, String> {
+    key::save(key::ENTRIES.of(which), &key)?;
     Ok(state.setup_view())
 }
 
+/// Removes the receiver's key `which`, and only that one.
 #[tauri::command(async)]
-fn forget_key(state: tauri::State<AppState>) -> Result<views::SetupView, String> {
-    key::forget(key::TARGET).map_err(|e| {
+fn forget_key(state: tauri::State<AppState>, which: views::KeyFor) -> Result<views::SetupView, String> {
+    key::forget(key::ENTRIES.of(which)).map_err(|e| {
         format!("Steplet could not remove the key from Windows' Credential Manager. {}", views::windows_says(e))
     })?;
     Ok(state.setup_view())

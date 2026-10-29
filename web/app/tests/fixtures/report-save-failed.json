@@ -287,5 +287,6 @@
   "saved_to": null,
   "save_error": "Steplet could not save the report. Windows says: There is not enough space on the disk.",
   "switch_error": null,
+  "key_error": null,
   "allowed_switch": []
 }

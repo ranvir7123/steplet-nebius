@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use steplet_app::views::{
-    Here, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
+    Here, Keys, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
     run_failure, setup_failure, setup_line, setup_view,
 };
 use steplet_core::report::check;
@@ -182,8 +182,11 @@ fn ready() -> Wsl {
 #[test]
 fn what_a_program_printed_when_setup_could_not_look_is_file_text() {
     // setup::State.trouble ends with what programs inside the Linux and wsl.exe printed (Task 6 review).
-    let view =
-        setup_view(&trouble_state(Some("wsl.exe said: Qzx \u{1b}[31m✅ all fine"), ready(), true), true, Switch::Off);
+    let view = setup_view(
+        &trouble_state(Some("wsl.exe said: Qzx \u{1b}[31m✅ all fine"), ready(), true),
+        Keys::BOTH,
+        Switch::Off,
+    );
     assert_eq!(stray_text(&view, "Qzx"), Vec::<String>::new(), "program output outside display pieces");
     assert_eq!(view.tools.status, LineStatus::Unknown, "could not look, which is not the same as missing");
 }
@@ -198,7 +201,7 @@ fn what_a_failed_program_printed_is_file_text() {
 
 #[test]
 fn setup_says_why_it_cannot_look_yet() {
-    let text = |state: &State| setup_view(state, false, Switch::Off).tools.text;
+    let text = |state: &State| setup_view(state, Keys::NONE, Switch::Off).tools.text;
     assert_eq!(
         text(&trouble_state(None, ready(), false)),
         "Steplet can look at the tools in its Linux once its Linux is installed."
@@ -212,7 +215,7 @@ fn setup_says_why_it_cannot_look_yet() {
         "Steplet can look at the tools in its Linux once Windows' Linux feature is there."
     );
     assert_eq!(
-        setup_view(&trouble_state(Some("x"), ready(), true), false, Switch::Off).linux.text,
+        setup_view(&trouble_state(Some("x"), ready(), true), Keys::NONE, Switch::Off).linux.text,
         "Steplet could not look at its own Linux. What went wrong:"
     );
     assert_eq!(
@@ -325,7 +328,7 @@ fn every_setup_check_has_plain_words() {
         gate: true,
         trouble: None,
     };
-    let view = setup_view(&state, true, Switch::Off);
+    let view = setup_view(&state, Keys::BOTH, Switch::Off);
     assert_eq!(view.tools.status, LineStatus::Missing);
     assert_eq!(
         view.tools.text,
@@ -345,7 +348,7 @@ fn setup_says_what_to_do_next() {
     };
     let ready = || Wsl::Ready { version: "2.6.3.0".into() };
     let next = |s: State| {
-        let v = setup_view(&s, true, Switch::Off);
+        let v = setup_view(&s, Keys::BOTH, Switch::Off);
         (v.wsl_fix.map(|f| f.command), v.install)
     };
     // Windows' own feature: Steplet shows the command to type, and offers no install of its own Linux yet.
@@ -367,8 +370,11 @@ fn setup_says_what_to_do_next() {
 
 #[test]
 fn setup_says_what_went_wrong_once() {
-    let view =
-        setup_view(&trouble_state(Some("WSL did not answer within 60 seconds"), ready(), true), true, Switch::Off);
+    let view = setup_view(
+        &trouble_state(Some("WSL did not answer within 60 seconds"), ready(), true),
+        Keys::BOTH,
+        Switch::Off,
+    );
     assert!(view.linux.detail.is_some(), "the first line it could not look at says what went wrong");
     assert_eq!((view.tools.detail.clone(), view.gate.detail.clone()), (None, None), "and only that line");
     assert_eq!(view.tools.text, "Steplet could not look at the tools in its Linux either.");
@@ -407,7 +413,8 @@ fn steplets_own_words_carry_no_decision_codes() {
         (ready(), true, Some("WSL did not answer")),
         (ready(), true, None),
     ] {
-        setups += &serde_json::to_string(&setup_view(&trouble_state(trouble, wsl, linux), false, Switch::Off)).unwrap();
+        setups +=
+            &serde_json::to_string(&setup_view(&trouble_state(trouble, wsl, linux), Keys::NONE, Switch::Off)).unwrap();
     }
     assert_eq!(coded(&chooser), Vec::<String>::new(), "the chooser");
     assert_eq!(coded(&setups), Vec::<String>::new(), "the setup screen");
@@ -527,7 +534,7 @@ fn windows_errors_read_without_their_code_number() {
 /// Found by looking (Task 14): the help for Windows' Linux feature says what is wrong with it, missing or too old.
 #[test]
 fn the_wsl_help_says_whether_it_is_missing_or_too_old() {
-    let fix = |wsl| setup_view(&trouble_state(None, wsl, false), false, Switch::Off).wsl_fix.expect("a fix");
+    let fix = |wsl| setup_view(&trouble_state(None, wsl, false), Keys::NONE, Switch::Off).wsl_fix.expect("a fix");
     let missing = fix(Wsl::Missing);
     assert_eq!(missing.command, "wsl --install --no-distribution");
     assert!(missing.why.starts_with("Windows' Linux feature has to be on"), "{}", missing.why);
@@ -536,7 +543,7 @@ fn the_wsl_help_says_whether_it_is_missing_or_too_old() {
     assert_eq!(old.command, "wsl --update");
     assert!(old.why.contains("too old") && !old.why.contains("has to be on"), "{}", old.why);
     assert_eq!(old.then, "Then press Check again.");
-    assert!(setup_view(&trouble_state(None, ready(), false), false, Switch::Off).wsl_fix.is_none());
+    assert!(setup_view(&trouble_state(None, ready(), false), Keys::NONE, Switch::Off).wsl_fix.is_none());
 }
 
 /// Found by looking (Task 14): a command that failed stands out from one that passed, and a command refused before it

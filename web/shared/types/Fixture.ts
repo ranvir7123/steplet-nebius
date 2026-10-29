@@ -62,6 +62,10 @@ saved_to: string | null, save_error: string | null,
  */
 switch_error: string | null, 
 /**
+ * `save_key`'s refusal instead, in Steplet's words (what was typed is not a key).
+ */
+key_error: string | null, 
+/**
  * What the run sends when the receiver pressed "Run again, allowing another model" (E1).
  */
 allowed_switch: Array<ProgressView>, };

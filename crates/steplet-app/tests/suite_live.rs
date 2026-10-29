@@ -58,7 +58,7 @@ fn ready() -> Option<(steplet_run::RunLock, ApiKey)> {
     };
     println!("--- a spending cap of ${cap:.2} is set, so this case may make one real-model run");
     let lock = support::hold_linux();
-    let key = match steplet_app::key::load(steplet_app::key::TARGET) {
+    let key = match steplet_app::key::load(steplet_app::key::ANTHROPIC_TARGET) {
         Ok(Some(key)) => key,
         Ok(None) => support::did_not_run("no Anthropic key is saved in Windows' Credential Manager"),
         Err(e) => support::did_not_run(&format!("Steplet could not read the Anthropic key: {e}")),

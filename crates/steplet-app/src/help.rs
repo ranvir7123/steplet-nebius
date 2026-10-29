@@ -11,6 +11,7 @@ pub fn address(topic: &str) -> Option<&'static str> {
     match topic {
         "wsl" => Some("https://learn.microsoft.com/windows/wsl/install"),
         "anthropic-key" => Some("https://console.anthropic.com/settings/keys"),
+        "nebius-key" => Some("https://tokenfactory.nebius.com/"),
         _ => None,
     }
 }

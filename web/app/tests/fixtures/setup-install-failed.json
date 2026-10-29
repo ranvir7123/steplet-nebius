@@ -25,7 +25,10 @@
       "text": "Steplet can look at its gate program once its Linux is installed.",
       "detail": null
     },
-    "key_saved": false,
+    "keys": {
+      "nebius": false,
+      "anthropic": false
+    },
     "opens_steplet_files": "off",
     "ready": false,
     "wsl_fix": null,
@@ -81,7 +84,7 @@
     ]
   },
   "setup_changes": {
-    "key_saved": {
+    "nebius_key_saved": {
       "wsl": {
         "status": "ready",
         "text": "Windows' Linux feature (WSL 2.6.3.0).",
@@ -102,13 +105,16 @@
         "text": "Steplet can look at its gate program once its Linux is installed.",
         "detail": null
       },
-      "key_saved": true,
+      "keys": {
+        "nebius": true,
+        "anthropic": false
+      },
       "opens_steplet_files": "off",
       "ready": false,
       "wsl_fix": null,
       "install": "install"
     },
-    "key_forgotten": {
+    "nebius_key_forgotten": {
       "wsl": {
         "status": "ready",
         "text": "Windows' Linux feature (WSL 2.6.3.0).",
@@ -129,7 +135,70 @@
         "text": "Steplet can look at its gate program once its Linux is installed.",
         "detail": null
       },
-      "key_saved": false,
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "install"
+    },
+    "anthropic_key_saved": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": false,
+        "anthropic": true
+      },
+      "opens_steplet_files": "off",
+      "ready": false,
+      "wsl_fix": null,
+      "install": "install"
+    },
+    "anthropic_key_forgotten": {
+      "wsl": {
+        "status": "ready",
+        "text": "Windows' Linux feature (WSL 2.6.3.0).",
+        "detail": null
+      },
+      "linux": {
+        "status": "missing",
+        "text": "Steplet's own Linux is not installed yet.",
+        "detail": null
+      },
+      "tools": {
+        "status": "unknown",
+        "text": "Steplet can look at the tools in its Linux once its Linux is installed.",
+        "detail": null
+      },
+      "gate": {
+        "status": "unknown",
+        "text": "Steplet can look at its gate program once its Linux is installed.",
+        "detail": null
+      },
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
       "opens_steplet_files": "off",
       "ready": false,
       "wsl_fix": null,
@@ -156,7 +225,10 @@
         "text": "Steplet can look at its gate program once its Linux is installed.",
         "detail": null
       },
-      "key_saved": false,
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
       "opens_steplet_files": "on",
       "ready": false,
       "wsl_fix": null,
@@ -183,7 +255,10 @@
         "text": "Steplet can look at its gate program once its Linux is installed.",
         "detail": null
       },
-      "key_saved": false,
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
       "opens_steplet_files": "off",
       "ready": false,
       "wsl_fix": null,
@@ -210,7 +285,10 @@
         "text": "Steplet can look at its gate program once its Linux is installed.",
         "detail": null
       },
-      "key_saved": false,
+      "keys": {
+        "nebius": false,
+        "anthropic": false
+      },
       "opens_steplet_files": "off",
       "ready": false,
       "wsl_fix": null,
@@ -226,5 +304,6 @@
   "saved_to": null,
   "save_error": null,
   "switch_error": null,
+  "key_error": null,
   "allowed_switch": []
 }

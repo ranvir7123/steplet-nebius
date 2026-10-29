@@ -55,16 +55,17 @@ pub fn look() -> State {
     run_setup::look(LINUX, &gate)
 }
 
-/// The Setup screen's data: the checklist from `state`, whether a key is saved as `key_target`, and the switch. It
-/// holds whether a key is saved, never the key.
-pub fn view(state: &State, key_target: &str, switch: Switch) -> SetupView {
-    let key_saved = matches!(key::load(key_target), Ok(Some(_)));
-    views::setup_view(state, key_saved, switch)
+/// The Setup screen's data: the checklist from `state`, which keys are saved in `entries`, and the switch. It holds
+/// whether each key is saved, never a key.
+pub fn view(state: &State, entries: key::Entries, switch: Switch) -> SetupView {
+    let saved = |target: &str| matches!(key::load(target), Ok(Some(_)));
+    let keys = views::Keys { nebius: saved(entries.nebius), anthropic: saved(entries.anthropic) };
+    views::setup_view(state, keys, switch)
 }
 
 /// The Setup screen as it is now on this computer.
 pub fn view_here() -> SetupView {
-    view(&look(), key::TARGET, switch())
+    view(&look(), key::ENTRIES, switch())
 }
 
 /// Installs Steplet's Linux, or finishes an install that stopped half way. Each line it prints goes to `line`, as
@@ -81,12 +82,12 @@ pub fn install(line: &dyn Fn(Shown)) -> Result<(), FailureView> {
 /// What a run needs from setup, if everything is there: Steplet's Linux by its id, this build's gate program on its
 /// disk, and the receiver's key. Otherwise Steplet's sentence saying what to do.
 pub fn ready_for_run(state: &State) -> Result<crate::session::Ready, String> {
-    if !view(state, key::TARGET, Switch::Off).ready {
+    if !view(state, key::ENTRIES, Switch::Off).ready {
         return Err("Set up Steplet first: Setup shows what is missing.".into());
     }
     let distro_id = state.linux.clone().ok_or("Set up Steplet first: its own Linux is not installed.")?;
     let gate = gate_program()?;
-    let key = match key::load(key::TARGET) {
+    let key = match key::load(key::ANTHROPIC_TARGET) {
         Ok(Some(key)) => key,
         Ok(None) => return Err("Steplet needs your Anthropic key. Add it in Setup.".into()),
         Err(e) => {

@@ -1,6 +1,7 @@
-//! The receiver's Anthropic key (smaller choice S3): one "generic" entry in Windows' own Credential Manager, locked to
-//! this Windows account and kept on this computer only, never in a file. Steplet's entry is `TARGET`; "Forget key"
-//! removes it. The key never goes back to the screens: they learn only whether one is saved.
+//! The receiver's keys (smaller choice S3): the Anthropic key for Claude Code and the Nebius Token Factory key for
+//! Steplet's own agent, each one "generic" entry of its own in Windows' own Credential Manager, locked to this Windows
+//! account and kept on this computer only, never in a file. "Forget key" removes one entry and leaves the other. A key
+//! never goes back to the screens: they learn only whether each one is saved.
 
 use std::io;
 use std::ptr;
@@ -11,10 +12,34 @@ use windows_sys::Win32::Security::Credentials::{
     CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW, CredFree, CredReadW, CredWriteW,
 };
 
-/// Steplet's entry in Credential Manager.
-pub const TARGET: &str = "Steplet/anthropic-api-key";
-/// Far longer than any Anthropic key; anything longer is something else pasted by mistake.
-const MAX_KEY_CHARS: usize = 512;
+use crate::views::KeyFor;
+
+/// Steplet's entry for the Anthropic key, named as before the Nebius copy so a key saved then is still found.
+pub const ANTHROPIC_TARGET: &str = "Steplet/anthropic-api-key";
+/// Steplet's entry for the Nebius Token Factory key.
+pub const NEBIUS_TARGET: &str = "Steplet/nebius-api-key";
+/// Nebius keys are long signed tokens. Credential Manager keeps at most 2,560 bytes; anything longer than this is
+/// something else pasted by mistake.
+const MAX_KEY_BYTES: usize = 2048;
+
+/// Where each key is kept: Steplet's own entries (`ENTRIES`), or a test's made-up ones.
+#[derive(Clone, Copy, Debug)]
+pub struct Entries {
+    pub nebius: &'static str,
+    pub anthropic: &'static str,
+}
+
+pub const ENTRIES: Entries = Entries { nebius: NEBIUS_TARGET, anthropic: ANTHROPIC_TARGET };
+
+impl Entries {
+    /// The entry of the key `which`.
+    pub fn of(&self, which: KeyFor) -> &'static str {
+        match which {
+            KeyFor::Nebius => self.nebius,
+            KeyFor::Anthropic => self.anthropic,
+        }
+    }
+}
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -24,21 +49,27 @@ fn not_found(e: &io::Error) -> bool {
     e.raw_os_error() == Some(ERROR_NOT_FOUND as i32)
 }
 
-/// Saves `key` as the entry `target`, without the spaces and line breaks a paste brings around it. A refusal is in
-/// Steplet's words and never repeats what was typed.
-pub fn save(target: &str, key: &str) -> Result<(), String> {
+/// The key as typed, without the spaces and line breaks a paste brings around it, or why it is not a key. A refusal is
+/// in Steplet's words and never repeats what was typed.
+pub fn check(key: &str) -> Result<&str, String> {
     let key = key.trim();
     if key.is_empty() {
         return Err("Steplet needs a key: the box is empty.".into());
     }
-    if key.chars().count() > MAX_KEY_CHARS {
-        return Err("Steplet did not save this: it is far longer than an Anthropic key.".into());
+    if key.len() > MAX_KEY_BYTES {
+        return Err("Steplet did not save this: it is far longer than an API key.".into());
     }
     if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err(
             "Steplet did not save this: a key has no spaces, line breaks or hidden characters inside it.".into()
         );
     }
+    Ok(key)
+}
+
+/// Saves `key` as the entry `target`, once `check` takes it.
+pub fn save(target: &str, key: &str) -> Result<(), String> {
+    let key = check(key)?;
     let mut name = wide(target);
     let mut blob = key.as_bytes().to_vec();
     let entry = CREDENTIALW {
