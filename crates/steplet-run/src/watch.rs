@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use serde_json::Value;
-use steplet_core::command::{self, Assessment, Kind};
+use steplet_core::command::{self, Piece, Proposed};
 
 use crate::decide::{Checker, decide};
 use crate::types::{Event, GateAnswer, GateRequest};
@@ -121,9 +121,10 @@ impl<'a> Watcher<'a> {
     /// True for a call that may run without asking the gate: a harmless read inside the working copy (G2).
     fn harmless(&self, tool: &str, input: &Value) -> bool {
         match tool {
+            // A chain only when each of its commands is such a read (phase 5 wrap-up).
             "Bash" => matches!(
                 command::assess_in(text(input, "command"), &self.work),
-                Assessment::Words { kind: Kind::ReadOnly, outside: false, .. }
+                Proposed::Pieces(pieces) if pieces.iter().all(Piece::harmless)
             ),
             // The checker's own answer, as the gate would have given it, where the path really leads (rows 29, 30).
             "Read" | "Glob" | "Grep" => {

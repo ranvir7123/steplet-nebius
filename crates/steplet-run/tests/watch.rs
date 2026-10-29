@@ -85,6 +85,10 @@ fn a_harmless_read_command_that_skipped_the_gate_is_recorded_and_the_run_goes_on
         // The working copy by its full path: the real model's first move in both paid live runs (phase 5 wrap-up).
         "ls -la /work/r1/repo",
         "cat /work/r1/repo/src/main.rs",
+        // A chain of harmless reads: the real model's second move in both paid live runs (phase 5 wrap-up).
+        "cat /work/r1/repo/README.md; echo \"---\"; ls -la /work/r1/repo/tests; echo \"---\"; cat /work/r1/repo/calc.py",
+        "git log --oneline -5 && cat README* 2>/dev/null | head -50",
+        "cat README | wc -l",
     ] {
         assert_eq!(judge("Bash", json!({"command": command}), None, false), harmless("Bash", command), "{command}");
     }
@@ -96,9 +100,14 @@ fn a_harmless_read_command_that_skipped_the_gate_is_recorded_and_the_run_goes_on
 fn any_other_command_that_skipped_the_gate_stops_the_run() {
     for command in [
         "touch made.txt",
-        // Chained commands are not read at all, so they cannot be judged harmless.
-        "cat README; echo done",
-        "cat README | wc -l",
+        // A chain with one piece that is not a harmless read inside, or that is not read at all.
+        "cat README; touch made.txt",
+        "cat README | sh",
+        "ls; cat /etc/hostname",
+        "cat README > out.txt",
+        "ls &",
+        // Declared by the file, and piped into a read: the declared piece still had to ask.
+        "cargo test 2>&1 | tail -20",
         // A read outside the working copy.
         "ls /var/lib/steplet",
         "ls /work/r1/repo/../r2",

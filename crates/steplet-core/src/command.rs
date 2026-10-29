@@ -2,7 +2,8 @@
 //! plain words, single quotes, and double quotes with only `\"` and `\\` inside. Anything with another meaning to
 //! the shell (pipes, `;`, `&&`, `$`, redirections, wildcards, `~`, …) is not read at all, so Steplet never guesses
 //! what a shell would do. Commands are then matched word for word. Within these rules `bash` makes exactly the same
-//! words (tests/vectors/commands.txt).
+//! words (tests/vectors/commands.txt). During a run only, a chain of commands is also read, piece by piece, with a
+//! few more rules (`assess_in`, phase 5 wrap-up); a file's own commands are still read one at a time.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -33,23 +34,59 @@ fn refuse(c: char) -> NotUnderstood {
 }
 
 pub fn split(line: &str) -> Result<Vec<String>, NotUnderstood> {
+    let mut pieces = read(line, false)?;
+    debug_assert_eq!(pieces.len(), 1);
+    Ok(pieces.swap_remove(0).words)
+}
+
+/// One command of a chain, as read: its words, and whether one of them has a wildcard the shell will expand.
+#[derive(Default)]
+struct Read {
+    words: Vec<String>,
+    wildcard: bool,
+    piped: bool,
+}
+
+/// The only redirections a chain may have, each as a word of its own: they throw away or merge error messages.
+const REDIRECTIONS: &[&str] = &["2>/dev/null", "2>&1"];
+
+/// Reads `line` by `split`'s rules. During a run (`chain`) it also reads, outside quotes: commands joined by `;`,
+/// `&&`, `||` or `|`; the `REDIRECTIONS`, which are dropped; and the wildcards `*` and `?`, in a word that is not
+/// the program, does not start with `-`, `*` or `?`, and has no part starting with `.` other than `.` itself. So a
+/// wildcard can neither name the program nor become an option, whatever files the repository holds, and it never
+/// reaches a hidden name such as `..`.
+fn read(line: &str, chain: bool) -> Result<Vec<Read>, NotUnderstood> {
     use NotUnderstood::*;
-    let mut words = Vec::new();
+    let mut pieces = Vec::new();
+    let mut piece = Read::default();
     let mut word = String::new();
     let mut in_word = false;
-    let mut chars = line.chars();
-    while let Some(c) = chars.next() {
+    let mut wildcard = None;
+    let mut chars = line.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if chain && !in_word && c == '2' {
+            let rest = &line[i..];
+            let redirection = REDIRECTIONS.iter().find(|r| {
+                rest.starts_with(**r) && matches!(rest[r.len()..].chars().next(), None | Some(' ' | ';' | '|' | '&'))
+            });
+            if let Some(r) = redirection {
+                for _ in 1..r.len() {
+                    chars.next();
+                }
+                continue;
+            }
+        }
         match c {
             ' ' => {
                 if in_word {
-                    words.push(core::mem::take(&mut word));
+                    end_word(&mut piece, core::mem::take(&mut word), wildcard.take())?;
                     in_word = false;
                 }
             }
             '\'' => {
                 in_word = true;
                 loop {
-                    match chars.next() {
+                    match chars.next().map(|(_, q)| q) {
                         None => return Err(UnclosedQuote),
                         Some('\'') => break,
                         Some(q) if (' '..='~').contains(&q) => word.push(q),
@@ -60,10 +97,10 @@ pub fn split(line: &str) -> Result<Vec<String>, NotUnderstood> {
             '"' => {
                 in_word = true;
                 loop {
-                    match chars.next() {
+                    match chars.next().map(|(_, q)| q) {
                         None => return Err(UnclosedQuote),
                         Some('"') => break,
-                        Some('\\') => match chars.next() {
+                        Some('\\') => match chars.next().map(|(_, e)| e) {
                             Some(e @ ('"' | '\\')) => word.push(e),
                             Some(_) => return Err(Symbol('\\')),
                             None => return Err(UnclosedQuote),
@@ -74,6 +111,28 @@ pub fn split(line: &str) -> Result<Vec<String>, NotUnderstood> {
                     }
                 }
             }
+            '*' | '?' if chain => {
+                in_word = true;
+                wildcard.get_or_insert(c);
+                word.push(c);
+            }
+            ';' | '|' | '&' if chain => {
+                if in_word {
+                    end_word(&mut piece, core::mem::take(&mut word), wildcard.take())?;
+                    in_word = false;
+                }
+                let pipe = match (c, chars.peek().map(|&(_, n)| n)) {
+                    ('|', Some('|')) | ('&', Some('&')) => {
+                        chars.next();
+                        false
+                    }
+                    // `|&` also pipes error messages; a lone `&` runs a command in the background.
+                    ('|', Some('&')) | ('&', _) => return Err(Symbol('&')),
+                    (c, _) => c == '|',
+                };
+                end_piece(&mut pieces, core::mem::take(&mut piece))?;
+                piece.piped = pipe;
+            }
             c if plain(c) => {
                 in_word = true;
                 word.push(c);
@@ -82,12 +141,35 @@ pub fn split(line: &str) -> Result<Vec<String>, NotUnderstood> {
         }
     }
     if in_word {
-        words.push(word);
+        end_word(&mut piece, word, wildcard)?;
     }
-    match words.first() {
-        None => Err(Empty),
-        Some(first) if first.contains('=') => Err(Assignment),
-        Some(_) => Ok(words),
+    end_piece(&mut pieces, piece)?;
+    Ok(pieces)
+}
+
+/// Adds `word` to `piece`. `wildcard` is the first wildcard written outside quotes in it, if any.
+fn end_word(piece: &mut Read, word: String, wildcard: Option<char>) -> Result<(), NotUnderstood> {
+    if let Some(w) = wildcard {
+        if piece.words.is_empty()
+            || word.starts_with(['-', '*', '?'])
+            || word.split('/').any(|part| part.starts_with('.') && part != ".")
+        {
+            return Err(NotUnderstood::Symbol(w));
+        }
+        piece.wildcard = true;
+    }
+    piece.words.push(word);
+    Ok(())
+}
+
+fn end_piece(pieces: &mut Vec<Read>, piece: Read) -> Result<(), NotUnderstood> {
+    match piece.words.first() {
+        None => Err(NotUnderstood::Empty),
+        Some(first) if first.contains('=') => Err(NotUnderstood::Assignment),
+        Some(_) => {
+            pieces.push(piece);
+            Ok(())
+        }
     }
 }
 
@@ -122,11 +204,9 @@ pub fn kind(words: &[String]) -> Kind {
             ReadOnly
         }
         "git" if git_reads_only(args) => ReadOnly,
-        "pip" | "pip3" => pip(sub),
+        "pip" | "pip3" => pip(args),
         "python" | "python3" | "py" => match args {
-            [m, p, rest @ ..] if m == "-m" && (p == "pip" || p == "pip3") => {
-                pip(rest.iter().map(String::as_str).find(|a| !a.starts_with('-')).unwrap_or(""))
-            }
+            [m, p, rest @ ..] if m == "-m" && (p == "pip" || p == "pip3") => pip(rest),
             _ => RunsCode,
         },
         "cargo" => match sub {
@@ -174,9 +254,14 @@ pub fn kind(words: &[String]) -> Kind {
     }
 }
 
-fn pip(sub: &str) -> Kind {
+/// `args` are pip's own. Its command is the first word that is not an option; but an option before it can take
+/// that word as its value (`pip --log list install x` writes a log named `list` and installs), so pip only reads
+/// when its command comes first (code review, phase 5 wrap-up).
+fn pip(args: &[String]) -> Kind {
+    let sub = args.iter().map(String::as_str).find(|a| !a.starts_with('-')).unwrap_or("");
     match sub {
-        "list" | "show" | "freeze" | "check" => Kind::ReadOnly,
+        "list" | "show" | "freeze" | "check" if args[0] == sub => Kind::ReadOnly,
+        "list" | "show" | "freeze" | "check" => Kind::Unknown,
         "install" | "download" | "wheel" => Kind::Installs,
         _ => Kind::Unknown,
     }
@@ -321,34 +406,90 @@ pub enum Assessment {
 }
 
 pub fn assess(text: &str) -> Assessment {
-    assess_with(text, None)
-}
-
-/// As `assess`, for a command proposed during a run in the working copy `work` (an absolute path, as the checker's):
-/// a full path to the working copy or into it is inside, as its short form is. A model writes the copy's full path
-/// (phase 5 wrap-up: `ls -la /work/p5l1/repo` was its first move in both paid live runs).
-pub fn assess_in(text: &str, work: &str) -> Assessment {
-    debug_assert!(work != "/" && paths::normalize(work).as_deref() == Some(work), "not a working copy: {work}");
-    assess_with(text, Some(work))
-}
-
-fn assess_with(text: &str, work: Option<&str>) -> Assessment {
-    if text.chars().any(is_invisible) {
-        return Assessment::Blocked(Blocked::Invisible);
-    }
-    if downloads_into_shell(text) {
-        return Assessment::Blocked(Blocked::DownloadIntoShell);
-    }
-    if let Some(secret) = paths::secret_in(text) {
-        return Assessment::Blocked(Blocked::Secret(secret));
+    if let Some(why) = blocked(text) {
+        return Assessment::Blocked(why);
     }
     let words = match split(text) {
         Ok(words) => words,
         Err(why) => return Assessment::NotUnderstood(why),
     };
-    match danger(&words) {
-        Some(Danger::Admin) => return Assessment::Blocked(Blocked::Admin),
-        Some(Danger::Registry) => return Assessment::Blocked(Blocked::Registry),
+    match judge(&words, None) {
+        Ok((kind, outside)) => Assessment::Words { words, kind, outside },
+        Err(why) => Assessment::Blocked(why),
+    }
+}
+
+/// What Steplet makes of a command an agent proposes during a run (`assess_in`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Proposed {
+    /// The whole text, or one of its pieces, can never be allowed.
+    Blocked(Blocked),
+    NotUnderstood(NotUnderstood),
+    /// One command, or each command of a chain in order.
+    Pieces(Vec<Piece>),
+}
+
+/// One command of what an agent proposed, judged as `assess` judges a file's command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Piece {
+    pub words: Vec<String>,
+    pub kind: Kind,
+    pub outside: bool,
+    /// A word has a wildcard the shell will expand, so the words that run are not these: the piece is never the
+    /// file's declared command, and only counts as a harmless read.
+    pub wildcard: bool,
+    /// It reads what the piece before it prints (it follows a single `|`). The agent chooses that input, so the
+    /// piece is never the file's declared command either: `echo … | python3` would run the agent's own code.
+    pub piped: bool,
+}
+
+impl Piece {
+    /// A harmless read inside the working copy (G2).
+    pub fn harmless(&self) -> bool {
+        self.kind == Kind::ReadOnly && !self.outside
+    }
+}
+
+/// As `assess`, for a command proposed during a run in the working copy `work` (an absolute path, as the checker's).
+/// Two things differ. A full path to the working copy or into it is inside, as its short form is: a model writes
+/// the copy's full path (phase 5 wrap-up: `ls -la /work/p5l1/repo` was its first move in both paid live runs). And
+/// a chain is read piece by piece (`read`): its second move in both was a chain of reads. The checks on the whole
+/// text still come first.
+pub fn assess_in(text: &str, work: &str) -> Proposed {
+    debug_assert!(work != "/" && paths::normalize(work).as_deref() == Some(work), "not a working copy: {work}");
+    if let Some(why) = blocked(text) {
+        return Proposed::Blocked(why);
+    }
+    let read = match read(text, true) {
+        Ok(read) => read,
+        Err(why) => return Proposed::NotUnderstood(why),
+    };
+    let mut pieces = Vec::with_capacity(read.len());
+    for Read { words, wildcard, piped } in read {
+        match judge(&words, Some(work)) {
+            Ok((kind, outside)) => pieces.push(Piece { words, kind, outside, wildcard, piped }),
+            Err(why) => return Proposed::Blocked(why),
+        }
+    }
+    Proposed::Pieces(pieces)
+}
+
+/// Why the whole text of a command can never be allowed, before it is read.
+fn blocked(text: &str) -> Option<Blocked> {
+    if text.chars().any(is_invisible) {
+        return Some(Blocked::Invisible);
+    }
+    if downloads_into_shell(text) {
+        return Some(Blocked::DownloadIntoShell);
+    }
+    paths::secret_in(text).map(Blocked::Secret)
+}
+
+/// The kind of one command's `words` and whether it reaches outside, or why it can never be allowed.
+fn judge(words: &[String], work: Option<&str>) -> Result<(Kind, bool), Blocked> {
+    match danger(words) {
+        Some(Danger::Admin) => return Err(Blocked::Admin),
+        Some(Danger::Registry) => return Err(Blocked::Registry),
         None => {}
     }
     // A path can hide after `=` (`--file=/etc/x`) or be joined to a short option (`-f/etc/x`, `-I~/x`).
@@ -367,6 +508,5 @@ fn assess_with(text: &str, work: Option<&str>) -> Assessment {
             || w.split_once('=').is_some_and(|(_, value)| is_outside(value))
             || (w.starts_with('-') && w.find(['/', '\\', '~']).is_some_and(|i| is_outside(&w[i..])))
     });
-    let k = kind(&words);
-    Assessment::Words { words, kind: k, outside }
+    Ok((kind(words), outside))
 }

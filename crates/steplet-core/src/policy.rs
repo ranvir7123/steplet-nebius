@@ -1,12 +1,13 @@
 //! The one checker (decision row 29): every action an agent proposes during a run is decided here, with the same
 //! reading of commands as the rating (`command::assess`; during a run `command::assess_in`, which also knows a full
-//! path into the working copy is inside it). Anything the file did not ask for goes to the receiver
+//! path into the working copy is inside it, and reads a chain piece by piece). Anything the file did not ask for goes
+//! to the receiver
 //! (R7); the always-blocked list and protected folders are refused without a question (row 24, G8, G14).
 
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::command::{self, Assessment, Blocked, Kind};
+use crate::command::{self, Assessment, Blocked, Proposed};
 use crate::header::{Scalar, Steplet};
 use crate::hosts;
 use crate::paths;
@@ -90,14 +91,17 @@ impl Policy {
         }
     }
 
+    /// A chain is allowed when each of its commands would be alone, except that the file's declared command never
+    /// reads what another piece prints.
     fn command(&self, line: &str) -> Decision {
         match command::assess_in(line, &self.work) {
-            Assessment::Blocked(why) => refuse(why),
-            Assessment::NotUnderstood(_) => {
+            Proposed::Blocked(why) => refuse(why),
+            Proposed::NotUnderstood(_) => {
                 ask("Steplet cannot read this command exactly, so it cannot match it with the file")
             }
-            Assessment::Words { words, kind, outside } => {
-                if self.commands.contains(&words) || (kind == Kind::ReadOnly && !outside) {
+            Proposed::Pieces(pieces) => {
+                if pieces.iter().all(|p| (!p.wildcard && !p.piped && self.commands.contains(&p.words)) || p.harmless())
+                {
                     Decision::Allow
                 } else {
                     ask("the file does not ask for this command")

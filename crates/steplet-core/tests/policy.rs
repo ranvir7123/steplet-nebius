@@ -27,7 +27,23 @@ fn commands() {
     assert_eq!(check("  cargo   'test' "), Decision::Allow, "the same words, quoted differently");
     assert_eq!(check("wc -l /etc/hostname"), Decision::Allow, "declared, so allowed although outside");
     assert!(asks(check("cargo test --release")));
-    assert!(asks(check("cargo test | tail")));
+    // A chain is allowed when each piece is: a declared command or a harmless read inside (phase 5 wrap-up).
+    assert_eq!(check("cargo test | tail"), Decision::Allow);
+    assert_eq!(check("cargo test 2>&1 | tail -20"), Decision::Allow);
+    assert_eq!(check(&format!("cat {WORK}/README.md; echo \"---\"; ls -la {WORK}/tests")), Decision::Allow);
+    assert_eq!(check("git log --oneline -5 && cat README* 2>/dev/null | head -50"), Decision::Allow);
+    assert!(asks(check("cargo test --release | tail")), "one piece the file does not ask for");
+    assert!(asks(check("cargo test | sh")), "one piece runs code the file does not ask for");
+    // A declared command never reads what another piece prints: the agent would choose its input.
+    assert!(asks(check("echo x | cargo test")));
+    assert!(asks(check("ls | wc -l /etc/hostname")));
+    assert_eq!(check("ls; wc -l /etc/hostname"), Decision::Allow);
+    assert!(asks(check("ls; touch made.txt")));
+    assert!(asks(check("ls; cat /etc/passwd")), "one piece reads outside");
+    assert!(asks(check("cargo t*")), "a wildcard: what runs is not the declared words");
+    assert!(asks(check("cargo test > out")), "a redirection that writes: not understood");
+    assert!(asks(check("ls &")), "in the background: not understood");
+    assert!(denies(check("ls; sudo make install"), "block.admin"), "one piece never allowed");
     assert_eq!(check("ls -la src"), Decision::Allow, "G2: harmless, inside the repository");
     assert!(asks(check("cat /etc/passwd")), "harmless, but outside the repository");
     assert_eq!(check(&format!("ls -la {WORK}")), Decision::Allow, "G2: the working copy by its full path");
