@@ -362,6 +362,21 @@ Plan: `docs/plans/2026-10-22-milestone-1-phase-5.md`, approved by the user on 22
 | K5 | **A: the gate also checks who is at Steplet's end of the gate channel:** Steplet passes its own process number to the gate in the run's root-owned settings (`--steplet-pid`), and the gate refuses to talk to any other program. | Closes the easy route phase 3 measured (another program of the same Windows account could open its own end of the channel). A program of that account that reads Steplet's memory stays outside what Steplet can stop, and the plan says so. |
 | K6 | **A: phase 5 covers Claude Code 2.1.220 only.** Another version is added later by installing it and running `cargo suite scripted`, then `cargo suite live`. | Testing a second version now would add a download, a change to setup's pinned version and a second live layer to one phase. Keys not bound to an Anthropic workspace stay refused (J22) until then. |
 
+## Nebius hackathon choices (29 Oct 2026)
+
+Plan: `docs/plans/2026-10-29-nebius-hackathon.md`, approved by the user on 29 Oct 2026 with the recommended answer for each of N1 to N8. This copy (`C:\dev\steplet-nebius`, branch `nebius-hackathon`, started from `956e4ab`) adds Steplet's own agent, run by NVIDIA Nemotron on Nebius Token Factory. Its brain runs in the app on Windows; each move it asks for is decided by `Policy::check` (row 29) and, if allowed, runs alone inside the fence in Steplet's Linux.
+
+| # | Decision | Why |
+|---|---|---|
+| N1 | **Steplet talks to Nebius through WinHTTP, Windows' own web-request library, via the cached `windows-sys` 0.61.2.** | No download and no new package under F12; it uses Windows' certificates and proxy settings. ureq would need a download and brings its own certificate list. |
+| N2 | **The release is an NSIS installer plus a zip, with SHA-256 sums.** Tauri's one-time download of the NSIS tools is approved with this answer. | The hackathon asks for a Windows installer; the zip also works without installing. The app is not signed, and the README says so. |
+| N3 | **A standing yes to use Steplet's Linux and the test Linux from Thu 29 Oct 13:00 to Fri 30 Oct 12:00 IST,** provided no run holds the one-run lock (`Local\Steplet-run`) when a step starts; if one does, the step stops. | The overnight safety cases and real runs must not wait for the user, or the 10:00 core check slips. |
+| N4 | **Real Token Factory calls: $1.00 in total for the build; $0.25 per run, built into the app.** Spend is recorded after every real call. | The trial credit is $1; one run of use case 1 on Super is expected to cost about $0.05. |
+| N5 | **Licence: Apache 2.0, in one `LICENSE` file at the top of the repository.** | It lets anyone use the code and includes a patent promise; GitHub shows it. |
+| N6 | **The public repository keeps the full git history,** knowing that everything in the private `ranvir7123/steplet` up to 29 Oct (docs, research, agent memory, spikes, the author email on every commit) becomes public there. | The dated history shows the work was done after the hackathon opened on 26 Aug 2026 (first commit 8 Oct 2026). |
+| N7 | **The public repository is `ranvir7123/steplet-nebius`.** Creating it, pushing and the Release each still need the user's yes. | |
+| N8 | **The secret scan also counts how often the user's saved Anthropic and Nebius keys appear in the history,** printing only the counts. | Key-shaped patterns alone could miss a real key in an unusual format. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`
