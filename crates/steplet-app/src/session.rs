@@ -500,7 +500,7 @@ impl Relay {
                 self.refused_first.insert(call.clone(), views::refused_first(check));
                 out.views.extend(views::progress_view(p, None, self.limits));
             }
-            Progress::Prepared(_) => {
+            Progress::Prepared(_) | Progress::Spent(_) => {
                 out.views.extend(views::progress_view(p, None, self.limits));
             }
         }

@@ -464,3 +464,202 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; fini
 (56 passed, none failed.) Then `cargo fmt --all`, `cargo clippy -p steplet-run --offline --all-targets -- -D warnings`
 (`Finished`, no warnings) and `cargo test -p steplet-run --offline`: every test binary `ok`, none failed (the Linux
 tests are ignored in that run and were run above).
+
+## Task 6: The agent loop, with a stand-in model (29 Oct 2026)
+
+Steplet's own agent now runs end to end in code: `run_agent_locked` prepares the run, then `drive` asks the model
+for its next answer, puts each move it asks for through the checker (`Asker::decide`, recorded as `Asked::InApp`),
+and runs only the allowed ones through the hands, built from the request the checker saw. The model is called on a
+thread of its own, so Stop and the time limit are looked at every 100 ms even while a call hangs. Before each call,
+the most it could cost is held against the cap. Each answer's tokens and cost go to the screen (`Progress::Spent`).
+Busy and failing service answers are tried again after 2, 5 and 10 s, each shown as `Event::ApiRetry`; a refused key
+or an empty account ends the run at once with plain words. The run's events use Claude Code's own shapes, so
+`build_report` serves both runners. This task used no Linux and no Nebius: the model is the stand-in `Scripted`,
+and the hands are a stand-in that records each move.
+
+Not as the plan wrote it: rows N21 to N35 in `docs/decisions.md`. The biggest: no `exit` field on a result (the
+result's text carries "Exit code N", as Claude Code's does); `drive` takes one `Agent` value and is reachable from
+the tests; a call that fails after Nebius may have charged is counted at the most it could have cost; and a limit
+reached is recorded as a limit, not as a fault.
+
+The 14 tests in `crates/steplet-run/tests/agent.rs`, with the spending test's last case tightened: a cap of exactly
+the most the first call could cost lets that one call through, and its move runs, then the run ends at the cap.
+
+```
+> cargo test -p steplet-run --offline --test agent
+running 14 tests
+test a_malformed_tool_call_is_answered_not_run ... ok
+test a_refused_key_ends_the_run_with_plain_words ... ok
+test what_runs_is_what_was_checked ... ok
+test the_report_shows_steplets_exit_code_not_the_models_claim ... ok
+test the_step_limit_ends_the_run ... ok
+test a_refusal_goes_back_to_the_model ... ok
+test the_nebius_key_never_appears_in_the_report_or_logs ... ok
+test three_unreadable_replies_in_a_row_end_the_run ... ok
+test every_call_goes_through_the_checker ... ok
+test huge_output_is_cut_for_the_model ... ok
+test the_spending_cap_ends_the_run_before_the_call_that_could_pass_it ... ok
+test busy_nebius_is_retried_and_shown ... ok
+test the_time_limit_ends_the_run ... ok
+test stop_during_a_model_call_ends_the_run_promptly ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+```
+
+Three deliberate breaks in `agent.rs`, each put back byte for byte (`cmp` with a saved copy) before the next. The
+breaks were made before `cargo fmt` reflowed `agent.rs`, and before the spending test's tightened case.
+
+```
+BREAK 1: a refused call runs anyway
+test a_refusal_goes_back_to_the_model ... FAILED
+test every_call_goes_through_the_checker ... FAILED
+test result: FAILED. 12 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+BREAK 2: the spending cap is never checked
+test the_spending_cap_ends_the_run_before_the_call_that_could_pass_it ... FAILED
+test result: FAILED. 13 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+BREAK 3: events go to the screen without the key hidden
+test the_nebius_key_never_appears_in_the_report_or_logs ... FAILED
+test result: FAILED. 13 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+```
+
+Format and lint, after the tightened test:
+
+```
+> cargo fmt --all -- --check
+fmt exit 0
+> cargo clippy --offline --workspace --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.60s
+clippy exit 0
+```
+
+### A fault found on the way: a Stop at the very start of a run can break name lookup
+
+The first rerun of the Linux tests failed three `launch` tests, each at the clone:
+
+```
+test a_stop_right_after_launch_never_lets_the_agent_act ... --- stopped at once; exit code Some(9); every event:
+--- acted: no; programs of the steplet account left: 0; start scripts left: 0
+ok
+test stop_ends_a_run_mid_command_and_leaves_nothing_running ...
+thread 'stop_ends_a_run_mid_command_and_leaves_nothing_running' (55152) panicked at crates\steplet-run\tests\launch.rs:74:34:
+called `Result::unwrap()` on an `Err` value: Step { step: "clone the repository", detail: "fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Could not resolve host: github.com\nsteplet-prepare: could not clone https://github.com/octocat/Hello-World.git" }
+test result: FAILED. 3 passed; 3 failed; 0 ignored; 0 measured; 1 filtered out; finished in 52.43s
+```
+
+The test before it had checked that `/mnt/wsl` was Steplet's folder after its run. After the Stop-at-once test,
+`/mnt/wsl` held no mount at all, so `/etc/resolv.conf` (WSL's link to `/mnt/wsl/resolv.conf`) led nowhere. Steplet's
+Linux log shows `mnt-wsl.mount: Deactivated successfully` at 13:42:21 UTC, the moment of that test, and nothing put
+back after it. The cause is in `close_shared_folders` (`root-common.sh`, the same lines as `start-run.sh` at 956e4ab,
+so the fault predates this copy): it reads the name lookup file, removes WSL's `/mnt/wsl`, then mounts Steplet's own
+folder and writes the copy into it. A Stop that kills the start step between the removal and the new mount loses the
+only copy, and every later run fails at the site lookup or the clone until Steplet's Linux restarts.
+
+Three tries of the Stop-at-once test alone did not hit the gap (it is a few milliseconds wide). To confirm the cause
+without luck, a throwaway copy of the step inside Linux had a 5 s pause put into the gap and was killed there:
+
+```
+--- before: /mnt/wsl is none
+--- before: lookup ok
+--- killed in the gap, exit code 137
+--- after: /mnt/wsl is NONE
+--- after: lookup FAILED
+--- after: lookup file UNREADABLE
+--- the next run's step, unchanged, from this state:
+cat: /etc/resolv.conf: No such file or directory
+steplet-start: could not read the name lookup file
+--- its exit code: 30
+```
+
+`wsl --terminate steplet` (lock free, nothing of Steplet's running) put WSL's folder back each time; `getent hosts
+github.com` then answered `20.207.73.82`. The repair itself is not in this task: it changes the shared start step and
+both runners' first step, so it waits for a yes (Task 6b in the plan).
+
+Steplet's own agent meets the same gap once per move, since `start-hands.sh` runs the same step at the start of
+every move. A Stop ends a move by killing `wsl.exe` from Windows. Whether that ends the root script inside Linux at
+once was checked with two throwaway scripts that count to 10, one with traps that write down any signal and one
+without; each had its `wsl.exe` killed at 1.5 s, all three streams piped, as `LinuxHands` starts it:
+
+```
+exp.sh (traps: yes): counted [1 2 3 4 5 6 7 8 9 10 finished ] signals [HUP ]
+exp2.sh (traps: no): counted [1 2 3 4 ] signals []
+```
+
+The script is hung up at the kill and, like `start-hands.sh`, which sets no trap, dies on the spot.
+
+### The Linux tests, rerun
+
+`ask_live`, `contain` and `gate` passed in the first rerun, before the fault above (4, 12 and 6 passed). With
+Steplet's Linux restarted, the groups from `launch` on, each followed by a look at `/mnt/wsl` and the name lookup
+(`hands` ran in Task 5 and is unchanged here; `setup` reinstalls Linux and is not run):
+
+```
+19:24
+lock held: False
+     Running tests\launch.rs
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 91.52s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\links.rs
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 146.86s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\prepare.rs
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 57.06s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\report.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 39.41s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\restart.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 101.97s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\settings_live.rs
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 109.44s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\sites.rs
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 24.24s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\tripwires.rs
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.03s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+     Running tests\uc5.rs
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 51.65s
+=== after: /mnt/wsl is steplet-wsl; lookup ok
+```
+
+The one failure is `a_hook_in_the_run_s_settings_stops_the_run`. From the tripwire on, the gate refused every
+request, as it must; but the stand-in model reached the last of its 31 quick steps before Steplet's Stop ended
+Claude Code:
+
+```
+--- 4.1 s; exit code Some(0); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 30
+thread 'a_hook_in_the_run_s_settings_stops_the_run' (59172) panicked at crates\steplet-run\tests\tripwires.rs:303:5:
+the run was stopped before the script's end
+```
+
+Neither `watch_run` nor `stop` changed in this task; in Task 5's rerun the same test stopped the run at 2.8 s after
+9 requests. Three reruns of the test alone:
+
+```
+--- 3.0 s; exit code Some(143); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 13
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 10.60s
+--- 3.1 s; exit code Some(143); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 12
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 10.74s
+--- 3.0 s; exit code Some(124); stopped_by Some(Hook("PreToolUse:Bash")); faults []; every event:
+--- requests that reached the gate after the hook: 13
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 10.74s
+```
+
+So the Stop was slower that once, and 31 quick steps are too thin a margin for the test's last checks. Widening it
+is Task 6c in the plan, waiting for a yes.
+
+### The ordinary tests, after the last change
+
+`cargo test -p steplet-run -p steplet-app --offline`: 43 test programs, every one `ok`, 266 passed, none failed,
+77 ignored (the Linux and live tests). The runner: 178 passed, 69 ignored; the app: 88 passed, 8 ignored.
+
+Not checked in this task: a whole run of Steplet's own agent in real Linux (`run_agent_locked` with `prepare_own`,
+`LinuxHands` and the loop together). The loop's tests use stand-in hands; the hands' tests (Task 5) use no loop. The
+first whole run is Task 10's, with Nemotron.

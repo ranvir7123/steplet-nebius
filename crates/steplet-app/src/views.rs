@@ -1021,6 +1021,14 @@ pub fn run_failure(e: &RunError) -> (String, FailureView) {
         RunError::Pin(why) => {
             (starting, said("Steplet could not keep this file's web sites fixed for the run, so nothing ran:", why))
         }
+        RunError::NoPrice(model) => (
+            starting,
+            said(
+                "Steplet has no price for this model, so it could not keep the run under its spending cap, and \
+                 nothing ran. The model:",
+                model,
+            ),
+        ),
     }
 }
 
@@ -1093,6 +1101,8 @@ pub fn progress_view(p: &Progress, call: Option<(&str, &Value, bool)>, limits: L
         Progress::Checked { call, check, reason } => {
             ProgressView::Checked { call: call.clone(), check: check_view(check), reason: reason.clone() }
         }
+        // Shown from the Nebius plan's Task 7.
+        Progress::Spent(_) => return None,
     })
 }
 

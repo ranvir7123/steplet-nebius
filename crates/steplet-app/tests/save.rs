@@ -62,6 +62,8 @@ fn outcome(events: Vec<Event>, requests: Vec<Asked>, answers: Vec<Answer>) -> Ru
         faults: Vec::new(),
         stopped_by_you: false,
         answers,
+        limit: None,
+        spent: None,
     }
 }
 

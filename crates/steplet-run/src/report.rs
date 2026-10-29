@@ -396,7 +396,7 @@ fn service_refused(events: &[Event]) -> Option<String> {
 fn commands(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<ReportCommand> {
     let mut answered: HashMap<&str, bool> = HashMap::new();
     for asked in &outcome.requests {
-        if let Asked::Decision { request, answer, .. } = asked {
+        if let Asked::Decision { request, answer, .. } | Asked::InApp { request, answer, .. } = asked {
             let allowed = answered.entry(request.tool_use_id.as_str()).or_insert(false);
             *allowed |= matches!(answer, GateAnswer::Allow { .. });
         }
@@ -525,7 +525,8 @@ fn refused(outcome: &RunOutcome, scrub: &Scrubber) -> Vec<String> {
         .requests
         .iter()
         .filter_map(|asked| match asked {
-            Asked::Decision { request, answer: GateAnswer::Deny { message }, .. } => {
+            Asked::Decision { request, answer: GateAnswer::Deny { message }, .. }
+            | Asked::InApp { request, answer: GateAnswer::Deny { message }, .. } => {
                 let call = described(&request.tool_name, &what(&request.tool_name, &request.input));
                 let ran = results.get(request.tool_use_id.as_str()).is_some_and(|r| !r.is_error);
                 let ran = if ran { " (it ran anyway)" } else { "" };

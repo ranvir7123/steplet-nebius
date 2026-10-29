@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use crate::agent::Spent;
 use crate::ask::{Answers, Question, Reply};
 use crate::prepare::Prepared;
 use crate::report::Check;
@@ -45,6 +46,8 @@ pub enum Progress {
     /// and Steplet's reason when it refused. Said as the decision is made; the report, built afterwards from Steplet's
     /// own records, is the last word on what happened to the call.
     Checked { call: String, check: Check, reason: Option<String> },
+    /// Steplet's own agent: what the run has spent on the model so far, after each answer.
+    Spent(Spent),
 }
 
 /// Who follows a run as it goes: where its progress goes, and the Stop button. `on_progress` is called on the run's

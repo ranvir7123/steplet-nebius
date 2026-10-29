@@ -112,7 +112,7 @@ fn all_read(asked: &[Asked]) -> bool {
     asked.iter().all(|a| match a {
         Asked::Decision { delivered, .. } => *delivered,
         Asked::Key { served, .. } => *served,
-        Asked::Refused { .. } => true,
+        Asked::Refused { .. } | Asked::InApp { .. } => true,
     })
 }
 
@@ -811,6 +811,7 @@ fn a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not() {
         let client = match a {
             Asked::Decision { client, .. } | Asked::Key { client, .. } => client,
             Asked::Refused { .. } => panic!("nothing was refused before deciding: {a:?}"),
+            Asked::InApp { .. } => panic!("a Claude Code run decides nothing in the app: {a:?}"),
         };
         println!("--- the gate: {client:?}");
         assert_eq!((client.user.as_str(), client.logon_session), (me.user.as_str(), me.logon_session));

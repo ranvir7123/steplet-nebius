@@ -289,6 +289,8 @@ impl Run {
             faults: Vec::new(),
             stopped_by_you: false,
             answers: self.answers.clone(),
+            limit: None,
+            spent: None,
         }
     }
 

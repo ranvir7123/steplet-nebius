@@ -64,9 +64,9 @@ impl TokenFactory {
         let lower = detail.to_ascii_lowercase();
         let no_credit = ["insufficient", "balance", "credit", "payment"].iter().any(|w| lower.contains(w));
         match status {
-            402 => ModelError::NoCredit { detail },
-            400..=499 if no_credit => ModelError::NoCredit { detail },
-            401 | 403 => ModelError::KeyRefused { detail },
+            402 => ModelError::NoCredit { status, detail },
+            400..=499 if no_credit => ModelError::NoCredit { status, detail },
+            401 | 403 => ModelError::KeyRefused { status, detail },
             429 => ModelError::Busy {
                 status,
                 detail,

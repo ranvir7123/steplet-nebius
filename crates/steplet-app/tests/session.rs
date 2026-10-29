@@ -125,6 +125,8 @@ fn empty_outcome() -> RunOutcome {
         faults: Vec::new(),
         stopped_by_you: false,
         answers: Vec::new(),
+        limit: None,
+        spent: None,
     }
 }
 

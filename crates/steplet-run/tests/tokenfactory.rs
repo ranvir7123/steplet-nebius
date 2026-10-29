@@ -215,7 +215,7 @@ fn a_refused_key_is_key_refused() {
     for code in [401, 403] {
         let s = server(vec![status(code, r#"{"detail":"Invalid API key"}"#)]);
         let e = model(&s).next(&convo(), &[], 100).unwrap_err();
-        assert_eq!(e, ModelError::KeyRefused { detail: "Invalid API key".into() }, "status {code}");
+        assert_eq!(e, ModelError::KeyRefused { status: code, detail: "Invalid API key".into() }, "status {code}");
         assert_eq!(e.to_string(), "Nebius did not accept the key. Change it in Setup.");
         assert!(!e.worth_retrying());
     }
@@ -231,7 +231,7 @@ fn no_credit_is_said_as_such() {
     for (code, body) in cases {
         let s = server(vec![status(code, body)]);
         let e = model(&s).next(&convo(), &[], 100).unwrap_err();
-        assert!(matches!(e, ModelError::NoCredit { .. }), "status {code}: {e:?}");
+        assert!(matches!(e, ModelError::NoCredit { status, .. } if status == code), "status {code}: {e:?}");
         assert!(e.to_string().starts_with("Your Nebius account has no credit left."));
         assert!(!e.worth_retrying());
     }

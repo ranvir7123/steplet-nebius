@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use steplet_core::policy::Policy;
 use windows_sys::Win32::Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom};
 
+use crate::agent::{Limit, Spent};
 use crate::ask::{Answer, Asker};
 use crate::decide::{Checker, decide};
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_for_run, gate_on_windows, serve};
@@ -20,7 +21,7 @@ use crate::launch::{LaunchError, RunHandle, launch};
 use crate::live::{Live, Progress, StopSignal};
 use crate::lock::RunLock;
 use crate::places::LinuxPaths;
-use crate::prepare::{PrepareError, changes, discard, prepare, run_config};
+use crate::prepare::{PrepareError, Prepared, changes, discard, prepare, run_config};
 use crate::report::{Report, Scrubber, Trust, build_report, read_trust};
 use crate::sites;
 use crate::types::{BadValue, Event, GateLink, RunPaths, RunRequest};
@@ -80,6 +81,8 @@ pub enum RunError {
     },
     /// Steplet could not keep the listed sites' addresses fixed for the run (the `/etc/hosts` write failed).
     Pin(String),
+    /// Steplet's own agent was given a model Steplet has no price for, so its spending could not be capped.
+    NoPrice(String),
 }
 
 /// What happened in a run, from Steplet's own records.
@@ -96,7 +99,8 @@ pub struct RunOutcome {
     /// whose result came after that was cut short or refused by the stop.
     pub stopped_at: Option<usize>,
     /// Claude Code's exit code. It is 124 at the time limit and also after a stop, so whether Steplet stopped the
-    /// run is `stopped_by` and `faults`, not this.
+    /// run is `stopped_by` and `faults`, not this. For Steplet's own agent, 0 when the model finished on its own, and
+    /// none otherwise.
     pub exit_code: Option<i32>,
     /// What went wrong around the run, in Steplet's words: it could not be stopped or waited for, did not end at
     /// its time limit, or was not removed.
@@ -105,6 +109,10 @@ pub struct RunOutcome {
     pub stopped_by_you: bool,
     /// Every question the receiver was asked, and every yes reused, from Steplet's own record (R7).
     pub answers: Vec<Answer>,
+    /// Steplet's own agent only: the limit that ended the run, if one did.
+    pub limit: Option<Limit>,
+    /// Steplet's own agent only: what the run spent on the model.
+    pub spent: Option<Spent>,
 }
 
 /// The gate's deadline covers the ask limit with room to spare, when someone may be asked.
@@ -169,33 +177,7 @@ pub fn run_live_on_pipe(
     live: Arc<Live>,
 ) -> Result<Report, RunError> {
     limits_fit(&live, setup)?;
-    // K4 B: the agent's fence reaches only the sites the file declares, but it dials wherever a declared name leads,
-    // so a name pointing at this computer or a private network would reach programs there. Steplet resolves each
-    // declared site where it would lead for the run, refuses the run if one leads to this computer or a private
-    // network (or cannot be found), and keeps the answers for the run (pinned in the fence's `/etc/hosts`).
-    let distro = paths.distro_id();
-    let domains: Vec<String> = req.steplet.allow.domains.iter().map(|d| d.text.clone()).collect();
-    // Resolve every declared site in one bounded call; if the look-up itself cannot run, refuse the run (fail closed).
-    let resolved = match sites::resolve_all_in_linux(distro, &domains) {
-        Ok(resolved) => resolved,
-        Err(e) => {
-            return Err(RunError::ListedSite {
-                site: String::new(),
-                why: format!(
-                    "Steplet will not run this file: it could not look up where the web sites it lists lead ({e})."
-                ),
-            });
-        }
-    };
-    let pins = match sites::check_sites(&domains, |name| Ok(resolved.get(name).cloned().unwrap_or_default())) {
-        Ok(pins) => pins,
-        Err(bad) => return Err(RunError::ListedSite { site: bad.site, why: bad.why }),
-    };
-    // The guard is set before pinning, so even a pin that fails part way is cleaned up; the normal path unpins
-    // explicitly below (and records any failure in the report), leaving the guard only as a backstop for the early
-    // returns and for panics.
-    let mut pinned = Pinned::new(distro);
-    sites::pin_sites(distro, &pins).map_err(RunError::Pin)?;
+    let mut pinned = pin_listed_sites(req, paths.distro_id())?;
     let token = random_hex::<32>().map_err(RunError::Random)?;
     let secrets: Vec<&str> = setup.key.iter().map(ApiKey::text).chain([token.as_str()]).collect();
     let log = setup.logs.join(format!("{}.gate.log", paths.run_id()));
@@ -227,7 +209,7 @@ pub fn run_live_on_pipe(
             return Err(RunError::Gate(e));
         }
     };
-    let prepared = prepare_until_stopped(req, paths, &link, &live);
+    let prepared = prepare_until_stopped(paths, &live, || prepare(req, paths, &link));
     let started = match prepared {
         // A Stop while preparing ends what preparing started, so preparing fails: the receiver's Stop, not a fault.
         _ if live.stop.is_set() => Ok(None),
@@ -283,15 +265,45 @@ pub fn run_live_on_pipe(
     Ok(report)
 }
 
-/// `prepare`, which can take minutes for a large repository, ended at once by the receiver's Stop: while it runs, a
-/// second thread looks at the Stop button and, once it is pressed, ends every program of the steplet account (the
-/// clone and the checkout run as that account), again and again until preparing has failed.
-fn prepare_until_stopped(
-    req: &RunRequest,
+/// K4 B: the agent's fence reaches only the sites the file declares, but it dials wherever a declared name leads, so a
+/// name pointing at this computer or a private network would reach programs there. Steplet resolves each declared site
+/// where it would lead for the run, refuses the run if one leads to this computer or a private network (or cannot be
+/// found), and keeps the answers for the run (pinned in the fence's `/etc/hosts`). Both runners pin before anything of
+/// the run is made. The guard is set before pinning, so even a pin that fails part way is cleaned up; the caller unpins
+/// explicitly at the end (and records any failure in the report), leaving the guard only as a backstop for the early
+/// returns and for panics.
+pub(crate) fn pin_listed_sites<'a>(req: &RunRequest, distro: &'a str) -> Result<Pinned<'a>, RunError> {
+    let domains: Vec<String> = req.steplet.allow.domains.iter().map(|d| d.text.clone()).collect();
+    // Resolve every declared site in one bounded call; if the look-up itself cannot run, refuse the run (fail closed).
+    let resolved = match sites::resolve_all_in_linux(distro, &domains) {
+        Ok(resolved) => resolved,
+        Err(e) => {
+            return Err(RunError::ListedSite {
+                site: String::new(),
+                why: format!(
+                    "Steplet will not run this file: it could not look up where the web sites it lists lead ({e})."
+                ),
+            });
+        }
+    };
+    let pins = match sites::check_sites(&domains, |name| Ok(resolved.get(name).cloned().unwrap_or_default())) {
+        Ok(pins) => pins,
+        Err(bad) => return Err(RunError::ListedSite { site: bad.site, why: bad.why }),
+    };
+    let pinned = Pinned::new(distro);
+    sites::pin_sites(distro, &pins).map_err(RunError::Pin)?;
+    Ok(pinned)
+}
+
+/// Preparing the run (`prepare`, or `prepare_own` for Steplet's own agent), which can take minutes for a large
+/// repository, ended at once by the receiver's Stop: while it runs, a second thread looks at the Stop button and, once
+/// it is pressed, ends every program of the steplet account (the clone and the checkout run as that account), again
+/// and again until preparing has failed.
+pub(crate) fn prepare_until_stopped(
     paths: &RunPaths,
-    link: &GateLink,
     live: &Live,
-) -> Result<crate::prepare::Prepared, PrepareError> {
+    prepare: impl FnOnce() -> Result<Prepared, PrepareError>,
+) -> Result<Prepared, PrepareError> {
     let done = AtomicBool::new(false);
     thread::scope(|s| {
         s.spawn(|| {
@@ -303,7 +315,7 @@ fn prepare_until_stopped(
                 thread::sleep(POLL);
             }
         });
-        let prepared = prepare(req, paths, link);
+        let prepared = prepare();
         done.store(true, Ordering::SeqCst);
         prepared
     })
@@ -472,7 +484,7 @@ fn already_come(agent: &mut impl RunningAgent) -> Vec<Event> {
 /// Removes the run's listed-site pins from Steplet's Linux `/etc/hosts` when the run ends, however it ends. The normal
 /// path calls `unpin` so a failure can be reported; `drop` is the backstop for the early returns and for panics. A
 /// block a crashed run left is replaced by the next run's `pin_sites`, so a stale pin never outlives one run.
-struct Pinned<'a> {
+pub(crate) struct Pinned<'a> {
     distro: &'a str,
     done: bool,
 }
@@ -483,7 +495,7 @@ impl<'a> Pinned<'a> {
     }
 
     /// Removes the pins now and remembers it, so `drop` does nothing more. The caller reports any error.
-    fn unpin(&mut self) -> Result<(), String> {
+    pub(crate) fn unpin(&mut self) -> Result<(), String> {
         if self.done {
             return Ok(());
         }
@@ -513,7 +525,7 @@ pub(crate) fn random_hex<const N: usize>() -> io::Result<String> {
 
 impl RunOutcome {
     /// An outcome with nothing on record yet but the gate's `requests`.
-    fn new(requests: Vec<Asked>) -> RunOutcome {
+    pub(crate) fn new(requests: Vec<Asked>) -> RunOutcome {
         RunOutcome {
             events: Vec::new(),
             requests,
@@ -523,6 +535,8 @@ impl RunOutcome {
             faults: Vec::new(),
             stopped_by_you: false,
             answers: Vec::new(),
+            limit: None,
+            spent: None,
         }
     }
 

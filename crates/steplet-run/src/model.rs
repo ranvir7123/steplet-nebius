@@ -113,9 +113,9 @@ pub struct ModelReply {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ModelError {
     /// The service refused the key (status 401 or 403).
-    KeyRefused { detail: String },
+    KeyRefused { status: u16, detail: String },
     /// The account has no credit left.
-    NoCredit { detail: String },
+    NoCredit { status: u16, detail: String },
     /// The service is busy (status 429); `retry_after` is its own wait, in seconds, when it gave one.
     Busy { status: u16, detail: String, retry_after: Option<u64> },
     /// The service failed on its side (status 500 and up).

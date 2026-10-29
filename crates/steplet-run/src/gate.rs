@@ -80,6 +80,9 @@ pub enum Asked {
     /// Refused before any decision; `client` is `None` when Windows would not say who it was, and `call` is the tool
     /// call's id when the request was read far enough to name one (the report labels that call, Task 13).
     Refused { client: Option<Client>, reason: String, call: Option<String> },
+    /// A request of Steplet's own agent, decided inside Steplet with no gate and no pipe (the Nebius plan, Task 6),
+    /// and Steplet's answer. `took` runs from the call being read to the answer.
+    InApp { request: GateRequest, answer: GateAnswer, took: Duration },
 }
 
 #[derive(Debug)]
