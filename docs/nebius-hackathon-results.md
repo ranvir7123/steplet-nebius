@@ -306,3 +306,23 @@ Not shown yet: the saved line says "Steplet sends it only to api.tokenfactory.ne
 `sends_the_key_as_a_bearer_header_and_nowhere_else` shows the key goes only in the request header to the address it
 is given; that the key never reaches Steplet's Linux is Task 9's `the_nebius_key_never_reaches_linux`. A real key
 typed into the real window is Task 4.
+
+Added after that commit, because no test drove the real window's key commands: `real-nebius-key.spec.ts` drives the
+e2e build's window (opened with no file, after checking that no run held `Local\Steplet-run`). It saves a made-up key
+through the real `save_key`, sees "Saved.", forgets it through `forget_key`, and checks that the Anthropic box did not
+change. It skips itself if a Nebius key is already saved, so it never replaces the owner's key, and forgets the
+made-up key if it fails after saving.
+
+```
+> npx --offline playwright test --project=real real-nebius-key.spec.ts      (e2e build's window open)
+Anthropic key saved before: yes
+made-up Nebius key: saved, and the box says so
+made-up Nebius key: forgotten; the Anthropic box did not change
+  ok 1 [real] › app\tests\real-nebius-key.spec.ts:11:1 › the_nebius_key_box_saves_and_forgets_through_the_real_commands (3.1s)
+  1 passed (6.3s)
+> target\debug\examples\nebius_check.exe --yes-spend 0.05      (afterwards: the entry is empty again)
+There is no Nebius key in Setup. Type it into Setup's Nebius box first.
+```
+
+The normal build was then rebuilt for the owner, and its debugging port checked closed (`window running: True;
+debugging port open: False`).
