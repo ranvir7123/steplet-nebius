@@ -377,6 +377,13 @@ Plan: `docs/plans/2026-10-29-nebius-hackathon.md`, approved by the user on 29 Oc
 | N7 | **The public repository is `ranvir7123/steplet-nebius`.** Creating it, pushing and the Release each still need the user's yes. | |
 | N8 | **The secret scan also counts how often the user's saved Anthropic and Nebius keys appear in the history,** printing only the counts. | Key-shaped patterns alone could miss a real key in an unusual format. |
 
+Choices made while building (Claude's, each one open to the user's change):
+
+| | Chosen | Why, and what it costs |
+|---|---|---|
+| N9 | **The screen tests run in Microsoft Edge 156, through a local settings file `web/playwright.edge.config.ts` kept out of git (`.git/info/exclude`),** not in Playwright's own Chromium. | Playwright 1.63.0 needs its Chromium build 1243, which is no longer on this computer; Edge is already installed and is the engine inside WebView2, the real window. No test compares pixels. Cost: about 35 minutes for all 330 tests with eight Edge windows at once (one click timed out under that load and passed when run again); the committed setup still names Chromium, so anyone else needs `npx playwright install chromium`. |
+| N10 | **The model's answer type is `ModelReply`,** not `Reply` as the plan wrote it. | `steplet_run::Reply` already names the receiver's answer to a question. |
+
 ## Background
 
 - Research: `research/2026-10-06-landscape-and-feasibility.md`

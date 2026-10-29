@@ -8,8 +8,10 @@ mod gate;
 mod launch;
 mod live;
 mod lock;
+mod model;
 mod places;
 mod prepare;
+mod price;
 mod promises;
 mod report;
 mod run;
@@ -18,8 +20,10 @@ pub mod setup;
 mod sites;
 mod stream;
 mod task;
+mod tokenfactory;
 mod types;
 mod watch;
+mod winhttp;
 pub mod wsl;
 
 pub use ask::{Answer, Answers, Asker, Question, Reply, fingerprint};
@@ -31,10 +35,15 @@ pub use gate::{
 pub use launch::{LaunchError, RunHandle, launch};
 pub use live::{Live, Progress, StopSignal};
 pub use lock::RunLock;
+pub use model::{
+    Finish, Message, Model, ModelError, ModelReply, Role, Scripted, Seen, Step, ToolCall, ToolSpec, Usage, chat_body,
+    read_reply,
+};
 pub use places::{LinuxPaths, RealPaths};
 pub use prepare::{
     PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, fetchable, prepare, removed_files, run_config,
 };
+pub use price::{Nanodollars, Price, cost, price, worst_case};
 pub use promises::{NetworkMode, Promise, network_mode, promises, read_network_mode};
 pub use report::{
     Check, NotYes, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line,
@@ -50,5 +59,7 @@ pub use sites::{
 };
 pub use stream::parse_line;
 pub use task::task_text;
+pub use tokenfactory::{BASE, TokenFactory};
 pub use types::{BadValue, Event, GateAnswer, GateLink, GateRequest, RunPaths, RunRequest};
 pub use watch::{Tripwire, Verdict, Watcher, call_what};
+pub use winhttp::HttpLimits;

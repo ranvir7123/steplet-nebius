@@ -124,3 +124,69 @@ crates.io packages in this `Cargo.lock` from 22 Oct, with 0 under 14 days old an
 and after any change to a lock file.
 
 **Commit:** "Starting point of the Nebius copy: builds, tests and lock ages recorded".
+## Task 2: Talking to Nebius (stand-in only, no spend) (29 Oct 2026)
+
+New: `crates/steplet-run/src/model.rs` (the conversation, the `Model` trait, the `Scripted` stand-in model),
+`winhttp.rs` (one request through Windows' own WinHTTP, decision N1), `tokenfactory.rs`, `price.rs`; the test
+`crates/steplet-run/tests/tokenfactory.rs`, whose stand-in Nebius is a small web server on `127.0.0.1` inside the test
+file itself (the plan had it in `tests/support/fake_nebius.rs`; only this file uses it). `Cargo.toml` gains the
+`windows-sys` feature `Win32_Networking_WinHttp`. Not as the plan wrote it: the answer type is `ModelReply` (N10),
+`TokenFactory::models` is a method on a `TokenFactory` rather than a free function taking the key, and the errors keep
+Nebius's own words (cut to 300 characters, with the key taken out) so the report can say what Nebius said.
+
+Before the code was connected:
+
+```
+> cargo test -p steplet-run --offline --test tokenfactory --no-run
+error[E0432]: unresolved imports `steplet_run::Finish`, `steplet_run::HttpLimits`, `steplet_run::Message`, `steplet_run::Model`, `steplet_run::ModelError`, `steplet_run::Nanodollars`, `steplet_run::ToolSpec`, `steplet_run::TokenFactory`, `steplet_run::Usage`, `steplet_run::cost`, `steplet_run::price`, `steplet_run::worst_case`
+error: could not compile `steplet-run` (test "tokenfactory") due to 1 previous error
+```
+
+After:
+
+```
+> cargo test -p steplet-run --offline --test tokenfactory
+test worst_case_is_at_least_the_cost_of_any_reply_within_max_tokens ... ok
+test cost_counts_both_directions ... ok
+test only_https_or_this_laptop_is_accepted ... ok
+test an_answer_that_is_not_json_is_a_bad_reply ... ok
+test an_oversized_reply_is_refused ... ok
+test the_models_list_is_read ... ok
+test reads_tool_calls_text_and_usage ... ok
+test sends_the_key_as_a_bearer_header_and_nowhere_else ... ok
+test a_refused_key_is_key_refused ... ok
+test a_tool_result_goes_back_as_a_tool_message ... ok
+test no_credit_is_said_as_such ... ok
+test the_key_never_appears_in_an_error ... ok
+test busy_and_server_errors_are_told_apart ... ok
+test nobody_listening_is_a_network_error ... ok
+test a_server_that_goes_silent_is_too_slow ... ok
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.02s
+```
+
+They passed on the first run, so the code was broken on purpose once to see a test catch it: the header was changed
+to send `Bearer x<key>`, then put back (the file compared equal to the original afterwards).
+
+```
+> cargo test -p steplet-run --offline --test tokenfactory -- sends_the_key      (header broken on purpose)
+test sends_the_key_as_a_bearer_header_and_nowhere_else ... FAILED
+assertion `left == right` failed
+  left: Some("Bearer xnebius-STEPLET-TEST-MADE-UP-NOT-A-KEY")
+ right: Some("Bearer nebius-STEPLET-TEST-MADE-UP-NOT-A-KEY")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.01s
+```
+
+The run crate's own unit tests, the format check, clippy and the lock file:
+
+```
+> cargo test -p steplet-run --offline --lib
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.60s
+> cargo fmt --all -- --check          (after cargo fmt --all rewrapped two lines in model.rs)
+(nothing printed, exit 0)
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.30s
+> git diff --stat -- Cargo.lock
+(nothing printed: the lock file is unchanged, so no package was added and F12 still holds)
+```
+
+Not shown by these tests: a call to the real Nebius (Task 4), and WinHTTP through a proxy (this computer has none).
