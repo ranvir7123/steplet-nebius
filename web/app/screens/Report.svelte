@@ -1,9 +1,10 @@
 <script lang="ts">
   // Screen 8: the report. First how the run ended, in Steplet's words, with what to do next; then every command with
   // its check, its exit code (from Claude Code's own record, never from the output) and everything it printed; what
-  // Steplet refused; your answers; every model used and any refusal; what changed in the working copy (already
-  // deleted); the trust check; what went wrong around the run; Steplet's notes; and last, labelled, what the agent
-  // says. Every word about the run comes from Rust; everything the agent, a command or a model wrote is file text.
+  // Steplet refused; your answers; every model used and any refusal, and for Steplet's own agent what the run spent;
+  // what changed in the working copy (already deleted); the trust check (Claude Code's runs only); what went wrong
+  // around the run; Steplet's notes; and last, labelled, what the agent says. Every word about the run comes from
+  // Rust; everything the agent, a command or a model wrote is file text.
   import { getContext } from "svelte";
   import FileText from "../../shared/FileText.svelte";
   import Icon from "../../shared/Icon.svelte";
@@ -156,6 +157,17 @@
 
   <section class="panel" aria-labelledby="models-title">
     <h2 id="models-title">The models</h2>
+    {#if report.spent}
+      {@const s = report.spent}
+      <dl class="spend">
+        <dt>The model</dt>
+        <dd>{s.model}</dd>
+        <dt>Spent</dt>
+        <dd>{s.money}</dd>
+      </dl>
+      <p class="muted">{s.tokens}</p>
+      {#if s.unsure}<p>{s.unsure}</p>{/if}
+    {/if}
     {#if report.models.length === 0}
       <p class="muted">None recorded.</p>
     {:else}
@@ -190,10 +202,12 @@
     {/if}
   </section>
 
-  <section class="panel" aria-labelledby="trust-title">
-    <h2 id="trust-title">The trust check</h2>
-    <p>{report.trust}</p>
-  </section>
+  {#if report.trust !== undefined}
+    <section class="panel" aria-labelledby="trust-title">
+      <h2 id="trust-title">The trust check</h2>
+      <p>{report.trust}</p>
+    </section>
+  {/if}
 
   <section class="panel" aria-labelledby="faults-title">
     <h2 id="faults-title">What went wrong around the run</h2>
@@ -381,6 +395,23 @@
   .chip {
     display: inline-block;
     margin: 0 var(--space-1) var(--space-1) 0;
+  }
+
+  .spend {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-1) var(--space-4);
+    margin: 0;
+  }
+
+  .spend dt {
+    color: var(--text-muted);
+  }
+
+  .spend dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
   }
 
   .what {

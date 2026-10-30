@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use serde_json::{Map, Value};
 use steplet_core::display::{is_invisible, is_space_like};
 
+use crate::agent::{Limit, Spent};
 use crate::ask::{Answer, Reply};
 use crate::gate::Asked;
 use crate::run::RunOutcome;
@@ -61,6 +62,10 @@ pub struct Report {
     pub answers: Vec<Answer>,
     /// Lines every report carries.
     pub notes: Vec<&'static str>,
+    /// Steplet's own agent: what the run spent on the model, and its cap and step limit. `None` for Claude Code.
+    pub spent: Option<Spent>,
+    /// Steplet's own agent: the limit that ended the run, if one did.
+    pub limit: Option<Limit>,
 }
 
 /// One tool call, as the report shows it.
@@ -158,6 +163,8 @@ pub enum Trust {
     Recorded,
     /// Steplet could not read the run's config.
     Unknown,
+    /// Steplet's own agent: there is no Claude Code config to check, so the report has no line for it.
+    NotApplicable,
 }
 
 /// The report of `outcome`. `changed` is Steplet's own list of the working copy's changes (`None` if it could not
@@ -214,6 +221,8 @@ pub fn build_report(outcome: &RunOutcome, changed: Option<&[String]>, trust: Tru
             })
             .collect(),
         notes: vec![FENCE_NOTE],
+        spent: outcome.spent.as_ref().map(|s| Spent { model: scrub.text(&s.model), ..s.clone() }),
+        limit: outcome.limit,
     }
 }
 

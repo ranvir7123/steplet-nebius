@@ -29,6 +29,8 @@ const special: Record<string, Partial<Timing>> = {
   "run-40-commands": { step: 40 },
   // A run that takes a moment to stop, as a real one does, so "Stopping…" can be seen.
   "run-stopping": { stopping: 1500 },
+  // Steplet's own agent answering 40 times over a few seconds, so the top line can be seen counting the steps.
+  "run-agent-step-limit": { step: 15 },
 };
 
 /** The timing of the scenario `name`. */

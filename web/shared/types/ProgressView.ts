@@ -5,8 +5,9 @@ import type { FailureView } from "./FailureView";
 import type { QuestionView } from "./QuestionView";
 import type { ReportView } from "./ReportView";
 import type { Seg } from "./Seg";
+import type { SpendView } from "./SpendView";
 
 /**
  * One step of a run, for the screen.
  */
-export type ProgressView = { "kind": "prepared", commit: string, removed: Array<Array<Seg>>, limit_ms: number, } | { "kind": "event", event: EventView, } | { "kind": "question", question: QuestionView, } | { "kind": "question_closed", id: number, how: string, } | { "kind": "waiting", count: number, } | { "kind": "checked", call: string, check: CheckView, reason: string | null, } | { "kind": "finished", report: ReportView, } | { "kind": "failed", stage: string, failure: FailureView, };
+export type ProgressView = { "kind": "prepared", commit: string, removed: Array<Array<Seg>>, limit_ms: number, } | { "kind": "event", event: EventView, } | { "kind": "question", question: QuestionView, } | { "kind": "question_closed", id: number, how: string, } | { "kind": "waiting", count: number, } | { "kind": "checked", call: string, check: CheckView, reason: string | null, } | { "kind": "spent", spent: SpendView, } | { "kind": "finished", report: ReportView, } | { "kind": "failed", stage: string, failure: FailureView, };

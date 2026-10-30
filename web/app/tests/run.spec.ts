@@ -1,8 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { Fixture } from "../../shared/types/Fixture";
 import type { QuestionView } from "../../shared/types/QuestionView";
 import type { Seg } from "../../shared/types/Seg";
+import type { SpendView } from "../../shared/types/SpendView";
 
 // The run screen and the ask screen (Task 12), reached as a receiver reaches them: the preview, Run, then "Run with
 // Claude Code". Against the screens build and its stand-in backend, which replays progress saved from real Rust
@@ -224,4 +226,114 @@ test("a_link_box_keeps_a_gap_from_the_text_around_it", async ({ page }) => {
   });
   expect(gaps.before).toBeGreaterThanOrEqual(3);
   expect(gaps.after).toBeGreaterThanOrEqual(3);
+});
+
+// Steplet's own agent (the Nebius plan, Task 7): the bar at the top of the run says the model, what the run has spent
+// of its cap and the step it is on, at both widths and whatever the model's name. Pictured, dark, in
+// docs/screens/nebius/task7-run-*.
+const NEBIUS_SHOTS = fileURLToPath(new URL("../../../docs/screens/nebius/", import.meta.url));
+
+/** The last of the scenario's spending, as the top line ends up showing it. */
+function spendOf(f: Fixture): SpendView {
+  let last: SpendView | null = null;
+  for (const p of f.progress) if (p.kind === "spent") last = p.spent;
+  if (!last) throw new Error("the scenario spends nothing");
+  return last;
+}
+const topLine = (s: SpendView) => `${s.model} · ${s.money} · ${s.steps}`;
+
+/** The end panel's sentence for a run that stopped at a limit. */
+function limitOf(f: Fixture): string {
+  for (const p of f.progress) if (p.kind === "finished" && p.report.end.kind === "stopped_at_limit") return p.report.end.why;
+  throw new Error("the scenario did not stop at a limit");
+}
+
+for (const width of [1100, 560]) {
+  test(`the_top_line_says_the_model_the_spend_and_the_step_at_${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    for (const [scenario, ends] of [
+      ["run-agent-long-model", false],
+      ["run-agent-spending-cap", true],
+      ["run-agent-step-limit", true],
+      ["run-agent-key-refused", true],
+    ] as const) {
+      await runOf(page, scenario);
+      const f = saved(scenario);
+      const line = page.getByText(topLine(spendOf(f)), { exact: true });
+      await expect(line).toBeVisible({ timeout: 20_000 });
+      if (ends) await expect(page.getByRole("button", { name: "See the report" })).toBeVisible();
+      else await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+      // It stays at the top of the window while the log scrolls under it, and fits the window's width.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const box = (await line.boundingBox())!;
+      expect(box.y, `${scenario}: the top line stays at the top`).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height, `${scenario}: the top line stays at the top`).toBeLessThan(200);
+      expect(box.x + box.width, `${scenario}: the top line fits`).toBeLessThanOrEqual(width);
+      const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      expect(sideways, `${scenario}: sideways scroll`).toBe(false);
+      // The money and the step are never broken across two lines, however long the model's name.
+      for (const part of [spendOf(f).money, spendOf(f).steps]) {
+        const tall = await line.getByText(part, { exact: true }).evaluate((e) => {
+          const r = document.createRange();
+          r.selectNodeContents(e);
+          return r.getClientRects().length;
+        });
+        expect(tall, `${scenario}: "${part}" on one line`).toBe(1);
+      }
+      // A dot the receiver can see always stands between two pieces on one line: no line starts with one.
+      const start = await line.getByText(spendOf(f).model, { exact: true }).evaluate((e) => {
+        const r = document.createRange();
+        r.selectNodeContents(e);
+        return r.getClientRects()[0].left;
+      });
+      for (const dot of await line.getByText("·", { exact: true }).all()) {
+        const at = await dot.evaluate((e) => {
+          const r = e.getBoundingClientRect();
+          const seen = e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+          return { seen, left: r.left };
+        });
+        if (at.seen) expect(at.left, `${scenario}: a line starts with a dot`).toBeGreaterThan(start + 1);
+      }
+      await page.evaluate(() => document.fonts.ready);
+      await page.mouse.move(width - 1, 799);
+      await page.screenshot({ path: `${NEBIUS_SHOTS}task7-${scenario}-dark-${width}.png`, animations: "disabled" });
+    }
+  });
+}
+
+test("the_top_line_counts_the_steps_as_the_answers_come", async ({ page }) => {
+  await runOf(page, "run-agent-step-limit");
+  // The stand-in plays this run over a few seconds (scenarios.ts): an early step shows before the last one.
+  await expect(page.getByText(/^Nemotron 3 Super on Nebius · .+ · step ([1-9]|[12]\d) of 40$/)).toBeVisible();
+  await expect(page.getByText(topLine(spendOf(saved("run-agent-step-limit"))), { exact: true })).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
+test("a_run_stopped_at_a_limit_says_which_in_plain_words", async ({ page }) => {
+  const cap = saved("run-agent-spending-cap");
+  expect(limitOf(cap)).toMatch(
+    /^Stopped before the next model call, which could have taken spending past the \$0\.25 cap\. Spent: \$0\.\d\d\.$/,
+  );
+  await runOf(page, "run-agent-spending-cap");
+  const end = page.getByRole("region", { name: "Stopped at a limit" });
+  await expect(end).toContainText(limitOf(cap));
+  const steps = saved("run-agent-step-limit");
+  expect(limitOf(steps)).toBe("Stopped at the step limit (40 model turns). The task may be unfinished.");
+  await runOf(page, "run-agent-step-limit");
+  await expect(page.getByRole("region", { name: "Stopped at a limit" })).toContainText(limitOf(steps), {
+    timeout: 20_000,
+  });
+  // The row that opens the log names Steplet's agent and the model it asked for, not Claude Code.
+  await expect(log(page).getByRole("listitem").first()).toHaveText(
+    "Steplet's agent started, with the model nvidia/nemotron-3-super-120b-a12b.",
+  );
+  await expect(page.getByText(/\bgate\b/i)).toHaveCount(0);
+});
+
+test("a_claude_code_run_shows_no_spending", async ({ page }) => {
+  await runOf(page, "run-started");
+  await expect(log(page).getByRole("listitem").first()).toContainText("Claude Code started, with the model");
+  await expect(page.getByText(/on Nebius/)).toHaveCount(0);
 });

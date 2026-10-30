@@ -5,6 +5,7 @@ import type { EndView } from "./EndView";
 import type { EndWords } from "./EndWords";
 import type { RefusalView } from "./RefusalView";
 import type { Seg } from "./Seg";
+import type { SpendView } from "./SpendView";
 
 export type ReportView = { end: EndView, end_words: EndWords, 
 /**
@@ -16,10 +17,14 @@ offers_model_switch: boolean, completed: boolean, stopped_by_you: boolean, comma
  */
 changed_files: Array<Array<Seg>> | null, 
 /**
- * The trust check (D3), in Steplet's words.
+ * The trust check (D3), in Steplet's words. `None` for Steplet's own agent, which has no Claude Code settings.
  */
-trust: string, faults: Array<Array<Seg>>, notes: Array<string>, 
+trust?: string, faults: Array<Array<Seg>>, notes: Array<string>, 
 /**
  * Shown last, labelled (F47).
  */
-agent_says: Array<Seg>, };
+agent_says: Array<Seg>, 
+/**
+ * Steplet's own agent: the model and what the run spent. `None` for Claude Code.
+ */
+spent?: SpendView, };

@@ -55,6 +55,18 @@ const PRICES: &[(&str, u64, u64)] = &[
     ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", 60, 240),
 ];
 
+/// The names the screens give the models Steplet knows. Model names are compared without regard to case.
+const NAMES: &[(&str, &str)] = &[
+    ("nvidia/nemotron-3-super-120b-a12b", "Nemotron 3 Super"),
+    ("nvidia/Nemotron-3-Ultra-550b-a55b", "Nemotron 3 Ultra"),
+    ("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "Nemotron 3 Nano"),
+];
+
+/// The model's name on screen ("Nemotron 3 Super"), or its id as Steplet asked for it when Steplet has no name for it.
+pub fn model_name(model: &str) -> String {
+    NAMES.iter().find(|(id, _)| id.eq_ignore_ascii_case(model)).map_or(model, |&(_, name)| name).to_string()
+}
+
 /// The model's price, or `None` for a model Steplet has no price for: such a model is never run, because its spending
 /// could not be capped.
 pub fn price(model: &str) -> Option<Price> {
