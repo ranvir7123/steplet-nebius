@@ -18,8 +18,9 @@ use steplet_core::report::Report as FileReport;
 use steplet_core::rules::{self, Finding, Outcome, Severity};
 use steplet_core::sig::SigStatus;
 use steplet_run::{
-    Answer, Check, Event, GateError, LaunchError, NotYes, PrepareError, Progress, Promise, Question, Refusal, Reply,
-    Report, ReportCommand, RunError, Tripwire, Trust, call_what, exit_code_of,
+    Answer, Check, Event, GateError, LaunchError, Limit, Nanodollars, NotYes, PrepareError, Progress, Promise,
+    Question, Refusal, Reply, Report, ReportCommand, RunError, Spent, Tripwire, Trust, call_what, exit_code_of,
+    model_name,
 };
 use ts_rs::TS;
 
@@ -729,6 +730,11 @@ fn retry_words(status: Option<u16>, attempt: u32, max: u32) -> String {
     }
 }
 
+/// Steplet's own agent tries again after an answer from Nebius: `error` is Steplet's own sentence for it.
+pub fn own_retry_words(error: &str, attempt: u32, max: u32) -> String {
+    format!("{error} Steplet tries again ({attempt} of {max}).")
+}
+
 /// Every field of a request, in its own order: strings as they are, anything else as JSON.
 fn fields(input: &Value) -> Vec<FieldView> {
     match input {
@@ -910,8 +916,14 @@ pub enum ProgressView {
         check: CheckView,
         reason: Option<String>,
     },
+    /// Steplet's own agent: the model, what the run has spent of its cap and the steps used of its limit, at the start
+    /// and after each answer.
+    Spent {
+        spent: SpendView,
+    },
+    /// Boxed: the report is far bigger than any other step, and each step is as big as the biggest.
     Finished {
-        report: ReportView,
+        report: Box<ReportView>,
     },
     /// The run could not start or prepare: the stage, in Steplet's words, and why.
     Failed {
@@ -1101,9 +1113,81 @@ pub fn progress_view(p: &Progress, call: Option<(&str, &Value, bool)>, limits: L
         Progress::Checked { call, check, reason } => {
             ProgressView::Checked { call: call.clone(), check: check_view(check), reason: reason.clone() }
         }
-        // Shown from the Nebius plan's Task 7.
-        Progress::Spent(_) => return None,
+        Progress::Spent(spent) => ProgressView::Spent { spent: spend_view(spent) },
     })
+}
+
+/// What Steplet's own agent has spent, in Steplet's words: the run's top line ("Nemotron 3 Super on Nebius · $0.04 of
+/// $0.25 · step 7 of 40") and the report's account of it. The model is one Steplet chose, never the file's.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct SpendView {
+    /// The model's name and where it runs: "Nemotron 3 Super on Nebius".
+    pub model: String,
+    /// What the run has spent of its cap: "$0.04 of $0.25".
+    pub money: String,
+    /// The step under way, or the last one, of the step limit: "step 7 of 40".
+    pub steps: String,
+    /// The tokens and the model turns: "12,345 tokens sent and 678 received, in 7 model turns."
+    pub tokens: String,
+    /// What `money` counts for calls that may have cost something without an answer, if any.
+    pub unsure: Option<String>,
+}
+
+pub fn spend_view(s: &Spent) -> SpendView {
+    let tokens = if s.calls == 0 {
+        "The model gave no answer.".into()
+    } else {
+        let sent = if s.tokens_in == 1 { "token" } else { "tokens" };
+        format!(
+            "{} {sent} sent and {} received, in {}.",
+            thousands(s.tokens_in),
+            thousands(s.tokens_out),
+            turns(s.calls)
+        )
+    };
+    let unsure = (s.unsure > Nanodollars(0)).then(|| {
+        format!(
+            "This counts {} for model calls that failed after Nebius may have charged for them, each at the most it \
+             could have cost.",
+            money(s.unsure)
+        )
+    });
+    SpendView {
+        model: format!("{} on Nebius", model_name(&s.model)),
+        money: format!("{} of {}", money(s.cost + s.unsure), money(s.cap)),
+        steps: format!("step {} of {}", s.calls.max(1).min(s.max_steps), s.max_steps),
+        tokens,
+        unsure,
+    }
+}
+
+/// An amount of money in Steplet's words: dollars to the nearest cent, or "less than $0.01" for less than a cent
+/// that is not nothing.
+pub fn money(n: Nanodollars) -> String {
+    const CENT: u64 = 10_000_000;
+    if n.0 > 0 && n.0 < CENT {
+        return "less than $0.01".into();
+    }
+    let cents = n.0 / CENT + u64::from(n.0 % CENT >= CENT / 2);
+    format!("${}.{:02}", thousands(cents / 100), cents % 100)
+}
+
+/// "1 model turn", "7 model turns".
+fn turns(n: u32) -> String {
+    if n == 1 { "1 model turn".into() } else { format!("{} model turns", thousands(n.into())) }
+}
+
+/// A whole number with a comma between each three digits: "12,345".
+fn thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The report's first line: how the run ended.
@@ -1121,6 +1205,10 @@ pub enum EndView {
     /// A model refused, and the run did not finish (E1).
     ModelRefused,
     DidNotFinish,
+    /// Steplet's own agent: one of the run's limits ended it, `why` in Steplet's words.
+    StoppedAtLimit {
+        why: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -1213,6 +1301,7 @@ fn end_words(end: &EndView) -> EndWords {
             ("The model refused", "The model refused the task, so the run did not finish.", "amber")
         }
         EndView::DidNotFinish => ("Did not finish", "The run ended before the agent finished.", "amber"),
+        EndView::StoppedAtLimit { why } => ("Stopped at a limit", why.as_str(), "amber"),
     };
     EndWords { title: title.into(), text: text.into(), icon: icon.into() }
 }
@@ -1232,12 +1321,18 @@ pub struct ReportView {
     pub refusals: Vec<RefusalView>,
     /// `None` when Steplet could not look; `faults` says why.
     pub changed_files: Option<Vec<Shown>>,
-    /// The trust check (D3), in Steplet's words.
-    pub trust: String,
+    /// The trust check (D3), in Steplet's words. `None` for Steplet's own agent, which has no Claude Code settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub trust: Option<String>,
     pub faults: Vec<Shown>,
     pub notes: Vec<String>,
     /// Shown last, labelled (F47).
     pub agent_says: Shown,
+    /// Steplet's own agent: the model and what the run spent. `None` for Claude Code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub spent: Option<SpendView>,
 }
 
 pub fn report_view(r: &Report) -> ReportView {
@@ -1256,6 +1351,8 @@ pub fn report_view(r: &Report) -> ReportView {
             }
         };
         EndView::StoppedBySteplet { why: why.into(), about: line(about) }
+    } else if let Some(limit) = r.limit {
+        EndView::StoppedAtLimit { why: limit_words(limit) }
     } else if r.completed {
         EndView::Finished
     } else if !r.refusals.is_empty() {
@@ -1276,14 +1373,31 @@ pub fn report_view(r: &Report) -> ReportView {
         refusals: r.refusals.iter().map(refusal_view).collect(),
         changed_files: r.changed_files.as_ref().map(|files| files.iter().map(|f| line(f)).collect()),
         trust: match r.trust {
-            Trust::NotRecorded => "The run's settings mark no folder as trusted.",
-            Trust::Recorded => "The run's settings mark a folder as trusted: something got past Steplet's settings.",
-            Trust::Unknown => "Steplet could not read the run's settings to check them.",
+            Trust::NotRecorded => Some("The run's settings mark no folder as trusted."),
+            Trust::Recorded => {
+                Some("The run's settings mark a folder as trusted: something got past Steplet's settings.")
+            }
+            Trust::Unknown => Some("Steplet could not read the run's settings to check them."),
+            Trust::NotApplicable => None,
         }
-        .into(),
+        .map(str::to_owned),
         faults: r.faults.iter().map(|f| shown(f)).collect(),
         notes: r.notes.iter().map(|n| n.to_string()).collect(),
         agent_says: shown(&r.agent_says),
+        spent: r.spent.as_ref().map(spend_view),
+    }
+}
+
+/// Which limit ended a run of Steplet's own agent, in Steplet's words.
+fn limit_words(limit: Limit) -> String {
+    match limit {
+        Limit::Steps(n) => format!("Stopped at the step limit ({}). The task may be unfinished.", turns(n)),
+        Limit::Time => "Stopped at the run's time limit. The task may be unfinished.".into(),
+        Limit::Spending { spent, cap } => format!(
+            "Stopped before the next model call, which could have taken spending past the {} cap. Spent: {}.",
+            money(cap),
+            money(spent)
+        ),
     }
 }
 

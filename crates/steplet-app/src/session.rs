@@ -285,7 +285,7 @@ impl Session {
                     run(&one_run, &req, &paths, &policy, &setup, live)
                 }));
                 match ran {
-                    Ok(Ok(report)) => ProgressView::Finished { report: views::report_view(&report) },
+                    Ok(Ok(report)) => ProgressView::Finished { report: Box::new(views::report_view(&report)) },
                     Ok(Err(e)) => {
                         let (stage, failure) = views::run_failure(&e);
                         ProgressView::Failed { stage, failure }
@@ -308,7 +308,7 @@ impl Session {
             }
             drop(one_run);
             if let ProgressView::Finished { report } = &end {
-                *lock(&last) = Some(Last { sha, report: report.clone() });
+                *lock(&last) = Some(Last { sha, report: views::ReportView::clone(report) });
             }
             let close = {
                 let mut current = lock(&current);
@@ -449,11 +449,20 @@ pub struct Relay {
     refused_first: HashMap<String, bool>,
     showing: Option<u64>,
     waiting: VecDeque<Question>,
+    /// A run of Steplet's own agent: it says what it spends, and its tries again are about Nebius.
+    own: bool,
 }
 
 impl Relay {
     pub fn new(limits: views::Limits) -> Relay {
-        Relay { limits, calls: HashMap::new(), refused_first: HashMap::new(), showing: None, waiting: VecDeque::new() }
+        Relay {
+            limits,
+            calls: HashMap::new(),
+            refused_first: HashMap::new(),
+            showing: None,
+            waiting: VecDeque::new(),
+            own: false,
+        }
     }
 
     pub fn relay(&mut self, p: &Progress) -> Relayed {
@@ -476,6 +485,10 @@ impl Relay {
                 // Closed before it came on screen (a stop, or the run's end): it only stops waiting.
                 self.waiting.retain(|q| q.id != *question);
                 out.views.push(self.waiting_count());
+            }
+            Progress::Event(Event::ApiRetry { error, attempt, max, .. }) if self.own => {
+                let words = views::own_retry_words(error, *attempt, *max);
+                out.views.push(ProgressView::Event { event: views::EventView::Retry { words } });
             }
             Progress::Event(e) => {
                 let call = match e {
@@ -500,7 +513,11 @@ impl Relay {
                 self.refused_first.insert(call.clone(), views::refused_first(check));
                 out.views.extend(views::progress_view(p, None, self.limits));
             }
-            Progress::Prepared(_) | Progress::Spent(_) => {
+            Progress::Prepared(_) => {
+                out.views.extend(views::progress_view(p, None, self.limits));
+            }
+            Progress::Spent(_) => {
+                self.own = true;
                 out.views.extend(views::progress_view(p, None, self.limits));
             }
         }

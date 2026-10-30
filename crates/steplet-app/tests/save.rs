@@ -241,6 +241,55 @@ fn a_turned_away_connection_never_hides_a_call_that_went_past_the_gate() {
     assert_eq!(r.commands[0].check, Check::NotAsked { harmless: false });
 }
 
+/// The Nebius plan's Task 7: the saved report of a run of Steplet's own agent says the model, what the run spent of
+/// its cap, its tokens and turns, and which limit ended it. It has no trust check, which is about Claude Code's
+/// settings, and never names the gate.
+#[test]
+fn the_saved_report_has_the_model_and_the_spend() {
+    use steplet_run::{Limit, Nanodollars, Spent};
+    const MODEL: &str = "nvidia/nemotron-3-super-120b-a12b";
+    let mut o = outcome(
+        vec![
+            Event::Started { model: MODEL.into(), tools: vec!["run_command".into()], gate_connected: true },
+            bash("c1", "make test"),
+            result("c1", false, "ok\n"),
+        ],
+        vec![allow("c1", "make test")],
+        Vec::new(),
+    );
+    o.limit = Some(Limit::Spending { spent: Nanodollars(240_000_000), cap: Nanodollars::from_cents(25) });
+    o.stopped_at = Some(3);
+    o.spent = Some(Spent {
+        model: MODEL.into(),
+        tokens_in: 12_345,
+        tokens_out: 678,
+        cost: Nanodollars(230_000_000),
+        unsure: Nanodollars(10_000_000),
+        cap: Nanodollars::from_cents(25),
+        calls: 12,
+        max_steps: 40,
+    });
+    let text = report_text(&report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[])));
+    let section = |heading: &str| {
+        let start = text.find(&format!("\n{heading}\n")).unwrap_or_else(|| panic!("no {heading:?} in:\n{text}"));
+        let body = &text[start + heading.len() + 2..];
+        body[..body.find("\n\n").unwrap_or(body.len())].to_string()
+    };
+    assert_eq!(
+        section("How the run ended"),
+        "  Stopped at a limit. Stopped before the next model call, which could have taken spending past the $0.25 \
+         cap. Spent: $0.24."
+    );
+    assert_eq!(
+        section("The models"),
+        "  The model: Nemotron 3 Super on Nebius.\n  Spent: $0.24 of $0.25.\n  12,345 tokens sent and 678 received, \
+         in 12 model turns.\n  This counts $0.01 for model calls that failed after Nebius may have charged for them, \
+         each at the most it could have cost.\n  Used:\n  - | nvidia/nemotron-3-super-120b-a12b"
+    );
+    assert!(!text.contains("The trust check"), "{text}");
+    assert!(!text.to_lowercase().contains("gate"), "{text}");
+}
+
 /// S4: the name Steplet offers in the Save dialog is its own, from the time only.
 #[test]
 fn the_default_name_never_comes_from_the_file() {

@@ -4,4 +4,4 @@ import type { Seg } from "./Seg";
 /**
  * The report's first line: how the run ended.
  */
-export type EndView = { "kind": "finished" } | { "kind": "stopped_by_steplet", why: string, about: Array<Seg>, } | { "kind": "stopped_by_you" } | { "kind": "model_refused" } | { "kind": "did_not_finish" };
+export type EndView = { "kind": "finished" } | { "kind": "stopped_by_steplet", why: string, about: Array<Seg>, } | { "kind": "stopped_by_you" } | { "kind": "model_refused" } | { "kind": "did_not_finish" } | { "kind": "stopped_at_limit", why: string, };

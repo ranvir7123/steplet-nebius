@@ -104,6 +104,8 @@ pub struct Spent {
     pub cap: Nanodollars,
     /// How many answers came.
     pub calls: u32,
+    /// The most answers the model may give (the step limit).
+    pub max_steps: u32,
 }
 
 /// Runs `req` as run `paths` with Steplet's own agent, every move decided by `policy`, and returns the receiver's
@@ -189,8 +191,7 @@ pub fn run_agent_locked(
         after.push(format!("Steplet could not remove this run's web-site pins from Steplet's Linux: {e}"));
     }
     // This runner has no Claude Code config for a folder's trust to be recorded in.
-    let trust = if agent_ran { Trust::NotRecorded } else { Trust::Unknown };
-    let mut report = build_report(&outcome, changed.as_deref(), trust, &secrets);
+    let mut report = build_report(&outcome, changed.as_deref(), Trust::NotApplicable, &secrets);
     let scrub = Scrubber::new(&secrets);
     report.faults.extend(after.iter().map(|fault| scrub.text(fault)));
     Ok(report)
@@ -227,6 +228,7 @@ pub fn drive(agent: Agent<'_>, task: &str, work: &str) -> RunOutcome {
         unsure: Nanodollars(0),
         cap: limits.cap,
         calls: 0,
+        max_steps: limits.max_steps,
     };
     let mut run = Driving {
         hands,
@@ -277,6 +279,8 @@ impl Driving<'_> {
             Ok(brain) => brain,
             Err(e) => return self.fault(format!("Steplet could not start its call to the model: {e}")),
         };
+        // The top of the live log shows the model, the cap and the step limit from the start.
+        self.tell_spent();
         self.show(Event::Started {
             model: id.clone(),
             tools: tools.iter().map(|t| t.name.to_string()).collect(),
@@ -439,7 +443,7 @@ impl Driving<'_> {
         s.tokens_out = s.tokens_out.saturating_add(reply.usage.completion_tokens);
         s.cost += cost(&reply.usage, price);
         s.calls += 1;
-        (self.live.on_progress)(Progress::Spent(Spent { model: self.scrub.text(&s.model), ..s.clone() }));
+        self.tell_spent();
         if !reply.model.is_empty() && !self.models.contains(&reply.model) {
             self.models.push(reply.model.clone());
         }
@@ -594,6 +598,12 @@ impl Driving<'_> {
 
     fn fault(&mut self, why: String) {
         self.outcome.faults.push(why);
+    }
+
+    /// Tells the screen what the run has spent so far.
+    fn tell_spent(&self) {
+        let s = &self.spent;
+        (self.live.on_progress)(Progress::Spent(Spent { model: self.scrub.text(&s.model), ..s.clone() }));
     }
 
     /// Adds `event` to the run's record, and shows it cleaned as the report would show it.

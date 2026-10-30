@@ -88,6 +88,14 @@ pub fn report_text(r: &ReportView) -> String {
     }
 
     out.heading("The models");
+    if let Some(spent) = &r.spent {
+        out.line(&format!("  The model: {}.", spent.model));
+        out.line(&format!("  Spent: {}.", spent.money));
+        out.line(&format!("  {}", spent.tokens));
+        if let Some(unsure) = &spent.unsure {
+            out.line(&format!("  {unsure}"));
+        }
+    }
     if r.models.is_empty() {
         out.line("  None recorded.");
     } else {
@@ -115,8 +123,10 @@ pub fn report_text(r: &ReportView) -> String {
         Some(files) => list(&mut out, files, "None."),
     }
 
-    out.heading("The trust check");
-    out.line(&format!("  {}", r.trust));
+    if let Some(trust) = &r.trust {
+        out.heading("The trust check");
+        out.line(&format!("  {trust}"));
+    }
 
     out.heading("What went wrong around the run");
     list(&mut out, &r.faults, "Nothing.");

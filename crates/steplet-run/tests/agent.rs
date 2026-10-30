@@ -371,6 +371,57 @@ fn the_step_limit_ends_the_run() {
     assert!(!ran.report.completed);
 }
 
+/// The Nebius plan's Task 7: the screen is told the model, the cap and the step limit before the run's first row, so
+/// the top of the live log shows them from the start; and after each answer, the steps used.
+#[test]
+fn the_screen_hears_the_model_and_the_limits_before_the_first_row() {
+    let ran = Run::new(vec![run_tests("c1"), Scripted::done("Done.")]).go();
+    let spends: Vec<(usize, &steplet_run::Spent)> = ran
+        .progress
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| match p {
+            Progress::Spent(s) => Some((i, s)),
+            _ => None,
+        })
+        .collect();
+    let started = ran.progress.iter().position(|p| matches!(p, Progress::Event(Event::Started { .. })));
+    let (first, nothing_yet) = spends[0];
+    assert!(started.is_some_and(|started| first < started), "{:#?}", ran.progress);
+    let none = steplet_run::Spent {
+        model: MODEL.into(),
+        tokens_in: 0,
+        tokens_out: 0,
+        cost: Nanodollars(0),
+        unsure: Nanodollars(0),
+        cap: Nanodollars(250_000_000),
+        calls: 0,
+        max_steps: 20,
+    };
+    assert_eq!(*nothing_yet, none);
+    let calls: Vec<u32> = spends.iter().map(|(_, s)| s.calls).collect();
+    assert_eq!(calls, [0, 1, 2], "once at the start, then after each answer");
+    assert_eq!(ran.spent().max_steps, 20);
+}
+
+/// The Nebius plan's Task 7: the models Steplet knows go by their names on screen; any other by its id.
+#[test]
+fn each_model_steplet_knows_has_a_name() {
+    use steplet_run::model_name;
+    assert_eq!(model_name("nvidia/nemotron-3-super-120b-a12b"), "Nemotron 3 Super");
+    assert_eq!(model_name("nvidia/Nemotron-3-Ultra-550b-a55b"), "Nemotron 3 Ultra");
+    assert_eq!(model_name("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"), "Nemotron 3 Nano");
+    assert_eq!(model_name("NVIDIA/NEMOTRON-3-SUPER-120B-A12B"), "Nemotron 3 Super", "as price() compares them");
+    assert_eq!(model_name("nvidia/some-new-model"), "nvidia/some-new-model");
+    for model in [
+        "nvidia/nemotron-3-super-120b-a12b",
+        "nvidia/Nemotron-3-Ultra-550b-a55b",
+        "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+    ] {
+        assert!(price(model).is_some(), "every model with a name has a price: {model}");
+    }
+}
+
 #[test]
 fn the_time_limit_ends_the_run() {
     let mut run = Run::new(vec![run_tests("c1"), run_tests("c2"), Scripted::done("Done.")]).hands(|_, limit, _| {

@@ -6,8 +6,9 @@
 //! `STEPLET_BLESS=1 cargo test -p steplet-app --offline --test fixtures` writes both; otherwise each test fails when
 //! what is saved is out of date. Look at what changed (`git diff`) before keeping it.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -24,8 +25,10 @@ use steplet_core::policy::{Action, Decision, Policy};
 use steplet_core::report::check;
 use steplet_run::setup::{State, Wsl};
 use steplet_run::{
-    Answer, Asked, Check, Client, Event, GateAnswer, GateRequest, NetworkMode, NotYes, Prepared, Progress, Question,
-    Reply, RunOutcome, Tripwire, Trust, build_report, fingerprint, promises,
+    Agent, AgentLimits, Answer, Asked, Asker, Check, Checker, Client, Done, Event, Finish, GateAnswer, GateRequest,
+    Hands, HandsError, Live, Message, Model, ModelError, ModelReply, Move, Nanodollars, NetworkMode, NotYes, PER_MOVE,
+    Prepared, Progress, Question, RETRY_WAITS, RealPaths, Reply, RunOutcome, StopSignal, ToolCall, ToolSpec, Tripwire,
+    Trust, Usage, build_report, chat_body, drive, fingerprint, promises, task_text,
 };
 use ts_rs::{Config, TS};
 
@@ -339,7 +342,7 @@ impl Run {
 
 fn finished(progress: Vec<ProgressView>, report: ReportView) -> Vec<ProgressView> {
     let mut p = progress;
-    p.push(ProgressView::Finished { report });
+    p.push(ProgressView::Finished { report: Box::new(report) });
     p
 }
 
@@ -387,6 +390,137 @@ fn asked_progress(questions: Vec<(Progress, Duration)>) -> Vec<ProgressView> {
     let mut r = Run::new();
     r.says("The README is there. I want to note the count in a file.");
     r.progress_then(&[], questions)
+}
+
+// ------------------------------------------------------------------------------------------------------------------
+// Runs of Steplet's own agent (the Nebius plan, Task 7)
+
+/// The models Steplet's own agent asks Nebius for.
+const SUPER: &str = "nvidia/nemotron-3-super-120b-a12b";
+const ULTRA: &str = "nvidia/Nemotron-3-Ultra-550b-a55b";
+/// A model Steplet has no name for, as a later price list might add one: the screens show its id as it is.
+const LONG_MODEL: &str = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-Reasoning-Long-Context-Preview-2026-10-28";
+
+/// Paths lead where they are written: these runs need no Steplet's Linux.
+struct AsWritten;
+
+impl RealPaths for AsWritten {
+    fn real(&self, path: &str) -> std::io::Result<String> {
+        Ok(path.into())
+    }
+}
+
+/// Stand-in hands: every command prints the README's line count and ends with exit code 0.
+struct Counting;
+
+impl Hands for Counting {
+    fn run(&mut self, _: &Move, _: Duration, _: &StopSignal) -> Result<Done, HandsError> {
+        let output = String::from("1 README\n");
+        Ok(Done { exit_code: Some(0), timed_out: false, total_bytes: output.len() as u64, output })
+    }
+}
+
+/// A stand-in model that gives its answers in turn and counts tokens as a real one would: one for every 4 bytes it
+/// was sent, and `thinks` written for each answer (Nemotron reasons before it answers). After its answers, it fails
+/// as `then` says.
+struct Measured {
+    id: &'static str,
+    answers: VecDeque<(Option<&'static str>, Vec<ToolCall>)>,
+    thinks: u64,
+    then: fn() -> ModelError,
+}
+
+impl Measured {
+    fn new(id: &'static str, thinks: u64) -> Measured {
+        Measured { id, answers: VecDeque::new(), thinks, then: || ModelError::BadReply("no more answers".into()) }
+    }
+
+    /// The model says `text`, then runs `wc -l README`, `times` times.
+    fn counts(mut self, text: &'static str, times: usize) -> Measured {
+        for _ in 0..times {
+            let n = self.answers.len() + 1;
+            let call = ToolCall {
+                id: format!("call_{n:02}"),
+                name: "run_command".into(),
+                arguments: json!({ "command": "wc -l README" }).to_string(),
+            };
+            self.answers.push_back((Some(text), vec![call]));
+        }
+        self
+    }
+
+    fn ends(mut self, text: &'static str) -> Measured {
+        self.answers.push_back((Some(text), Vec::new()));
+        self
+    }
+}
+
+impl Model for Measured {
+    fn id(&self) -> &str {
+        self.id
+    }
+
+    fn next(&mut self, convo: &[Message], tools: &[ToolSpec], max_tokens: u32) -> Result<ModelReply, ModelError> {
+        let (text, calls) = self.answers.pop_front().ok_or_else(self.then)?;
+        let sent = chat_body(self.id, convo, tools, max_tokens).len() as u64;
+        Ok(ModelReply {
+            text: text.map(str::to_owned),
+            finish: if calls.is_empty() { Finish::Stop } else { Finish::ToolCalls },
+            calls,
+            usage: Usage { prompt_tokens: sent.div_ceil(4), completion_tokens: self.thinks },
+            model: self.id.into(),
+            reasoning: None,
+        })
+    }
+}
+
+/// A run of Steplet's own agent on the example file, by Steplet's own loop with `model`, at most `max_steps` answers
+/// and a 25-cent cap: what the run did, and its progress as the runner sends it.
+fn agent_run(model: Measured, max_steps: u32) -> (RunOutcome, Vec<Progress>) {
+    let s = steplet_of(&read("examples/run-tests.steplet"));
+    let policy = Policy::from_steplet(&s, "/work/r1/repo").unwrap();
+    let prepared = Progress::Prepared(Prepared { commit: COMMIT.into(), removed: Vec::new() });
+    let progress = Arc::new(Mutex::new(vec![prepared]));
+    let shown = Arc::clone(&progress);
+    let live = Arc::new(Live {
+        on_progress: Box::new(move |p| shown.lock().unwrap().push(p)),
+        stop: StopSignal::new(),
+        answers: None,
+        ask_limit: ASK_LIMIT,
+    });
+    let checker = Checker::new(policy, Arc::new(AsWritten));
+    let asker = Asker::new(Arc::clone(&live), &[]);
+    let limits = AgentLimits {
+        cap: Nanodollars::from_cents(25),
+        max_steps,
+        deadline: Instant::now() + RUN_LIMIT,
+        per_move: PER_MOVE,
+        retry_waits: RETRY_WAITS.to_vec(),
+    };
+    let mut log = Vec::new();
+    let agent = Agent {
+        model: Box::new(model),
+        hands: &mut Counting,
+        checker: &checker,
+        asker: &asker,
+        live: &live,
+        limits,
+        log: &mut log,
+        secrets: &[],
+    };
+    let outcome = drive(agent, &task_text(&s, COMMIT), "/work/r1/repo");
+    let progress = progress.lock().unwrap().clone();
+    (outcome, progress)
+}
+
+/// The progress the screen gets, as the app's own relay passes it on.
+fn relayed(progress: &[Progress]) -> Vec<ProgressView> {
+    let mut relay = Relay::new(Limits { ask: ASK_LIMIT, run: RUN_LIMIT });
+    progress.iter().flat_map(|p| relay.relay(p).views).collect()
+}
+
+fn agent_report(o: &RunOutcome) -> ReportView {
+    report_view(&build_report(o, Some(&[]), Trust::NotApplicable, &[]))
 }
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -756,7 +890,7 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     s.insert(
         "run-stopping",
         Fixture {
-            after_stop: vec![ProgressView::Finished { report: stopped_report.clone() }],
+            after_stop: vec![ProgressView::Finished { report: Box::new(stopped_report.clone()) }],
             ..run_screen(busy.progress(&[]))
         },
     );
@@ -837,7 +971,7 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
     let report_screen = |report: ReportView| Fixture {
         preview: Some(plain_preview(&example)),
         chooser: Some(chooser_for(&example, true)),
-        progress: vec![ProgressView::Finished { report }],
+        progress: vec![ProgressView::Finished { report: Box::new(report) }],
         ..fixture("report")
     };
     let ex = example_run();
@@ -894,6 +1028,39 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
             ..report_screen(finished_report)
         },
     );
+
+    // Steplet's own agent (the Nebius plan, Task 7): the model, what the run spent, and why it stopped. Each run is
+    // Steplet's own loop with a stand-in model, on the example file.
+    let (o, _) = agent_run(Measured::new(SUPER, 900).counts("I will count the README's lines.", 1).ends("1 line."), 40);
+    s.insert("report-agent-finished", report_screen(agent_report(&o)));
+    // Still going, with a model Steplet has no name for.
+    let (_, mut going) = agent_run(Measured::new(SUPER, 1_800).counts("Counting the README's lines.", 3), 40);
+    let last = going.iter().rposition(|p| matches!(p, Progress::Event(Event::ToolResult { .. }))).unwrap();
+    going.truncate(last + 1);
+    for p in &mut going {
+        match p {
+            Progress::Spent(spent) => spent.model = LONG_MODEL.into(),
+            Progress::Event(Event::Started { model, .. }) => *model = LONG_MODEL.into(),
+            _ => {}
+        }
+    }
+    s.insert("run-agent-long-model", run_screen(relayed(&going)));
+    // Nemotron 3 Ultra reasoning at length on every answer reaches the 25-cent cap before the step limit.
+    let checking = "Counting the README's lines once more, to be sure.";
+    let (o, p) = agent_run(Measured::new(ULTRA, 3_000).counts(checking, 60), 40);
+    s.insert("run-agent-spending-cap", run_screen(finished(relayed(&p), agent_report(&o))));
+    s.insert("report-agent-spending-cap", report_screen(agent_report(&o)));
+    let (o, p) = agent_run(Measured::new(SUPER, 1_800).counts(checking, 60), 40);
+    s.insert("run-agent-step-limit", run_screen(finished(relayed(&p), agent_report(&o))));
+    s.insert("report-agent-step-limit", report_screen(agent_report(&o)));
+    // Nebius refuses the key on the first call: the model gives no answer.
+    let refused = Measured {
+        then: || ModelError::KeyRefused { status: 401, detail: "Invalid API key".into() },
+        ..Measured::new(SUPER, 0)
+    };
+    let (o, p) = agent_run(refused, 40);
+    s.insert("run-agent-key-refused", run_screen(finished(relayed(&p), agent_report(&o))));
+    s.insert("report-agent-key-refused", report_screen(agent_report(&o)));
     s
 }
 

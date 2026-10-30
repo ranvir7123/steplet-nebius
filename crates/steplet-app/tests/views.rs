@@ -638,3 +638,158 @@ fn the_live_log_marks_a_failed_command() {
         ("It did not run".into(), false)
     );
 }
+
+/// What Steplet's own agent had spent: the model it asked for, its tokens and cost, and the run's cap and step limit.
+fn spent(cost: u64, unsure: u64, calls: u32) -> steplet_run::Spent {
+    steplet_run::Spent {
+        model: "nvidia/nemotron-3-super-120b-a12b".into(),
+        tokens_in: 12_345,
+        tokens_out: 678,
+        cost: steplet_run::Nanodollars(cost),
+        unsure: steplet_run::Nanodollars(unsure),
+        cap: steplet_run::Nanodollars::from_cents(25),
+        calls,
+        max_steps: 40,
+    }
+}
+
+/// The Nebius plan's Task 7: a run of Steplet's own agent says, at the top of its live log and in its report, the
+/// model, what it spent of its cap and the steps used of its limit, in Steplet's words. Money shows to the cent, or
+/// "less than $0.01".
+#[test]
+fn the_report_view_says_what_was_spent() {
+    use std::time::Duration;
+    use steplet_app::views::{Limits, progress_view};
+    use steplet_run::Progress;
+    let limits = Limits { ask: Duration::from_secs(300), run: Duration::from_secs(1800) };
+    let top = |s: steplet_run::Spent| match progress_view(&Progress::Spent(s), None, limits) {
+        Some(ProgressView::Spent { spent }) => spent,
+        other => panic!("{other:?}"),
+    };
+    let s = top(spent(40_000_000, 0, 7));
+    assert_eq!(
+        format!("{} · {} · {}", s.model, s.money, s.steps),
+        "Nemotron 3 Super on Nebius · $0.04 of $0.25 · step 7 of 40"
+    );
+    // Before the first answer, the first step is under way.
+    let first = top(spent(0, 0, 0));
+    assert_eq!((first.money.as_str(), first.steps.as_str()), ("$0.00 of $0.25", "step 1 of 40"));
+    assert_eq!(top(spent(1, 0, 1)).money, "less than $0.01 of $0.25");
+    assert_eq!(top(spent(9_999_999, 0, 1)).money, "less than $0.01 of $0.25");
+    assert_eq!(top(spent(10_000_000, 0, 1)).money, "$0.01 of $0.25");
+    assert_eq!(top(spent(14_999_999, 0, 1)).money, "$0.01 of $0.25");
+    assert_eq!(top(spent(15_000_000, 0, 1)).money, "$0.02 of $0.25");
+    assert_eq!(top(spent(1_234_500_000_000, 0, 1)).money, "$1,234.50 of $0.25");
+    // What may have been charged without an answer counts as spent.
+    assert_eq!(top(spent(30_000_000, 10_000_000, 3)).money, "$0.04 of $0.25");
+    // A model Steplet has no name for shows as Steplet asked for it.
+    let mut new_model = spent(0, 0, 0);
+    new_model.model = "nvidia/some-new-model".into();
+    assert_eq!(top(new_model).model, "nvidia/some-new-model on Nebius");
+
+    // The report says the same, with the tokens and the turns, and what may have cost something without an answer.
+    let mut o = outcome(Vec::new());
+    o.spent = Some(spent(30_000_000, 10_000_000, 7));
+    let view = report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[]));
+    let s = view.spent.expect("the report says what was spent");
+    assert_eq!((s.model.as_str(), s.money.as_str()), ("Nemotron 3 Super on Nebius", "$0.04 of $0.25"));
+    assert_eq!(s.tokens, "12,345 tokens sent and 678 received, in 7 model turns.");
+    assert_eq!(
+        s.unsure.as_deref(),
+        Some(
+            "This counts $0.01 for model calls that failed after Nebius may have charged for them, each at the most \
+             it could have cost."
+        )
+    );
+    o.spent = Some(steplet_run::Spent { tokens_in: 1, tokens_out: 1, ..spent(10_000_000, 0, 1) });
+    let s = report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[])).spent.unwrap();
+    assert_eq!((s.tokens.as_str(), s.unsure), ("1 token sent and 1 received, in 1 model turn.", None));
+    o.spent = Some(steplet_run::Spent { tokens_in: 0, tokens_out: 0, ..spent(0, 0, 0) });
+    let s = report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[])).spent.unwrap();
+    assert_eq!(s.tokens, "The model gave no answer.");
+    // The trust check is about Claude Code's settings: this runner's report has no line for it.
+    assert_eq!(view.trust, None);
+    // A Claude Code run's report has no spend, and keeps its trust line.
+    let theirs = report_view(&build_report(&outcome(Vec::new()), Some(&[]), Trust::NotRecorded, &[]));
+    assert_eq!(theirs.spent, None);
+    assert_eq!(theirs.trust.as_deref(), Some("The run's settings mark no folder as trusted."));
+}
+
+/// The Nebius plan's Task 7: the report says which of the run's limits ended it, in plain words, and calls the
+/// checker "Steplet's checker", never "the gate", for this runner.
+#[test]
+fn each_limit_is_said_in_plain_words() {
+    use steplet_app::views::EndView;
+    use steplet_run::{Limit, Nanodollars};
+    let ended = |limit: Limit| {
+        let mut o = outcome(Vec::new());
+        o.limit = Some(limit);
+        o.stopped_at = Some(0);
+        o.spent = Some(spent(240_000_000, 0, 12));
+        report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[]))
+    };
+    let said = |limit: Limit| {
+        let view = ended(limit);
+        assert!(matches!(view.end, EndView::StoppedAtLimit { .. }), "{:?}", view.end);
+        assert_eq!((view.end_words.title.as_str(), view.end_words.icon.as_str()), ("Stopped at a limit", "amber"));
+        assert!(!view.offers_model_switch && !view.completed);
+        view.end_words.text
+    };
+    assert_eq!(said(Limit::Steps(40)), "Stopped at the step limit (40 model turns). The task may be unfinished.");
+    assert_eq!(
+        said(Limit::Spending { spent: Nanodollars(240_000_000), cap: Nanodollars::from_cents(25) }),
+        "Stopped before the next model call, which could have taken spending past the $0.25 cap. Spent: $0.24."
+    );
+    assert_eq!(
+        said(Limit::Spending { spent: Nanodollars(5), cap: Nanodollars::from_cents(25) }),
+        "Stopped before the next model call, which could have taken spending past the $0.25 cap. Spent: less than \
+         $0.01."
+    );
+    assert_eq!(said(Limit::Time), "Stopped at the run's time limit. The task may be unfinished.");
+    assert_eq!(said(Limit::Steps(1)), "Stopped at the step limit (1 model turn). The task may be unfinished.");
+
+    // Stop, and a tripwire, say more than a limit does.
+    let mut o = outcome(Vec::new());
+    o.limit = Some(Limit::Time);
+    o.stopped_by_you = true;
+    assert_eq!(report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[])).end, EndView::StoppedByYou);
+    o.stopped_by_you = false;
+    o.stopped_by = Some(steplet_run::Tripwire::NotOffered("Fetch".into()));
+    assert!(matches!(
+        report_view(&build_report(&o, Some(&[]), Trust::NotApplicable, &[])).end,
+        EndView::StoppedBySteplet { .. }
+    ));
+
+    // No word of the report on a run of Steplet's own agent names the gate.
+    let text = serde_json::to_string(&ended(Limit::Steps(40))).unwrap().to_lowercase();
+    assert!(!text.contains("gate"), "{text}");
+}
+
+/// The Nebius plan's Task 7: in a run of Steplet's own agent, each try again says what Nebius answered and that
+/// Steplet tries again, never Anthropic's or Claude Code's words.
+#[test]
+fn each_try_again_in_steplets_own_run_names_nebius() {
+    use std::time::Duration;
+    use steplet_app::session::Relay;
+    use steplet_app::views::{EventView, Limits};
+    use steplet_run::Progress;
+    let retry = Progress::Event(Event::ApiRetry {
+        status: Some(429),
+        error: "Nebius is busy (status 429).".into(),
+        attempt: 1,
+        max: 3,
+    });
+    let words = |relay: &mut Relay| match &relay.relay(&retry).views[..] {
+        [ProgressView::Event { event: EventView::Retry { words } }] => words.clone(),
+        other => panic!("{other:?}"),
+    };
+    let limits = Limits { ask: Duration::from_secs(300), run: Duration::from_secs(1800) };
+    let mut own = Relay::new(limits);
+    own.relay(&Progress::Spent(spent(0, 0, 0)));
+    assert_eq!(words(&mut own), "Nebius is busy (status 429). Steplet tries again (1 of 3).");
+    let mut claude_code = Relay::new(limits);
+    assert_eq!(
+        words(&mut claude_code),
+        "Anthropic's service answered with error 429. Claude Code tries again (1 of 3)."
+    );
+}

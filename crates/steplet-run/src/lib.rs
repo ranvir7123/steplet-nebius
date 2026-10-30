@@ -53,7 +53,7 @@ pub use prepare::{
     PrepareError, Prepared, REPOSITORY_HOSTS, changes, discard, fetchable, prepare, prepare_own, removed_files,
     run_config,
 };
-pub use price::{Nanodollars, Price, cost, price, worst_case};
+pub use price::{Nanodollars, Price, cost, model_name, price, worst_case};
 pub use promises::{NetworkMode, Promise, network_mode, promises, read_network_mode};
 pub use report::{
     Check, NotYes, Refusal, Report, ReportCommand, Trust, build_report, changed_files, exit_code_of, raw_log_line,

@@ -1,6 +1,7 @@
 <script lang="ts">
   // Screens 5 and 6: prepare, then the run with its live log. A bar that stays at the top says where the run is, how
-  // long it has run against its limit, and holds Stop (which asks first). One row per thing that happens: what the
+  // long it has run against its limit, and holds Stop (which asks first); for Steplet's own agent it also says the
+  // model, what the run has spent of its cap and the step it is on. One row per thing that happens: what the
   // agent says (quoted, as file text), each command or file action with Steplet's check, its exit code and its output
   // (the first 40 lines, then "Show all"), each question and how it ended. The log follows the newest row unless the
   // receiver scrolled up. Steplet's words come from Rust; everything the agent, the repository or a command wrote is
@@ -15,6 +16,7 @@
   import type { ProgressView } from "../../shared/types/ProgressView";
   import type { QuestionView } from "../../shared/types/QuestionView";
   import type { ReportView } from "../../shared/types/ReportView";
+  import type { SpendView } from "../../shared/types/SpendView";
   import type { Backend, Shown, Unlisten } from "../lib/backend";
   import { outcomeIcon } from "../lib/end";
   import { modal } from "../lib/modal";
@@ -71,6 +73,8 @@
   let waiting = $state(0);
   let report = $state<ReportView | null>(null);
   let failed = $state<{ stage: string; failure: FailureView } | null>(null);
+  /** Steplet's own agent: the model, what the run has spent of its cap and the step it is on. */
+  let spent = $state<SpendView | null>(null);
   let confirm = $state<"stop" | "close" | null>(null);
   let closing = $state(false);
   let startedAt = 0;
@@ -163,6 +167,9 @@
         } else early.set(p.call, { check: p.check, reason: p.reason });
         break;
       }
+      case "spent":
+        spent = p.spent;
+        break;
       case "finished":
         report = p.report;
         question = null;
@@ -195,6 +202,7 @@
     waiting = 0;
     report = null;
     failed = null;
+    spent = null;
     early.clear();
     phase = "preparing";
     following = true;
@@ -327,6 +335,14 @@
     {#if going && !closing}
       <button class="button stop" type="button" disabled={phase === "stopping"} onclick={() => (confirm = "stop")}>Stop</button>
     {/if}
+    {#if spent}
+      <!-- The model, the spend and the step, on a line of their own: the money and the step are never broken, and a
+           line never starts with a dot. No spaces between the pieces: each dot carries its own, in braces, as Svelte
+           drops spaces at the edges of a tag. -->
+      <p class="spend"><span class="model">{spent.model}</span><span class="part"><span class="dot">{" · "}</span><span
+            >{spent.money}</span
+          ></span><span class="part"><span class="dot">{" · "}</span><span>{spent.steps}</span></span></p>
+    {/if}
   </div>
   {#if closing}
     <p class="closing" role="status">Steplet is stopping the run, then it closes.</p>
@@ -379,7 +395,9 @@
       {#each rows as r, i (i)}
         <li class="row {r.kind}">
           {#if r.kind === "started"}
-            <p class="muted">Claude Code started, with the model <span class="mono"><FileText text={r.model} /></span>.</p>
+            <p class="muted">
+              {spent ? "Steplet's agent" : "Claude Code"} started, with the model <span class="mono"><FileText text={r.model} /></span>.
+            </p>
           {:else if r.kind === "says"}
             <div class="quote">
               <p class="quote-label">The agent says</p>
@@ -555,6 +573,37 @@
 
   .stop {
     margin-left: auto;
+  }
+
+  /* Steplet's own agent: always the bar's second line, so Stop never moves; a model's long name breaks anywhere. Each
+     dot leads its piece. The line starts a dot's width to the left and is clipped there, so a piece that wraps starts
+     its line with its words: its dot falls in the clipped strip. Each line of the model is indented past the strip. */
+  .spend {
+    --dot: var(--space-3);
+    flex-basis: calc(100% + var(--dot));
+    order: 1;
+    margin-left: calc(-1 * var(--dot));
+    clip-path: inset(0 0 0 var(--dot));
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .spend .model {
+    padding-left: var(--dot);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    font-weight: 600;
+  }
+
+  .spend .part {
+    display: inline-flex;
+    white-space: nowrap;
+  }
+
+  .spend .dot {
+    width: var(--dot);
+    text-align: center;
+    color: var(--text-muted);
   }
 
   .closing {
