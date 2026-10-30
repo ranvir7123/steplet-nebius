@@ -81,8 +81,14 @@ real tool call correctly (the output is in [docs/nebius-hackathon-results.md](do
 they have no price here, so a run never uses them. The prices are the plan's starting prices: they were not checked
 against the Nebius dashboard.
 
-<!-- TODO after Task 11: "Ask Nemotron what this file will do" on the preview, if it ships: its answer is shown in a
-box marked as AI advice, and it cannot change the rating. Name its tests here. -->
+**Ask Nemotron what a file will do.** Before you run a `.steplet` file, the preview has a button that sends the file's
+text to Nemotron 3 Super: one call, no tools, at most 1,500 tokens back. Nemotron is told to describe what running the
+file would do and what a careful person would look at, in plain words, and not to judge whether it is safe. Its answer
+is shown in a box marked as AI advice, with the model's name and what the call cost. It is advice only: the red, amber
+or green rating above it comes from Steplet's fixed rules, and the answer has no way to change it. Tests:
+`crates/steplet-app/tests/explain.rs` (7, with a stand-in model; among them `the_advice_cannot_change_the_rating` and
+`the_file_text_goes_in_after_the_instruction`) and 6 in `web/app/tests/preview.spec.ts`. The key, the model and the
+price table are the same as the agent's.
 
 ## What has been tested
 

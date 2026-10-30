@@ -14,7 +14,22 @@ the Devpost feedback section is written from this list.
   Steplet tells "the key is wrong" apart from every other failure by the status alone, and says so in plain words.
   Got in the way, a little: the list of models also needs a key, so Steplet cannot check a model name is offered
   before the owner has typed in a key.
+- 30 Oct 2026: Applying the hackathon's promo code on the billing page failed at first with "Act for contract(...)
+  and period(...) not found". Got in the way: the message says nothing the person can act on, and it came with
+  hours to go before the deadline.
+- 30 Oct 2026: With a real key, the models list offered 30 models, 5 of them Nemotron, under exactly the names in the
+  docs. Every reply carried `usage` with the tokens sent and received, so Steplet could count each call's cost as it
+  came back. Answers were quick: 0.6 to 2.2 seconds for a short tool call or answer on Super, Ultra and Lightning.
+  Helped.
 
 ## NVIDIA Nemotron
 
-- Nothing yet: the first real calls are Task 4.
+- 30 Oct 2026: Given one tool (`list_files`) and asked to list a folder, all five Nemotron models offered (3 Super,
+  3 Ultra, 3 Nano, 3.5 Lightning, 3.5 Super VL) called it correctly on the first try, with readable arguments, then
+  answered from its result without calling it again. Helped: the tool-call shape is the standard one, so Steplet's
+  loop needed nothing model-specific.
+- 30 Oct 2026: Nemotron 3 Super's thinking comes back in its own field, apart from the answer, and the answer is
+  empty on a tool call. Helped: Steplet shows only the answer and the moves, and never has to cut thinking out of it.
+- 30 Oct 2026: Nemotron 3 Nano used 1,721 tokens, most of them thinking, to answer a one-line question about a folder
+  listing (6.5 seconds). Still the cheapest at $0.0004, but the slowest by far. Got in the way, a little: a cap counted
+  in tokens has to leave room for thinking that long.

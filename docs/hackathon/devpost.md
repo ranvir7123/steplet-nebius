@@ -5,8 +5,8 @@ field or one section of the "About the project" box. Fill the `TODO` parts from 
 delete the `<!-- -->` notes. Every claim here must also be in the README's "What has been tested"; if a test result
 changes, change both.
 
-Submission closes **Fri 30 Oct 2026, 10:00 am Pacific time = 22:30 India time** (official rules, section 1). The plan
-aims to submit by 20:00.
+Submission closes **Fri 30 Oct 2026, 10:00 am Pacific time = 22:30 India time** (official rules, section 1). Aim to
+submit by 22:00.
 
 ---
 
@@ -32,7 +32,7 @@ Windows Credential Manager, Playwright, NVIDIA Nemotron 3 Super, Nebius Token Fa
 
 ## Links
 
-- Code: <!-- TODO after Task 12: https://github.com/ranvir7123/steplet-nebius -->
+- Code: https://github.com/ranvir7123/steplet-nebius
 - Test build (the installer): <!-- TODO after Task 12: the v0.2.0 release page -->
 - Video: <!-- TODO after the video is uploaded: the public YouTube link -->
 
@@ -80,8 +80,11 @@ their own words. Steplet is for the person who wants the work done anyway, and w
 - **The key** lives in Windows Credential Manager and goes only into the `Authorization` header, never onto the screen
   or into a log or report.
 
-<!-- TODO after Task 4: confirm the model name and prices from the first real calls. -->
-<!-- TODO after Task 11: one line on "Ask Nemotron what this file will do", if it shipped. -->
+- **Checked with real calls on 30 Oct:** Token Factory offers all three models under exactly the names Steplet uses,
+  and each one, given a tool, called it correctly on the first try and then answered from its result.
+- **"What will this file do?"** Before you run a file, the preview can ask Nemotron 3 Super to describe, in plain
+  words, what running it would do and what a careful person would look at. The answer is shown as AI advice next to
+  the rating; it cannot change the rating, which comes from fixed rules.
 
 ### How we built it
 
@@ -108,7 +111,9 @@ Only what a passing test or a recorded run shows. In short:
 
 The README lists every test by name, and what is **not** verified yet.
 
-<!-- TODO after Task 9: the agent's attack suite result, case count and outcome. -->
+- 10 attack tests of Steplet's agent in Steplet's real Linux, each with a control that shows the test can fail. The
+  attack suite replays them as ten cases next to the 39 cases it runs for Claude Code: on 30 Oct, **49 of 49 blocked,
+  nothing left behind**, with a scripted model (the record is in the repository).
 <!-- TODO after Task 10: the real runs with Nemotron: what happened, refusals, exit codes, what each run cost. -->
 
 ### Challenges
@@ -136,11 +141,22 @@ date.
   `tool_choice`, `usage`). Steplet talks to it with Windows' own web library and its own code (the Token Factory
   part is 109 lines); no Nebius-specific package or SDK was needed.
 
-<!-- TODO after Tasks 4 and 10: add what the first real calls showed: sign-up and key creation, the models list,
-whether the prices matched the dashboard, speed, rate limits, busy answers, error messages, the docs. Only things
-seen, each with its date. -->
+- (30 Oct 2026, helped) A wrong or missing key comes back as HTTP 401 with a short reason, so Steplet can tell "the
+  key is wrong" apart from every other failure and say so in plain words.
+- (30 Oct 2026, got in the way, a little) The list of models also needs a key, so an app cannot check a model name is
+  offered before its owner has typed a key in.
+- (30 Oct 2026, got in the way) Applying the hackathon's promo code failed at first with "Act for contract(...) and
+  period(...) not found", which says nothing the person can act on.
+- (30 Oct 2026, helped) The models list showed 30 models, 5 of them Nemotron, under exactly the documented names.
+  Every reply carried token counts in `usage`, so Steplet counts each call's cost as it arrives. Short calls on Super,
+  Ultra and Lightning answered in 0.6 to 2.2 seconds.
 
 **NVIDIA Nemotron**
 
-<!-- TODO after Tasks 4 and 10: how Nemotron 3 Super handled tool calls, refusals and the step limit in real runs;
-anything it got wrong. Nothing has been seen yet: the first real calls are Task 4. -->
+- (30 Oct 2026, helped) Given one tool and asked to list a folder, all five Nemotron models on Token Factory called
+  it correctly on the first try, then answered from its result without calling it again. The tool-call shape is the
+  standard one, so Steplet's loop needed nothing model-specific.
+- (30 Oct 2026, helped) Nemotron 3 Super's thinking comes back in its own field, apart from the answer, so Steplet
+  shows only the answer and the moves.
+- (30 Oct 2026, got in the way, a little) Nemotron 3 Nano used 1,721 tokens, most of them thinking, for a one-line
+  answer (6.5 seconds). Still the cheapest, but a cap counted in tokens has to leave room for thinking that long.
