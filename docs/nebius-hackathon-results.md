@@ -1231,3 +1231,97 @@ sits after the drives line with the same spacing as the others, wraps cleanly at
 - K1 and E1 were not run again in Steplet's Linux after this change. The standing yes to use Steplet's Linux ended
   at 12:00. A2 and A7 have not changed since the 09:29 to 09:32 run, which passed. What changed is which lines and
   cases name them, and K1's second test, which runs on Windows and passed in the ordinary tests above.
+
+## Evening, 30 Oct: K1 and E1 again, and the release build
+
+### K1 and E1, after the afternoon's change
+
+The afternoon's "Not checked" left K1 and E1 unrun in Steplet's Linux after K1 gained its second test. With Ranvir's
+yes to use Steplet's Linux until 22:30, and the run lock free (checked at 18:16):
+
+```
+> cargo suite scripted --runner own --only E1,K1
+Started 2026-10-30 at 18:16, on the code at commit 1fa7f1f-dirty.
+K1   The Nebius key reaches Steplet's Linux before, during or after a run of Steplet's agent, or its report or logs ... blocked   (83 s)
+E1   A program one of Steplet's agent's moves leaves running is still running at its next move ... blocked   (26 s)
+Suite: PASSED for the 2 cases run (only E1,K1): each was blocked and left nothing behind. It backs only the lines marked backed above. Took 1 min 58 s.
+Record: docs/suite/2026-10-30-steplet-agent-scripted-only-E1-K1-2.txt (counted before it was kept: the made-up key's text 0 times, the made-up Nebius key's text 0 times).
+```
+
+"-dirty" is the release settings and README edits not yet committed; neither touches what K1 or E1 run.
+
+### The release build
+
+`tools/release.ps1` builds the screens, the gate program (in a target folder of its own, `target\gate`, so Tauri
+never copies a file onto itself), then Steplet and its installer with `tauri build --config tauri.release.conf.json`.
+The release settings (installer on, NSIS, per-user install, the gate shipped beside `steplet.exe`) are in that second
+file, so an ordinary build or test does not need the gate built first. The version is now 0.2.0.
+
+The first try stopped while Tauri downloaded its installer tools: "This is usually a temporary error during hostname
+resolution ... (os error 11002)". github.com answered a moment later, and the second try, unchanged, passed:
+
+```
+    Finished 1 bundle at:
+        C:\dev\steplet-nebius\target\release\bundle\nsis\Steplet_0.2.0_x64-setup.exe (2.45 MiB)
+SHA256SUMS.txt                  184
+Steplet_0.2.0_x64-setup.exe 2572429
+Steplet_0.2.0_x64.zip       3641541
+fe405f292533397d1f162649c376ff24a9cad5a7cb59e7d1f4bcad99ed400c98  Steplet_0.2.0_x64-setup.exe
+351c70d96833b263036db81af7f99e611a47191cf5405bedd5eb2b1d89c84a73  Steplet_0.2.0_x64.zip
+```
+
+These are the trial build's sums; the release is built again after Task 11, with new sums. The zip holds
+`steplet.exe`, `steplet-gate.exe` and `LICENSE`. A silent install (`/S`, exit 0) put `steplet.exe`,
+`steplet-gate.exe` and `uninstall.exe` in `%LOCALAPPDATA%\Steplet`, the folder where Steplet also keeps its Linux disk
+and logs. The uninstall steps in Tauri's installer template (read from the Tauri program on this laptop) delete only
+the files it installed, by name, then `RMDir "$INSTDIR"` without `/r`, which removes the folder only if it is empty.
+Its optional "delete app data" removes `dev.steplet.desktop` folders, not `Steplet`. So uninstalling leaves Steplet's
+Linux and logs alone. Not tried: an actual uninstall.
+
+## Task 4: the first real calls (30 Oct 2026, 18:39 IST)
+
+Ranvir typed the Nebius key into Setup. Then, with a 5-cent cap:
+
+```
+> cargo run -p steplet-app --offline --example nebius_check -- --yes-spend 0.05
+== 1. The list of models
+30 models offered, 5 of them Nemotron:
+  nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+  nvidia/Nemotron-3_5-Lightning
+  nvidia/Nemotron-3-Ultra-550b-a55b
+  nvidia/nemotron-3-super-120b-a12b
+  nvidia/Nemotron-3.5-Super-VL
+== 2. A made-up key
+KeyRefused { status: 401, detail: "Couldn't authenticate. Reason: Unable authenticate" }
+Steplet would say: Nebius did not accept the key. Change it in Setup.
+== Tool call: nvidia/nemotron-3-super-120b-a12b
+  answered in 1.1 s by "nvidia/nemotron-3-super-120b-a12b": finish ToolCalls, 435 tokens in, 60 out, cost $0.000185
+  tool call: name "list_files" (right), arguments "{\"path\": \"/work/demo\", \"depth\": 1}" (readable, with a path)
+  answered in 2.2 s by "nvidia/nemotron-3-super-120b-a12b": finish Stop, 503 tokens in, 41 out, cost $0.000188
+  after the listing: 0 more tool calls
+== Tool call: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+  answered in 1.3 s ...: finish ToolCalls, 353 tokens in, 243 out, cost $0.000079
+  answered in 6.5 s ...: finish Stop, 421 tokens in, 1721 out, cost $0.000438
+== Extra 1's shape, from nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+  answered in 2.0 s ...: finish Stop, 290 tokens in, 200 out, cost $0.000065
+  the answer is JSON of Extra 1's shape
+== Tool call: nvidia/Nemotron-3-Ultra-550b-a55b
+  answered in 0.6 s ...: finish ToolCalls, 388 tokens in, 57 out, cost $0.000559
+  answered in 1.5 s ...: finish Stop, 456 tokens in, 93 out, cost $0.000735
+== Tool call: nvidia/Nemotron-3_5-Lightning
+  answered in 0.6 s ...: finish ToolCalls, 482 tokens in, 26 out, counted as at most $0.001120
+  answered in 1.0 s ...: finish Stop, 540 tokens in, 65 out, counted as at most $0.001470
+== Tool call: nvidia/Nemotron-3.5-Super-VL
+  answered in 1.0 s ...: finish ToolCalls, 353 tokens in, 48 out, counted as at most $0.000994
+  answered in 1.3 s ...: finish Stop, 411 tokens in, 98 out, counted as at most $0.001410
+== Total counted: $0.007243 of $0.050000
+(A model with no price in Steplet is counted at twice Ultra's price, so the real total is at most this.)
+```
+
+(Lines shortened with "..." are the same model as the heading; the full output is in the session's log.)
+
+What it shows: the key works and the account has credit; the three model names in Steplet's price table are offered
+under exactly those names; every Nemotron model made the right tool call (`list_files` with a readable path) and then
+answered from its result; Super's thinking comes back separately from its answer, and its answer is empty on a tool
+call; Nano used 1,721 tokens of thinking for one short answer. Not checked: whether the dashboard's charge matches
+these counts (the dashboard was not read).

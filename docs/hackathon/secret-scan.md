@@ -174,3 +174,26 @@ then, and again just before the push in Task 12, and paste both lines here. -->
 - **The two saved keys only**: any other key Ranvir has ever used (for example in another project) is not counted.
 - **Other places**: GitHub issues, pull request text, the Devpost page and the video are not part of the history and
   were not checked.
+
+## Again before the push (30 Oct 2026, 18:13 and 18:45 IST, at commit `1fa7f1f`)
+
+`py -3.13 -I tools/secret_scan.py`, over every ref (`nebius-hackathon` and the merged task branches):
+
+```
+Objects read: 148 commits, 1128 folder lists, 2925 file versions, 0 tags; 148,896,844 bytes of file versions and messages.
+Hits: 128 distinct (the same text at the same path counts once, however many versions): 14 real, 16 made-up marker, 98 test value
+```
+
+The 14 hits classed real are all in the attack suite's records of 30 Oct (`docs/suite/2026-10-30-*.txt`, first in
+`429d8fe`). Each one is looked at: it is the fence's own login for the local web proxy of one run, in the shape
+`http://srt.<one-run token>:<one-run password>@localhost:3128`, printed by a test that shows which sites a program in the
+fence could reach. That login is made fresh for each run, works only on `localhost` inside that run's fence, and ends
+with the run. It opens nothing now and nothing outside this laptop. So: **0 working keys**. They stay in the history
+(decision N6 keeps all of it), recorded here.
+
+`py -3.13 -I tools/count_saved_keys.py`, with both keys saved in Steplet on this laptop:
+
+```
+Anthropic key (Steplet/anthropic-api-key): saved; found 0 times in 4201 objects (plain text 0, UTF-16 0, base64 0).
+Nebius key (Steplet/nebius-api-key): saved; found 0 times in 4201 objects (plain text 0, UTF-16 0, base64 0).
+```

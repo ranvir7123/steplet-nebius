@@ -57,10 +57,6 @@ Windows: the Steplet app                         Steplet's Linux (one move at a 
   each call Steplet works out the most that call could cost (everything sent plus the longest answer allowed); if that
   could pass the cap, the run stops without sending. Busy or failing answers from Nebius are tried again after 2, 5
   and 10 seconds, and each try is shown.
-
-<!-- TODO after Task 8: the loop stops at whatever cap and step limit it is given (tested); the app passing it $0.25
-and 40 is wired in Task 8. Check it there, then delete this note. -->
-
 - **The key** is kept in Windows Credential Manager, never shown on screen, and sent only as the `Authorization`
   header.
 
@@ -79,9 +75,11 @@ extra package. The Token Factory part is 109 lines (`crates/steplet-run/src/toke
 own small layer over Windows' web library (`winhttp.rs`) and the chat message shapes (`model.rs`), and it is tested
 against a stand-in server. No other Nebius service is used.
 
-<!-- TODO after Task 4: confirm each model name against Token Factory's models list and each price against the
-Nebius dashboard after the first real calls; change the table if they differ. Until then these are the starting
-prices from the plan. -->
+On 30 Oct 2026 Token Factory's list of models offered all three under exactly these names, and each one answered a
+real tool call correctly (the output is in [docs/nebius-hackathon-results.md](docs/nebius-hackathon-results.md),
+"Task 4"). Two more Nemotron models are offered, `nvidia/Nemotron-3_5-Lightning` and `nvidia/Nemotron-3.5-Super-VL`;
+they have no price here, so a run never uses them. The prices are the plan's starting prices: they were not checked
+against the Nebius dashboard.
 
 <!-- TODO after Task 11: "Ask Nemotron what this file will do" on the preview, if it ships: its answer is shown in a
 box marked as AI advice, and it cannot change the rating. Name its tests here. -->
@@ -129,7 +127,8 @@ The loop (`crates/steplet-run/tests/agent.rs`, 14 tests with a stand-in model an
   `the_report_shows_steplets_exit_code_not_the_models_claim`.
 - The spending cap ends the run before the call that could pass it; the step and time limits end the run:
   `the_spending_cap_ends_the_run_before_the_call_that_could_pass_it`, `the_step_limit_ends_the_run`,
-  `the_time_limit_ends_the_run`.
+  `the_time_limit_ends_the_run`. The app hands the loop $0.25 and 40 steps
+  (`crates/steplet-app/tests/session.rs`, `start_run_passes_the_runner_and_model`).
 - The Nebius key never appears in the report or the logs: `the_nebius_key_never_appears_in_the_report_or_logs`.
 - Busy answers are tried again and shown; three unreadable replies in a row end the run; Stop works during a model
   call: `busy_nebius_is_retried_and_shown`, `three_unreadable_replies_in_a_row_end_the_run`,
@@ -138,8 +137,26 @@ The loop (`crates/steplet-run/tests/agent.rs`, 14 tests with a stand-in model an
 The loop's code was also broken on purpose three times (a refused move run anyway, the cap never checked, the key
 not hidden from the screen). Each time the tests above that guard it failed, and the code was then put back.
 
-<!-- TODO after Task 9: the agent's own attack suite record in docs/suite/, case by case, and the safety lines it
-backs on the run chooser. Until then, no safety line for Steplet's agent is claimed beyond the tests above. -->
+The attack tests, on Steplet's agent in Steplet's real Linux (`crates/steplet-run/tests/agent_linux.rs`, 10 tests,
+each with a stand-in model playing a fixed script of moves, a made-up Nebius key, and a control that shows its check
+can see a failure):
+
+- The Nebius key never reaches Steplet's Linux, before, during or after a run. The test counts the key's text in every
+  file and every program in Steplet's Linux, and finds it 0 times; its control plants it and finds it:
+  `a2_the_key_never_reaches_linux`.
+- Anything one move leaves running is ended before the next move; its control shows the same program keeps running
+  outside the fence: `a7_a_program_left_running_is_ended_before_the_next_move`.
+- The others: a command the file did not declare is refused and the agent is told; writes outside the working copy,
+  links out of it, reads of Windows files, sites the file does not declare and starting Windows programs are all
+  contained; Stop during a move ends it; use case 5's public test file runs and each escape is contained.
+
+Steplet's attack suite replays these as ten cases (G14, F4, F5, Y5, N4, P2, I3, U3, K1, E1). On 30 Oct 2026 it ran
+them with Claude Code's 39 cases: **49 of 49 blocked, nothing left behind**
+([record](docs/suite/2026-10-30-claude-2.1.220-and-steplet-agent-scripted.txt)). The run chooser shows two lines that
+are Steplet's agent's own, each naming the tests above:
+
+- Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.
+- Anything the agent leaves running is ended before its next move.
 
 <!-- TODO after Task 10: the first whole runs with real Nemotron (use case 1 and the use case 5 cases): each report,
 its moves, refusals, exit codes and spend. -->
@@ -214,13 +231,12 @@ screens, from 29 Oct 2026; see [docs/plans/2026-10-29-nebius-hackathon.md](docs/
 
 - **No whole run of Steplet's own agent has happened yet**, in real Linux with a real model. The loop's tests use a
   stand-in model and stand-in moves; the moves' tests use no loop.
-- **No real call to Nebius has been made yet**, so the model names and prices above are not confirmed, and the cap is
-  only as good as that price table.
+- **The prices are not checked against Nebius's bill.** Real calls were made on 30 Oct (six models, at most $0.0073
+  counted), and the model names are confirmed, but nobody compared Steplet's count with the dashboard's charge. The
+  cap is only as good as the price table.
 - **Two known faults are open:** a Stop pressed in the first moments of a run can leave Steplet's Linux unable to
   look up web addresses until it restarts (the gap is a few milliseconds wide, and was in Steplet before this copy),
   and one Linux test's time margin is too thin and failed once.
-- **The $0.25 and 40-step limits** are tested in the loop with the values a test gives it; the app passing these two
-  values is part of Task 8.
 - **The build steps above** are taken from earlier results; they were not run again for this draft.
 - **Only on this laptop:** Steplet has been tested on one Windows 11 laptop. A Windows without WSL has been tried
   only through a test of the version reader, not on a real machine.
