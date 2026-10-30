@@ -197,3 +197,15 @@ with the run. It opens nothing now and nothing outside this laptop. So: **0 work
 Anthropic key (Steplet/anthropic-api-key): saved; found 0 times in 4201 objects (plain text 0, UTF-16 0, base64 0).
 Nebius key (Steplet/nebius-api-key): saved; found 0 times in 4201 objects (plain text 0, UTF-16 0, base64 0).
 ```
+
+### After Task 11's merge (30 Oct 2026, 19:00 IST, at commit `21d1a8f`), the history that is pushed
+
+```
+Objects read: 151 commits, 1152 folder lists, 3033 file versions, 0 tags; 171,889,234 bytes of file versions and messages.
+Hits: 130 distinct (the same text at the same path counts once, however many versions): 16 real, 16 made-up marker, 98 test value
+Anthropic key (Steplet/anthropic-api-key): saved; found 0 times in 4336 objects (plain text 0, UTF-16 0, base64 0).
+Nebius key (Steplet/nebius-api-key): saved; found 0 times in 4336 objects (plain text 0, UTF-16 0, base64 0).
+```
+
+The two new "real" hits are line 119 of `docs/suite/2026-10-30-steplet-agent-scripted-only-E1-K1-2.txt` (commit
+`f86b2f3`): the same one-run proxy login as the 14 above, from the second E1 and K1 run. Still **0 working keys**.
