@@ -6,6 +6,7 @@ import type { ChooserView } from "../../shared/types/ChooserView";
 import type { KeyFor } from "../../shared/types/KeyFor";
 import type { PreviewView } from "../../shared/types/PreviewView";
 import type { ProgressView } from "../../shared/types/ProgressView";
+import type { Runner } from "../../shared/types/Runner";
 import type { Seg } from "../../shared/types/Seg";
 import type { SetupView } from "../../shared/types/SetupView";
 
@@ -37,9 +38,9 @@ export interface Backend {
   /** Removes the receiver's key `which`, and only that one. */
   forgetKey(which: KeyFor): Promise<SetupView>;
   setOpensStepletFiles(on: boolean): Promise<SetupView>;
-  /** Starts the run of the file previewed with this SHA-256; `typed` is the red file's sentence;
-   * `allowModelSwitch` is "Run again, allowing another model" (E1). */
-  startRun(sha256: string, typed: string | null, allowModelSwitch: boolean): Promise<void>;
+  /** Starts the run of the file previewed with this SHA-256 by `runner`, as chosen on the chooser; `typed` is the
+   * red file's sentence; `allowModelSwitch` is "Run again, allowing another model" (E1). */
+  startRun(sha256: string, typed: string | null, allowModelSwitch: boolean, runner: Runner): Promise<void>;
   /** The receiver's answer to a question, bound to the request's fingerprint; false when no such question is open. */
   answer(question: number, yes: boolean, fingerprint: string): Promise<boolean>;
   stopRun(): Promise<void>;

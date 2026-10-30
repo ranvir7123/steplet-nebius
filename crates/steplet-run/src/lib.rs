@@ -45,8 +45,8 @@ pub use launch::{LaunchError, RunHandle, launch};
 pub use live::{Live, Progress, StopSignal};
 pub use lock::RunLock;
 pub use model::{
-    Finish, Message, Model, ModelError, ModelReply, Role, Scripted, Seen, Step, ToolCall, ToolSpec, Usage, chat_body,
-    read_reply,
+    Finish, Message, Model, ModelError, ModelReply, OFFERED, Role, Scripted, Seen, Step, ToolCall, ToolSpec, Usage,
+    chat_body, read_reply,
 };
 pub use places::{LinuxPaths, RealPaths};
 pub use prepare::{
@@ -74,3 +74,6 @@ pub use tools::{specs, system_prompt, task_message, to_move, to_request};
 pub use types::{BadValue, Event, GateAnswer, GateLink, GateRequest, RunPaths, RunRequest};
 pub use watch::{Tripwire, Verdict, Watcher, call_what};
 pub use winhttp::HttpLimits;
+
+// The run chooser's two runners (the Nebius plan, Task 8).
+pub use promises::{LIMIT_TESTS, RunnerKind, promises_for};

@@ -146,8 +146,9 @@ impl session::Screen for WindowScreen {
     }
 }
 
-/// Starts the run of the file on screen, previewed with the SHA-256 `sha256`; `typed` is a red file's sentence. Rust
-/// checks the file again now (row 30). A refusal is Steplet's own sentence.
+/// Starts the run of the file on screen, previewed with the SHA-256 `sha256`, by the runner chosen on the chooser;
+/// `typed` is a red file's sentence. Rust checks the file again now (row 30), and reads the runner's key from Windows'
+/// Credential Manager. A refusal is Steplet's own sentence.
 #[tauri::command(async)]
 fn start_run(
     state: tauri::State<AppState>,
@@ -155,16 +156,18 @@ fn start_run(
     sha256: String,
     typed: Option<String>,
     allow_model_switch: bool,
+    runner: session::Runner,
 ) -> Result<(), String> {
     let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
     // The clean-up at start holds the one-run lock while it removes a crash's run; a run starts after it.
     state.looked_at_start();
-    let ready = setup::ready_for_run(&state.look());
+    let ready = setup::ready_for(&state.look(), &runner, key::ENTRIES);
     state.session.start(
         &raw,
         &sha256,
         typed.as_deref(),
         allow_model_switch,
+        runner,
         ready,
         std::sync::Arc::new(WindowScreen(window)),
     )
@@ -204,18 +207,25 @@ fn stop_and_close(state: tauri::State<AppState>, window: tauri::WebviewWindow) {
     }
 }
 
-/// The run chooser for the file on screen: the runner's own lines for it (R6), and whether a run can start now. The
-/// network line follows WSL's network mode, as `%USERPROFILE%\.wslconfig` sets it (K4; read only, never changed).
-/// Commands that may wait on WSL run off the window's own thread (`async`), so the window never freezes.
+/// The run chooser for the file on screen: Steplet's agent and Claude Code, each with its own lines for it (R6), the
+/// models the agent offers, and what each still needs before it can run. Claude Code's network line follows WSL's
+/// network mode, as `%USERPROFILE%\.wslconfig` sets it (K4; read only, never changed). Commands that may wait on WSL
+/// run off the window's own thread (`async`), so the window never freezes.
 #[tauri::command(async)]
 fn chooser(state: tauri::State<AppState>) -> Result<views::ChooserView, String> {
+    use steplet_run::{RunnerKind, promises_for};
     let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
     let file = steplet_core::report::check(&raw, open::now_unix())
         .steplet
         .ok_or("Steplet could not read this file, so it cannot run.")?;
-    let ready = setup::view(&state.look(), key::ENTRIES, setup::switch()).ready;
+    let setup = setup::view(&state.look(), key::ENTRIES, setup::switch());
     let network = steplet_run::read_network_mode(std::env::var_os("USERPROFILE").as_deref().map(std::path::Path::new));
-    Ok(views::chooser(&steplet_run::promises(&file, network), ready))
+    Ok(views::chooser(
+        &promises_for(RunnerKind::Own, &file, network),
+        &promises_for(RunnerKind::ClaudeCode, &file, network),
+        steplet_run::OFFERED,
+        &setup,
+    ))
 }
 
 /// The Setup screen, from a new look at this computer ("Check again" too).

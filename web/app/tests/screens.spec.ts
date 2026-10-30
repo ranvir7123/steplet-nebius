@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const SHOTS = fileURLToPath(new URL("../../../docs/screens/phase-4/", import.meta.url));
 const NEBIUS_SHOTS = fileURLToPath(new URL("../../../docs/screens/nebius/", import.meta.url));
 /** The screens the Nebius copy changed. */
-const CHANGED_IN_NEBIUS_COPY = new Set(["setup"]);
+const CHANGED_IN_NEBIUS_COPY = new Set(["setup", "chooser"]);
 const EXAMPLE = fileURLToPath(new URL("../../../examples/run-tests.steplet", import.meta.url));
 const SENTENCE = "I understand the risks and want to run this file";
 
@@ -388,8 +388,8 @@ const proof: Record<string, { shows: Text[]; hides?: Text[] }> = {
     ],
     hides: [/other programs in Steplet's Linux/],
   },
-  "chooser-needs-setup": { shows: ["Steplet's own Linux or your key is not ready yet."] },
-  "chooser-wsl-missing": { shows: ["Steplet's own Linux or your key is not ready yet."] },
+  "chooser-needs-setup": { shows: ["Steplet's own Linux is not ready yet. Setup shows what is missing."] },
+  "chooser-wsl-missing": { shows: ["Steplet's own Linux is not ready yet. Setup shows what is missing."] },
   "setup-nothing-done": {
     shows: ["Steplet's own Linux is not installed yet.", "Install Steplet's Linux", "Nebius Token Factory key"],
     hides: [/^Windows may still ask which app to use/, /Saved/],
@@ -560,5 +560,43 @@ for (const s of states) {
         expect(outside, "requests that leave the page's server").toEqual([]);
       });
     }
+  }
+}
+
+// The Nebius plan, Task 8: the chooser with Steplet's agent first, in the states the plan names, pictured in dark at
+// both widths as docs/screens/nebius/task8-chooser-<state>-dark-<width>.png, with the same checks as every state.
+const task8: { state: string; shows: Text[] }[] = [
+  {
+    state: "no-keys",
+    shows: ["Needs a Nebius key. Add it in Setup.", "Needs an Anthropic key. Add it in Setup."],
+  },
+  { state: "red", shows: ["Run with Steplet's agent", "Run with Claude Code"] },
+  { state: "longest-model", shows: ["nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", "Nemotron 3 Ultra"] },
+];
+
+for (const s of task8) {
+  for (const width of [1100, 560]) {
+    const name = `task8-chooser-${s.state}-dark-${width}`;
+    test(name, async ({ page, baseURL }) => {
+      const outside: string[] = [];
+      page.on("request", (r) => {
+        const url = r.url();
+        if (!url.startsWith(baseURL!) && !url.startsWith("data:") && !url.startsWith("blob:")) outside.push(url);
+      });
+      await page.setViewportSize({ width, height: 800 });
+      await page.emulateMedia({ colorScheme: "dark" });
+      await page.goto(`/?scenario=chooser-${s.state}`);
+      await chooser(page);
+      for (const t of s.shows) await expect(page.getByText(t).first(), `${name} shows ${t}`).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.mouse.move(width - 1, 799);
+      await page.screenshot({ path: `${NEBIUS_SHOTS}${name}.png`, fullPage: true, animations: "disabled" });
+
+      expect(await clipped(page), "text cut off").toEqual([]);
+      const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      expect(sideways, "sideways scroll").toBe(false);
+      expect(await withoutFocusRing(page), "controls without a focus ring").toEqual([]);
+      expect(outside, "requests that leave the page's server").toEqual([]);
+    });
   }
 }

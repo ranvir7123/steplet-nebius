@@ -5,7 +5,10 @@ use std::path::Path;
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
-use steplet_run::{NetworkMode, Promise, network_mode, promises, read_network_mode};
+use steplet_run::{
+    LIMIT_TESTS, NetworkMode, OFFERED, Promise, RunnerKind, model_name, network_mode, price, promises, promises_for,
+    read_network_mode,
+};
 
 fn steplet(allow: &str) -> Steplet {
     let f = format!("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n{allow}---\n");
@@ -39,14 +42,86 @@ fn every_promise_names_tests_that_exist() {
         .into_iter()
         .flat_map(|s| modes.map(|m| (s.clone(), m)))
     {
-        for p in promises(&s, mode) {
-            assert!(!p.tests.is_empty(), "{:?} names no test", p.text);
-            for test in p.tests {
-                assert!(is_test(test), "{:?} names {test}, which is not a test here", p.text);
+        for kind in [RunnerKind::Own, RunnerKind::ClaudeCode] {
+            for p in promises_for(kind, &s, mode) {
+                assert!(!p.tests.is_empty(), "{kind:?}: {:?} names no test", p.text);
+                for test in p.tests {
+                    assert!(is_test(test), "{kind:?}: {:?} names {test}, which is not a test here", p.text);
+                }
             }
         }
     }
+    // The agent's limits line, whose numbers the app writes.
+    assert!(!LIMIT_TESTS.is_empty());
+    for test in LIMIT_TESTS {
+        assert!(is_test(test), "the limits line names {test}, which is not a test here");
+    }
     assert!(!is_test("promises"), "the check itself: a function that is not a test does not count");
+}
+
+/// Claude Code's lines are the ones `promises` gives, and Steplet's own agent has lines of its own, each backed by a
+/// test of the agent (the Nebius plan, Tasks 5 and 6): none rests on a Claude Code run's test, and none changes with
+/// WSL's network mode, which only the Claude Code tests looked at.
+#[test]
+fn steplets_agent_has_lines_of_its_own() {
+    let site = "allow:\n  domains:\n    - example.org\n";
+    for (allow, mode) in [("", NetworkMode::Nat), (site, NetworkMode::Other)] {
+        assert_eq!(promises_for(RunnerKind::ClaudeCode, &steplet(allow), mode), promises(&steplet(allow), mode));
+    }
+    let none = promises_for(RunnerKind::Own, &steplet(""), NetworkMode::Nat);
+    assert_eq!(
+        texts(&none),
+        [
+            "Steplet's checker decides every move the agent asks for before it happens, and what runs is exactly what \
+             it checked. A move it refuses does not run.",
+            "Even a move the checker allows can change files only inside the working copy.",
+            "The agent's moves cannot read the folder where Linux would show your Windows drives.",
+            "Programs the agent runs can reach only the web sites this file declares, and it declares none.",
+            "Anything the agent leaves running is ended before its next move.",
+            "The report shows whether each command worked as Steplet saw it, not as the agent claims.",
+        ]
+    );
+    assert!(none.iter().all(|p| p.items.is_empty()));
+    let one = promises_for(RunnerKind::Own, &steplet(site), NetworkMode::Nat);
+    assert_eq!(
+        (one[3].text, one[3].items.clone()),
+        ("Programs the agent runs can reach only the web sites this file declares:", vec!["example.org".to_owned()])
+    );
+    assert_eq!(one[3].tests, ["a_command_reaches_only_declared_sites"]);
+    assert_eq!(none[4].tests, ["a_program_left_running_is_ended_before_the_next_move"]);
+    for mode in [NetworkMode::Other, NetworkMode::Unknown] {
+        assert_eq!(promises_for(RunnerKind::Own, &steplet(site), mode), one, "{mode:?}: the same lines");
+    }
+    // A Claude Code run's tests back none of the agent's lines.
+    let claude: Vec<&str> = [steplet(""), steplet(site)]
+        .iter()
+        .flat_map(|s| promises(s, NetworkMode::Nat))
+        .flat_map(|p| p.tests.iter().copied())
+        .collect();
+    for p in none.iter().chain(&one) {
+        for test in p.tests {
+            assert!(!claude.contains(test), "{:?} rests on {test}, a Claude Code run's test", p.text);
+        }
+    }
+    // Not shown yet: the line about the Nebius key waits for its test (Task 9).
+    assert!(none.iter().all(|p| !p.text.contains("Nebius key")));
+}
+
+/// The chooser offers only models Steplet can price and name, Nemotron 3 Super first: a run refuses a model with no
+/// price.
+#[test]
+fn every_offered_model_has_a_price_and_a_name() {
+    assert_eq!(OFFERED[0], "nvidia/nemotron-3-super-120b-a12b", "the default");
+    for model in OFFERED {
+        assert!(price(model).is_some(), "{model} has no price");
+        assert_ne!(model_name(model), *model, "{model} has no name");
+    }
+    assert_eq!(model_name("nvidia/nemotron-3-super-120b-a12b"), "Nemotron 3 Super");
+    assert_eq!(model_name("nvidia/Nemotron-3-Ultra-550b-a55b"), "Nemotron 3 Ultra");
+    assert_eq!(model_name("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"), "Nemotron 3 Nano");
+    assert_eq!(model_name("NVIDIA/NEMOTRON-3-SUPER-120B-A12B"), "Nemotron 3 Super", "as prices, any case");
+    // A model Steplet has no name for keeps its id (the same helper the report uses, Task 7).
+    assert_eq!(model_name("gpt-4o"), "gpt-4o");
 }
 
 #[test]

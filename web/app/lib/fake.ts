@@ -3,6 +3,7 @@
 // web/app/tests/fixtures. It decides nothing itself: every answer, word and colour comes from the saved data.
 import type { Fixture } from "../../shared/types/Fixture";
 import type { ProgressView } from "../../shared/types/ProgressView";
+import type { Runner } from "../../shared/types/Runner";
 import type { SetupChanges } from "../../shared/types/SetupChanges";
 import type { SetupView } from "../../shared/types/SetupView";
 import type { Backend, Shown, Unlisten } from "./backend";
@@ -119,8 +120,11 @@ export const backend: Backend = {
     setup = on ? c.switch_on : c.switch_off;
     return setup;
   },
-  async startRun(_sha256, _typed, allowModelSwitch) {
+  async startRun(_sha256, typed, allowModelSwitch, runner) {
     const f = await fixture();
+    // What the page asked to start, and by which runner, for the screen tests to read.
+    const page = window as unknown as { stepletStarted?: { runner: Runner; typed: string | null }[] };
+    (page.stepletStarted ??= []).push({ runner, typed });
     void emit(allowModelSwitch ? f.allowed_switch : f.progress);
   },
   async answer(question, yes) {

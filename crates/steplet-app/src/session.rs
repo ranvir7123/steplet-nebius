@@ -17,10 +17,12 @@ use steplet_core::policy::Policy;
 use steplet_core::report::{Report as FileReport, check};
 use steplet_core::rules::{Outcome, TIME_EXPIRED};
 use steplet_core::sig::SigStatus;
+use steplet_run::{AgentSetup, HttpLimits, Nanodollars, TokenFactory};
 use steplet_run::{
     Answers, ApiKey, Event, Live, PrepareError, Progress, Question, Reply, Report, RunError, RunLock, RunPaths,
     RunRequest, RunSetup, StopSignal, task_text,
 };
+use ts_rs::TS;
 
 use crate::pins;
 use crate::views::{self, ProgressView, RED_SENTENCE, RunStatus};
@@ -32,12 +34,34 @@ pub const DECISION_DEADLINE: Duration = Duration::from_secs(5 * 60 + 15);
 /// A run's limits (S2).
 pub const RUN_LIMIT: Duration = Duration::from_secs(30 * 60);
 pub const MAX_TURNS: u32 = 40;
+/// The most a run of Steplet's agent may spend on its model (the Nebius plan, Task 8).
+pub const AGENT_CAP: Nanodollars = Nanodollars::from_cents(25);
 
 /// The runner, as the session calls it, with the one-run lock the session holds for the run:
 /// `steplet_run::run_live_locked` in the app, a stand-in in tests.
 pub type RunFn = Arc<
     dyn Fn(&RunLock, &RunRequest, &RunPaths, &Policy, &RunSetup, Arc<Live>) -> Result<Report, RunError> + Send + Sync,
 >;
+
+/// Steplet's own agent, as the session calls it, with the one-run lock: `steplet_run::run_agent_locked` in the app, a
+/// stand-in in tests.
+pub type AgentFn = Arc<
+    dyn Fn(&RunLock, &RunRequest, &RunPaths, &Policy, AgentSetup, Arc<Live>) -> Result<Report, RunError> + Send + Sync,
+>;
+
+/// Who runs the file, as the chooser sends it (the Nebius plan, Task 8).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Runner {
+    /// Steplet's own agent, on `model` at Nebius Token Factory: one of `steplet_run::OFFERED`.
+    Own {
+        model: String,
+    },
+    ClaudeCode,
+}
+
+/// The refusal of a model the chooser does not list, whatever the page sends.
+const NOT_OFFERED: &str = "Steplet's agent does not offer this model. Choose one from the list.";
 
 /// The window, as a run needs it.
 pub trait Screen: Send + Sync {
@@ -72,13 +96,21 @@ impl Places {
     }
 }
 
-/// What setup gives a run.
+/// What setup gives a run. Each runner needs only its own part: Claude Code the gate program and the Anthropic key,
+/// Steplet's agent the Nebius key.
 pub struct Ready {
     /// Steplet's Linux, by its id.
     pub distro_id: String,
     /// This build's gate program on its disk.
-    pub gate_exe: String,
-    pub key: ApiKey,
+    pub gate_exe: Option<String>,
+    pub key: Option<ApiKey>,
+    pub nebius_key: Option<ApiKey>,
+}
+
+/// The run as it will go: Claude Code with its setup, or Steplet's agent with its own.
+enum Chosen {
+    ClaudeCode(RunSetup),
+    Own(AgentSetup),
 }
 
 /// The marker's contents.
@@ -107,6 +139,9 @@ const LEFT_BEHIND: &str = "Steplet was closed while a file was running, and coul
 
 pub struct Session {
     run: RunFn,
+    agent: AgentFn,
+    /// Nebius Token Factory's address: `steplet_run::BASE`, or the tests' stand-in on this computer.
+    nebius: String,
     discard: DiscardFn,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
     places: Places,
@@ -129,6 +164,8 @@ impl Session {
     pub fn new(run: RunFn, discard: DiscardFn, now: Arc<dyn Fn() -> i64 + Send + Sync>, places: Places) -> Session {
         Session {
             run,
+            agent: Arc::new(steplet_run::run_agent_locked),
+            nebius: steplet_run::BASE.into(),
             discard,
             now,
             places,
@@ -138,16 +175,29 @@ impl Session {
         }
     }
 
-    /// Starts the run of the file read as `raw`, previewed with the SHA-256 `previewed`; `typed` is the red file's
-    /// sentence; `allow_model_switch` is "Run again, allowing another model" (E1). A refusal is Steplet's own
-    /// sentence; once started, the run's end comes as progress. The run counts as going on from the first moment, so
-    /// a Stop, or closing the window, while Steplet still checks the file is kept, and a second Run is refused.
+    /// The same session with a stand-in for Steplet's own agent.
+    pub fn with_agent(self, agent: AgentFn) -> Session {
+        Session { agent, ..self }
+    }
+
+    /// The same session with Nebius at `base`: the tests' stand-in on this computer (plain `http` is allowed only
+    /// to 127.0.0.1).
+    pub fn with_nebius_at(self, base: &str) -> Session {
+        Session { nebius: base.into(), ..self }
+    }
+
+    /// Starts the run of the file read as `raw`, previewed with the SHA-256 `previewed`, by `runner`; `typed` is the
+    /// red file's sentence; `allow_model_switch` is "Run again, allowing another model" (E1). A refusal is Steplet's
+    /// own sentence; once started, the run's end comes as progress. The run counts as going on from the first moment,
+    /// so a Stop, or closing the window, while Steplet still checks the file is kept, and a second Run is refused.
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         &self,
         raw: &[u8],
         previewed: &str,
         typed: Option<&str>,
         allow_model_switch: bool,
+        runner: Runner,
         ready: Result<Ready, String>,
         screen: Arc<dyn Screen>,
     ) -> Result<(), String> {
@@ -161,7 +211,8 @@ impl Session {
             // A close asked for while an earlier run was ending is not carried over to this one.
             self.close_after.store(false, Ordering::SeqCst);
         }
-        let started = self.begin(raw, previewed, typed, allow_model_switch, ready, screen.clone(), stop, answers);
+        let started =
+            self.begin(raw, previewed, typed, allow_model_switch, runner, ready, screen.clone(), stop, answers);
         if started.is_err() {
             let close = {
                 let mut current = lock(&self.current);
@@ -182,6 +233,7 @@ impl Session {
         previewed: &str,
         typed: Option<&str>,
         allow_model_switch: bool,
+        runner: Runner,
         ready: Result<Ready, String>,
         screen: Arc<dyn Screen>,
         stop: StopSignal,
@@ -203,6 +255,7 @@ impl Session {
         let here = crate::open::here(&report, &pins::load_at(self.places.pins.as_deref()));
         let file = runnable(&report, &here, typed)?;
         let ready = ready?;
+        let chosen = self.chosen(&runner, &ready)?;
         // One run at a time on this computer, from now until this run is over: refused now if another window runs
         // one. While it is held, the marker below is this run's, and no other window's clean-up touches it.
         let one_run = RunLock::take().map_err(|e| views::run_failure(&e).1.reason)?;
@@ -234,13 +287,6 @@ impl Session {
             // A list Steplet cannot read is kept as it is; the preview already said it cannot warn.
             let _ = pins::record(path, &req.steplet.sender.text, fingerprint);
         }
-        let setup = RunSetup {
-            gate_exe: ready.gate_exe,
-            logs: self.places.logs.clone(),
-            key: Some(ready.key),
-            decision_deadline: DECISION_DEADLINE,
-            model_url: None,
-        };
         let marker = Marker { run_id: run_id.clone(), distro_id: ready.distro_id.clone() };
         write_marker(&self.places.marker, &marker).map_err(|e| {
             format!("Steplet could not note that a run is starting, so it did not start it. {}", views::windows_says(e))
@@ -265,8 +311,9 @@ impl Session {
             answers: Some(answers),
             ask_limit: ASK_LIMIT,
         });
-        let (run, current, close_after, marker_path, last) = (
+        let (run, agent, current, close_after, marker_path, last) = (
             self.run.clone(),
+            self.agent.clone(),
             self.current.clone(),
             self.close_after.clone(),
             self.places.marker.clone(),
@@ -281,8 +328,9 @@ impl Session {
                 }
             } else {
                 // A crash inside the run still ends it here, so the window is not left "running".
-                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run(&one_run, &req, &paths, &policy, &setup, live)
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match chosen {
+                    Chosen::ClaudeCode(setup) => run(&one_run, &req, &paths, &policy, &setup, live),
+                    Chosen::Own(setup) => agent(&one_run, &req, &paths, &policy, setup, live),
                 }));
                 match ran {
                     Ok(Ok(report)) => ProgressView::Finished { report: Box::new(views::report_view(&report)) },
@@ -321,6 +369,41 @@ impl Session {
             }
         });
         Ok(())
+    }
+
+    /// What `runner` runs with, from what setup gave: Claude Code needs the gate program and the Anthropic key;
+    /// Steplet's agent needs a model the chooser lists and the Nebius key, which goes only to Nebius and into the
+    /// secrets the agent keeps out of the report and logs. Steplet's sentence when something is missing.
+    fn chosen(&self, runner: &Runner, ready: &Ready) -> Result<Chosen, String> {
+        match runner {
+            Runner::ClaudeCode => {
+                let gate_exe = ready.gate_exe.clone().ok_or(views::NOT_SET_UP)?;
+                let key = ready.key.clone().ok_or(views::NEEDS_ANTHROPIC_KEY)?;
+                Ok(Chosen::ClaudeCode(RunSetup {
+                    gate_exe,
+                    logs: self.places.logs.clone(),
+                    key: Some(key),
+                    decision_deadline: DECISION_DEADLINE,
+                    model_url: None,
+                }))
+            }
+            Runner::Own { model } => {
+                if !steplet_run::OFFERED.contains(&model.as_str()) {
+                    return Err(NOT_OFFERED.into());
+                }
+                let key = ready.nebius_key.clone().ok_or(views::NEEDS_NEBIUS_KEY)?;
+                let secrets = vec![key.text().to_string()];
+                let model = TokenFactory::at(&self.nebius, key, model, HttpLimits::default())
+                    .map_err(|_| "Steplet does not know where to reach Nebius, so nothing ran.".to_string())?;
+                Ok(Chosen::Own(AgentSetup {
+                    model: Box::new(model),
+                    cap: AGENT_CAP,
+                    max_steps: MAX_TURNS,
+                    logs: self.places.logs.clone(),
+                    secrets,
+                }))
+            }
+        }
     }
 
     /// The receiver's answer to question `question`, bound to the request's fingerprint; false when no such

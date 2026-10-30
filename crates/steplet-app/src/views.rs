@@ -383,42 +383,141 @@ pub struct PromiseView {
     pub tests: Vec<String>,
 }
 
+/// Who runs the file (the Nebius plan, Task 8): Steplet's own agent, or Claude Code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RunnerKind {
+    Own,
+    ClaudeCode,
+}
+
+/// A model Steplet's agent offers, with its price in Steplet's words.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct ModelView {
+    /// The model as Nebius names it.
+    pub id: String,
+    /// Its name on screen ("Nemotron 3 Super").
+    pub name: String,
+    pub price: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct RunnerView {
-    /// Steplet's Linux and the key are ready; otherwise the button says "Set up first".
-    pub ready: bool,
+    pub kind: RunnerKind,
+    pub name: String,
+    /// The model chosen at first (Steplet's agent only).
+    pub model: Option<String>,
+    /// The models the receiver can choose from, the default first (Steplet's agent only).
+    pub models: Vec<ModelView>,
+    /// Where the run stops, with its tests (Steplet's agent only); shown first among the lines.
+    pub limits: Option<PromiseView>,
     pub promises: Vec<PromiseView>,
+    /// What this runner still needs before it can run, in Steplet's words; the button then goes to Setup.
+    pub needs: Option<String>,
     /// What leaves the computer (R16).
     pub data_leaves: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 pub struct ChooserView {
-    pub claude: RunnerView,
+    /// Steplet's agent first, then Claude Code.
+    pub runners: Vec<RunnerView>,
     /// Why Codex is not offered (D1).
     pub codex_reason: String,
 }
 
 const DATA_LEAVES: &str =
     "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key.";
+const AGENT_DATA_LEAVES: &str =
+    "Steplet's agent sends what it reads, the commands' output and this task to Nebius, using your Nebius key.";
 const CODEX_REASON: &str = "Not available for files that run code on this computer: Steplet has not shown that Codex \
                             keeps a task's programs away from the other programs on this computer.";
+pub const NEEDS_NEBIUS_KEY: &str = "Needs a Nebius key. Add it in Setup.";
+pub const NEEDS_ANTHROPIC_KEY: &str = "Needs an Anthropic key. Add it in Setup.";
+pub const NOT_SET_UP: &str = "Steplet's own Linux is not ready yet. Setup shows what is missing.";
 
-/// The chooser for a file, with the runner's own lines for it (`steplet_run::promises`).
-pub fn chooser(promises: &[Promise], ready: bool) -> ChooserView {
+/// What `kind` still needs before it can run, from the Setup screen's lines: Steplet's Linux and its tools first (a
+/// key is no use without them), the gate program for Claude Code alone (Steplet's agent's moves are decided inside
+/// Steplet), then the runner's own key.
+pub fn needs(setup: &SetupView, kind: RunnerKind) -> Option<String> {
+    let linux = [&setup.wsl, &setup.linux, &setup.tools].iter().all(|l| l.status == LineStatus::Ready);
+    let gate = kind == RunnerKind::Own || setup.gate.status == LineStatus::Ready;
+    let key = match kind {
+        RunnerKind::Own => (setup.keys.nebius, NEEDS_NEBIUS_KEY),
+        RunnerKind::ClaudeCode => (setup.keys.anthropic, NEEDS_ANTHROPIC_KEY),
+    };
+    if !(linux && gate) {
+        Some(NOT_SET_UP.into())
+    } else if !key.0 {
+        Some(key.1.into())
+    } else {
+        None
+    }
+}
+
+/// An amount in dollars, as exact as it is: "$0.25", "$0.06", "$0.0005".
+fn dollars(n: steplet_run::Nanodollars) -> String {
+    let (whole, part) = (n.0 / 1_000_000_000, n.0 % 1_000_000_000);
+    let digits = format!("{part:09}");
+    format!("${whole}.{:0<2}", digits.trim_end_matches('0'))
+}
+
+fn promise_view(p: &Promise) -> PromiseView {
+    PromiseView {
+        text: p.text.into(),
+        items: p.items.iter().map(|i| line(i)).collect(),
+        tests: p.tests.iter().map(|t| t.to_string()).collect(),
+    }
+}
+
+/// The chooser for a file: Steplet's agent with its lines for it (`steplet_run::promises_for`) and the models in
+/// `offered` that Steplet can price, then Claude Code with its lines; each says what it still needs from `setup`.
+pub fn chooser(own: &[Promise], claude: &[Promise], offered: &[&str], setup: &SetupView) -> ChooserView {
+    let models: Vec<ModelView> = offered
+        .iter()
+        .filter_map(|id| {
+            let p = steplet_run::price(id)?;
+            let million =
+                |n: steplet_run::Nanodollars| dollars(steplet_run::Nanodollars(n.0.saturating_mul(1_000_000)));
+            Some(ModelView {
+                id: id.to_string(),
+                name: steplet_run::model_name(id),
+                price: format!(
+                    "{} per million tokens read, {} per million written",
+                    million(p.input),
+                    million(p.output)
+                ),
+            })
+        })
+        .collect();
+    let limits = PromiseView {
+        text: format!("Stops at {} or {} steps.", dollars(crate::session::AGENT_CAP), crate::session::MAX_TURNS),
+        items: Vec::new(),
+        tests: steplet_run::LIMIT_TESTS.iter().map(|t| t.to_string()).collect(),
+    };
     ChooserView {
-        claude: RunnerView {
-            ready,
-            promises: promises
-                .iter()
-                .map(|p| PromiseView {
-                    text: p.text.into(),
-                    items: p.items.iter().map(|i| line(i)).collect(),
-                    tests: p.tests.iter().map(|t| t.to_string()).collect(),
-                })
-                .collect(),
-            data_leaves: DATA_LEAVES.into(),
-        },
+        runners: vec![
+            RunnerView {
+                kind: RunnerKind::Own,
+                name: "Steplet's agent".into(),
+                model: models.first().map(|m| m.id.clone()),
+                models,
+                limits: Some(limits),
+                promises: own.iter().map(promise_view).collect(),
+                needs: needs(setup, RunnerKind::Own),
+                data_leaves: AGENT_DATA_LEAVES.into(),
+            },
+            RunnerView {
+                kind: RunnerKind::ClaudeCode,
+                name: "Claude Code, in Steplet's own Linux".into(),
+                model: None,
+                models: Vec::new(),
+                limits: None,
+                promises: claude.iter().map(promise_view).collect(),
+                needs: needs(setup, RunnerKind::ClaudeCode),
+                data_leaves: DATA_LEAVES.into(),
+            },
+        ],
         codex_reason: CODEX_REASON.into(),
     }
 }
