@@ -9,19 +9,25 @@ use std::time::Duration;
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use steplet_app::key::{self, Entries};
 use steplet_app::pins::{self, Pins};
-use steplet_app::session::{DiscardFn, Places, Ready, RunFn, Screen, Session};
+use steplet_app::session::{AGENT_CAP, AgentFn, DiscardFn, MAX_TURNS, Places, Ready, RunFn, Runner, Screen, Session};
+use steplet_app::setup;
 use steplet_app::views::{ANOTHER_WINDOW, ProgressView, RED_SENTENCE};
 use steplet_core::policy::Policy;
+use steplet_run::setup::{State, Wsl};
 use steplet_run::{
-    ApiKey, Asker, Checker, GateAnswer, GateRequest, Live, RealPaths, Report, RunError, RunLock, RunOutcome, RunPaths,
-    RunRequest, RunSetup, Trust, build_report,
+    AgentSetup, ApiKey, Asker, Checker, GateAnswer, GateRequest, Live, Message, Nanodollars, RealPaths, Report,
+    RunError, RunLock, RunOutcome, RunPaths, RunRequest, RunSetup, Trust, build_report,
 };
 
 /// The corpus's own time of viewing: 11 Oct 2026. The example files expire at the end of 2026-12-31 or later.
 const NOW: i64 = 1_791_720_000;
 const MADE_UP_KEY: &str = "sk-ant-api03-STEPLET-TEST-MADE-UP-NOT-A-KEY";
+/// Made-up text in a Nebius key's shape; never a real key.
+const MADE_UP_NEBIUS_KEY: &str = "nebius-STEPLET-TEST-MADE-UP-NOT-A-KEY";
 const DISTRO: &str = "{44f36236-99b1-42c0-84bd-7ff8392d51ba}";
+const SUPER: &str = "nvidia/nemotron-3-super-120b-a12b";
 /// The tests share Windows' one-run lock, so they run one at a time.
 static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
@@ -64,9 +70,15 @@ fn places(dir: &std::path::Path) -> Places {
 fn ready() -> Result<Ready, String> {
     Ok(Ready {
         distro_id: DISTRO.into(),
-        gate_exe: "/opt/steplet/gate/steplet-gate-0123456789abcdef.exe".into(),
-        key: ApiKey::new(MADE_UP_KEY.into()),
+        gate_exe: Some("/opt/steplet/gate/steplet-gate-0123456789abcdef.exe".into()),
+        key: Some(ApiKey::new(MADE_UP_KEY.into())),
+        nebius_key: Some(ApiKey::new(MADE_UP_NEBIUS_KEY.into())),
     })
+}
+
+/// Steplet's own agent on Nemotron 3 Super.
+fn own() -> Runner {
+    Runner::Own { model: SUPER.into() }
 }
 
 /// The screen, played by the test: what it was sent, and how often the taskbar flashed.
@@ -185,8 +197,15 @@ fn start_run_checks_the_file_again_now() {
     let raw = read("examples/run-tests.steplet");
     // The example expires at the end of 2027-09-30; it was previewed before that, and Run is pressed after.
     let after_expiry = 1_822_521_600 + 2 * 86_400;
-    let refused =
-        session(quick(), after_expiry, &dir).start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
+    let refused = session(quick(), after_expiry, &dir).start(
+        &raw,
+        &sha(&raw),
+        None,
+        false,
+        Runner::ClaudeCode,
+        ready(),
+        Arc::new(Seen::default()),
+    );
     assert_eq!(refused, Err("This file expired after you opened it.".to_string()));
 }
 
@@ -197,8 +216,15 @@ fn start_run_refuses_bytes_that_changed() {
     let raw = read("examples/run-tests.steplet");
     let mut changed = raw.clone();
     changed.extend_from_slice(b"\nOne more line the sender did not write.\n");
-    let refused =
-        session(quick(), NOW, &dir).start(&changed, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
+    let refused = session(quick(), NOW, &dir).start(
+        &changed,
+        &sha(&raw),
+        None,
+        false,
+        Runner::ClaudeCode,
+        ready(),
+        Arc::new(Seen::default()),
+    );
     assert_eq!(
         refused,
         Err("This file changed after you opened it. Open it again to see what it asks for now.".to_string())
@@ -210,19 +236,27 @@ fn red_needs_the_exact_sentence_on_the_rust_side_too() {
     let _one = alone();
     let dir = scratch("red");
     let raw = read("corpus/hostile/hide.link-mismatch.hit.steplet");
-    let s = session(quick(), NOW, &dir);
-    let start = |typed: Option<&str>| s.start(&raw, &sha(&raw), typed, false, ready(), Arc::new(Seen::default()));
-    let (wrong, dotted) = (RED_SENTENCE.replace("risks", "risk"), format!("{RED_SENTENCE}."));
-    for typed in [None, Some(wrong.as_str()), Some(dotted.as_str())] {
+    let s = session(quick(), NOW, &dir).with_agent(quick_agent());
+    // The same sentence, whichever runs the file (the Nebius plan, Task 8).
+    for runner in [Runner::ClaudeCode, own()] {
+        let start = |typed: Option<&str>| {
+            s.start(&raw, &sha(&raw), typed, false, runner.clone(), ready(), Arc::new(Seen::default()))
+        };
+        let (wrong, dotted) = (RED_SENTENCE.replace("risks", "risk"), format!("{RED_SENTENCE}."));
+        for typed in [None, Some(wrong.as_str()), Some(dotted.as_str())] {
+            assert_eq!(
+                start(typed),
+                Err("This file is red: type the sentence exactly before you run it.".to_string()),
+                "{runner:?} {typed:?}"
+            );
+        }
+        let screen = Arc::new(Seen::default());
         assert_eq!(
-            start(typed),
-            Err("This file is red: type the sentence exactly before you run it.".to_string()),
-            "{typed:?}"
+            s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, runner.clone(), ready(), screen.clone()),
+            Ok(())
         );
+        wait_until("the run's end", || screen.ended() && !s.running());
     }
-    let screen = Arc::new(Seen::default());
-    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, ready(), screen.clone()), Ok(()));
-    wait_until("the run's end", || screen.ended());
 }
 
 #[test]
@@ -231,7 +265,15 @@ fn run_is_refused_while_another_window_runs() {
     let dir = scratch("busy");
     let raw = read("examples/run-tests.steplet");
     let _other_window = RunLock::take().expect("no run here yet");
-    let refused = session(quick(), NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default()));
+    let refused = session(quick(), NOW, &dir).start(
+        &raw,
+        &sha(&raw),
+        None,
+        false,
+        Runner::ClaudeCode,
+        ready(),
+        Arc::new(Seen::default()),
+    );
     assert_eq!(refused, Err(ANOTHER_WINDOW.to_string()));
 }
 
@@ -253,7 +295,7 @@ fn an_answer_reaches_the_runner_bound_to_its_question() {
         });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
-    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     let question = |n: usize| {
         wait_until("a question", || screen.questions().len() > n);
         screen
@@ -298,7 +340,7 @@ fn a_question_flashes_the_taskbar_and_waits_its_turn() {
         });
     let screen = Arc::new(Seen::default());
     let s = session(run, NOW, &dir);
-    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     wait_until("the first question", || screen.questions().len() == 1);
     std::thread::sleep(Duration::from_millis(400));
     assert_eq!(screen.questions().len(), 1, "the second waits behind the first");
@@ -323,7 +365,7 @@ fn closing_during_a_run_asks_first() {
     let screen = Arc::new(Seen::default());
     let s = session(until_stopped(), NOW, &dir);
     assert!(s.may_close(), "nothing runs yet");
-    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     assert!(!s.may_close(), "a run is going on: the window asks first");
     s.stop_and_close();
     wait_until("the window to close after the run", || *screen.closed.lock().unwrap());
@@ -363,7 +405,7 @@ fn the_pins_are_written_when_run_starts_and_not_before() {
     assert!(!pins_path.exists(), "opening wrote no pin");
     let screen = Arc::new(Seen::default());
     Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p)
-        .start(&raw, &sha(&raw), None, false, ready(), screen.clone())
+        .start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone())
         .unwrap();
     wait_until("the run's end", || screen.ended());
     let Pins::Known(known) = pins::load(&pins_path) else { panic!("the pins file reads") };
@@ -379,7 +421,7 @@ fn a_run_that_cannot_start_says_why_in_words() {
         Err(RunError::Busy)
     });
     let screen = Arc::new(Seen::default());
-    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.ended());
     let sent = screen.sent.lock().unwrap();
     let Some(ProgressView::Failed { failure, .. }) = sent.last() else { panic!("{sent:?}") };
@@ -437,13 +479,16 @@ fn a_known_sender_with_another_key_needs_the_sentence_too() {
     assert_eq!(preview.colour, "red", "the preview is red here");
     let s = Session::new(quick(), nothing_to_discard(), Arc::new(|| NOW), p);
     assert_eq!(
-        s.start(&raw, &sha(&raw), None, false, ready(), Arc::new(Seen::default())),
+        s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), Arc::new(Seen::default())),
         Err("This file is red: type the sentence exactly before you run it.".to_string())
     );
     let Pins::Known(known) = pins::load(&pins_path) else { panic!("the pins file reads") };
     assert_eq!(known.iter().map(|k| k.key.as_str()).collect::<Vec<_>>(), [OTHER_KEY], "the old pin stays");
     let screen = Arc::new(Seen::default());
-    assert_eq!(s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, ready(), screen.clone()), Ok(()));
+    assert_eq!(
+        s.start(&raw, &sha(&raw), Some(RED_SENTENCE), false, Runner::ClaudeCode, ready(), screen.clone()),
+        Ok(())
+    );
     wait_until("the run's end", || screen.ended());
 }
 
@@ -496,13 +541,13 @@ fn a_crashed_run_is_cleared_before_the_next_run_starts() {
     let now: Arc<dyn Fn() -> i64 + Send + Sync> = Arc::new(move || tick.load(std::sync::atomic::Ordering::SeqCst));
     let s = Session::new(crash_once, discard, now, p.clone());
     let first = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, false, ready(), first.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), first.clone()).unwrap();
     wait_until("the crash's end", || first.ended() && !s.running());
     assert!(p.marker.exists(), "the crashed run's marker stays");
     let crashed: serde_json::Value = serde_json::from_slice(&std::fs::read(&p.marker).unwrap()).unwrap();
     clock.store(NOW + 5, std::sync::atomic::Ordering::SeqCst);
     let second = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, false, ready(), second.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), second.clone()).unwrap();
     wait_until("the second run's end", || second.ended() && !s.running());
     assert_eq!(
         *cleared.lock().unwrap(),
@@ -540,7 +585,7 @@ fn two_starts_at_once_start_one_run() {
     let starts: Vec<_> = (0..2)
         .map(|_| {
             let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
-            std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, ready(), screen))
+            std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen))
         })
         .collect();
     let mut got: Vec<Result<(), String>> = starts.into_iter().map(|t| t.join().unwrap()).collect();
@@ -570,7 +615,7 @@ fn stop_pressed_while_starting_is_kept() {
     let screen = Arc::new(Seen::default());
     let starting = {
         let (s, raw, screen) = (s.clone(), raw.clone(), screen.clone());
-        std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, ready(), screen))
+        std::thread::spawn(move || s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen))
     };
     std::thread::sleep(Duration::from_millis(100));
     assert!(!s.may_close(), "closing while it starts asks first");
@@ -593,7 +638,7 @@ fn closing_when_no_run_goes_on_closes_now_and_only_now() {
     let s = session(quick(), NOW, &dir);
     assert!(!s.stop_and_close(), "nothing runs: the window closes now");
     let screen = Arc::new(Seen::default());
-    s.start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.ended() && !s.running());
     assert!(!*screen.closed.lock().unwrap(), "the next run's end does not close the window");
 }
@@ -641,7 +686,7 @@ fn progress_reaches_the_screen_in_the_order_it_was_made() {
             Ok(empty_report())
         });
     let screen = Arc::new(Slow::default());
-    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, ready(), screen.clone()).unwrap();
+    session(run, NOW, &dir).start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()).unwrap();
     wait_until("the run's end", || screen.0.ended());
     let sent = screen.0.sent.lock().unwrap();
     let kinds: Vec<String> = sent
@@ -699,7 +744,7 @@ fn another_model_is_allowed_only_right_after_a_model_refused_this_file() {
     let s = session(run, NOW, &dir);
     let start = |raw: &[u8], allow: bool| {
         let screen = Arc::new(Seen::default());
-        let started = s.start(raw, &sha(raw), None, allow, ready(), screen.clone());
+        let started = s.start(raw, &sha(raw), None, allow, Runner::ClaudeCode, ready(), screen.clone());
         if started.is_ok() {
             wait_until("the run's end", || screen.ended() && !s.running());
         }
@@ -750,4 +795,223 @@ fn a_refused_call_ends_in_the_live_log_as_in_the_report() {
         }
     }
     assert_eq!(ended, ["It did not run", "Exit code 0"]);
+}
+
+const GATE_EXE: &str = "/opt/steplet/gate/steplet-gate-0123456789abcdef.exe";
+const NEEDS_NEBIUS: &str = "Needs a Nebius key. Add it in Setup.";
+const NEEDS_ANTHROPIC: &str = "Needs an Anthropic key. Add it in Setup.";
+
+/// Setup as it looks when everything is there.
+fn set_up() -> State {
+    State {
+        wsl: Wsl::Ready { version: "2.6.3.0".into() },
+        linux: Some(DISTRO.into()),
+        missing: Vec::new(),
+        gate: true,
+        trouble: None,
+    }
+}
+
+/// Forgets a made-up Credential Manager entry when the test ends, however it ends.
+struct Forget(&'static str);
+
+impl Drop for Forget {
+    fn drop(&mut self) {
+        let _ = key::forget(self.0);
+    }
+}
+
+/// A stand-in for Steplet's own agent that ends at once.
+fn quick_agent() -> AgentFn {
+    Arc::new(|_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: AgentSetup, _: Arc<Live>| Ok(empty_report()))
+}
+
+/// A stand-in for Steplet's own agent that notes it ran.
+fn noting_agent(ran: Arc<std::sync::atomic::AtomicBool>) -> AgentFn {
+    Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: AgentSetup, _: Arc<Live>| {
+        ran.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(empty_report())
+    })
+}
+
+/// A stand-in Claude Code run that notes it ran.
+fn noting_run(ran: Arc<std::sync::atomic::AtomicBool>) -> RunFn {
+    Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, _: &RunSetup, _: Arc<Live>| {
+        ran.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(empty_report())
+    })
+}
+
+/// What the stand-in agent was given, and what the model it was given answered.
+struct AgentSaw {
+    model: String,
+    cap: Nanodollars,
+    max_steps: u32,
+    secrets: Vec<String>,
+    answer: Result<Option<String>, String>,
+}
+
+/// A stand-in for Steplet's own agent that asks its model one question and keeps what it was given.
+fn asking_agent() -> (AgentFn, Arc<Mutex<Option<AgentSaw>>>) {
+    let saw: Arc<Mutex<Option<AgentSaw>>> = Arc::default();
+    let keep = saw.clone();
+    let agent: AgentFn =
+        Arc::new(move |_: &RunLock, _: &RunRequest, _: &RunPaths, _: &Policy, mut setup: AgentSetup, _: Arc<Live>| {
+            let answer =
+                setup.model.next(&[Message::user("Say hello.")], &[], 16).map(|r| r.text).map_err(|e| format!("{e:?}"));
+            *keep.lock().unwrap() = Some(AgentSaw {
+                model: setup.model.id().into(),
+                cap: setup.cap,
+                max_steps: setup.max_steps,
+                secrets: setup.secrets.clone(),
+                answer,
+            });
+            Ok(empty_report())
+        });
+    (agent, saw)
+}
+
+/// A stand-in Nebius on this computer: it answers one chat with "Hello from the stand-in." and keeps the request it
+/// was sent, head and body, as text. No real call leaves this computer.
+fn stand_in_nebius() -> (String, Arc<Mutex<Option<String>>>) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://127.0.0.1:{}/v1/", listener.local_addr().unwrap().port());
+    let got: Arc<Mutex<Option<String>>> = Arc::default();
+    let keep = got.clone();
+    std::thread::spawn(move || {
+        let Ok((stream, _)) = listener.accept() else { return };
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let (mut request, mut length) = (String::new(), 0);
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line).unwrap() == 0 {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                length = value.trim().parse().unwrap();
+            }
+            request.push_str(&line);
+            if line == "\r\n" {
+                break;
+            }
+        }
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body).unwrap();
+        request.push_str(&String::from_utf8(body).unwrap());
+        *keep.lock().unwrap() = Some(request);
+        let answer = json!({
+            "id": "chatcmpl-1",
+            "model": SUPER,
+            "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Hello from the stand-in." },
+                          "finish_reason": "stop" }],
+            "usage": { "prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17 }
+        })
+        .to_string();
+        let mut out = stream;
+        let _ = write!(out, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}", answer.len());
+    });
+    (base, got)
+}
+
+/// The value of the request's header `name`, as the stand-in Nebius saw it.
+fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
+    let head = request.split("\r\n\r\n").next().unwrap_or_default();
+    head.lines()
+        .skip(1)
+        .find_map(|l| l.split_once(':').filter(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim()))
+}
+
+/// The Nebius plan, Task 8: the runner chosen on the chooser is the one that runs. Steplet's agent gets the model
+/// chosen, its spending cap and step limit, and the Nebius key the owner saved in Setup, read from Windows'
+/// Credential Manager. The key goes only to Nebius (here a stand-in on this computer, so no real call) and into the
+/// secrets the agent keeps out of the report and logs. Nothing else needs changing once the key is saved.
+#[test]
+fn start_run_passes_the_runner_and_model() {
+    let _one = alone();
+    let dir = scratch("own-runner");
+    const ENTRY: &str = "Steplet-test/session-nebius-key";
+    let entries = Entries { nebius: ENTRY, anthropic: "Steplet-test/session-no-anthropic-key" };
+    let _forget = Forget(ENTRY);
+    key::save(ENTRY, MADE_UP_NEBIUS_KEY).unwrap();
+    let saved = setup::ready_for(&set_up(), &own(), entries).unwrap();
+    assert_eq!(saved.distro_id, DISTRO);
+    assert!(saved.nebius_key.as_ref().is_some_and(|k| k.is(MADE_UP_NEBIUS_KEY)));
+    // Steplet's agent needs neither the gate program nor an Anthropic key.
+    assert_eq!(saved.gate_exe, None);
+    assert!(saved.key.is_none());
+
+    let (base, request) = stand_in_nebius();
+    let (agent, saw) = asking_agent();
+    let claude_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let s = session(noting_run(claude_ran.clone()), NOW, &dir).with_agent(agent).with_nebius_at(&base);
+    let raw = read("examples/run-tests.steplet");
+    let screen = Arc::new(Seen::default());
+    assert_eq!(s.start(&raw, &sha(&raw), None, false, own(), Ok(saved), screen.clone()), Ok(()));
+    wait_until("the run's end", || screen.ended() && !s.running());
+
+    let saw = saw.lock().unwrap().take().expect("Steplet's agent did not run");
+    assert_eq!(saw.model, SUPER);
+    assert_eq!(saw.cap, AGENT_CAP);
+    assert_eq!(AGENT_CAP, Nanodollars::from_cents(25));
+    assert_eq!(saw.max_steps, MAX_TURNS);
+    assert_eq!(MAX_TURNS, 40);
+    assert_eq!(saw.secrets, [MADE_UP_NEBIUS_KEY]);
+    assert_eq!(saw.answer, Ok(Some("Hello from the stand-in.".to_string())));
+    assert!(!claude_ran.load(std::sync::atomic::Ordering::SeqCst), "Claude Code ran instead");
+    let request = request.lock().unwrap().clone().expect("nothing reached the stand-in Nebius");
+    assert!(request.starts_with("POST /v1/chat/completions "), "{request}");
+    assert_eq!(header(&request, "authorization"), Some(format!("Bearer {MADE_UP_NEBIUS_KEY}").as_str()));
+    let body: serde_json::Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    assert_eq!(body["model"], SUPER);
+
+    // Only the models on the list; Ultra has a price but is not offered yet.
+    for model in ["gpt-4o", "nvidia/Nemotron-3-Ultra-550b-a55b"] {
+        let other = Runner::Own { model: model.into() };
+        assert_eq!(
+            s.start(&raw, &sha(&raw), None, false, other, ready(), Arc::new(Seen::default())),
+            Err("Steplet's agent does not offer this model. Choose one from the list.".to_string()),
+            "{model}"
+        );
+    }
+    let no_key = Ready { nebius_key: None, ..ready().unwrap() };
+    assert_eq!(
+        s.start(&raw, &sha(&raw), None, false, own(), Ok(no_key), Arc::new(Seen::default())),
+        Err(NEEDS_NEBIUS.into())
+    );
+    key::forget(ENTRY).unwrap();
+    assert_eq!(setup::ready_for(&set_up(), &own(), entries).map(|_| ()), Err(NEEDS_NEBIUS.into()));
+}
+
+/// The Nebius plan, Task 8: Claude Code still runs as before, with the gate program and the Anthropic key, and
+/// Steplet's agent does not run in its place.
+#[test]
+fn the_claude_code_runner_still_starts() {
+    let _one = alone();
+    let dir = scratch("claude-runner");
+    let seen: Arc<Mutex<Option<(String, bool, u32)>>> = Arc::default();
+    let keep = seen.clone();
+    let run: RunFn =
+        Arc::new(move |_: &RunLock, req: &RunRequest, _: &RunPaths, _: &Policy, setup: &RunSetup, _: Arc<Live>| {
+            let key = setup.key.as_ref().is_some_and(|k| k.is(MADE_UP_KEY));
+            *keep.lock().unwrap() = Some((setup.gate_exe.clone(), key, req.max_turns));
+            Ok(empty_report())
+        });
+    let agent_ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let s = session(run, NOW, &dir).with_agent(noting_agent(agent_ran.clone()));
+    let raw = read("examples/run-tests.steplet");
+    let screen = Arc::new(Seen::default());
+    assert_eq!(s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, ready(), screen.clone()), Ok(()));
+    wait_until("the run's end", || screen.ended() && !s.running());
+    assert_eq!(*seen.lock().unwrap(), Some((GATE_EXE.to_string(), true, MAX_TURNS)));
+    assert!(!agent_ran.load(std::sync::atomic::Ordering::SeqCst), "Steplet's agent ran instead");
+
+    let no_key = Ready { key: None, ..ready().unwrap() };
+    let refused = s.start(&raw, &sha(&raw), None, false, Runner::ClaudeCode, Ok(no_key), Arc::new(Seen::default()));
+    assert_eq!(refused, Err(NEEDS_ANTHROPIC.into()));
+    let entries =
+        Entries { nebius: "Steplet-test/session-no-nebius-key", anthropic: "Steplet-test/session-no-anthropic-key" };
+    assert_eq!(setup::ready_for(&set_up(), &Runner::ClaudeCode, entries).map(|_| ()), Err(NEEDS_ANTHROPIC.into()));
 }

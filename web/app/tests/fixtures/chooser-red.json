@@ -1,0 +1,363 @@
+{
+  "screen": "chooser",
+  "preview": {
+    "sha256": "7164c98f24574799297c432fac4ce07da47d5badea630e8821c0330c6b0d2bf2",
+    "outcome": "red",
+    "colour": "red",
+    "run_status": {
+      "kind": "red"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "key_changed": false,
+    "red_sentence": "I understand the risks and want to run this file",
+    "findings": [
+      {
+        "rule": "hide.link-mismatch",
+        "severity": "red",
+        "line": 22,
+        "title": "A link shows one address but opens another",
+        "detail": null,
+        "advice": "The text of the link names a different site from the one it opens. Steplet shows the real address.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "See "
+          },
+          {
+            "kind": "link",
+            "shown": [
+              {
+                "kind": "text",
+                "text": "https://github.com/octocat/Hello-World"
+              }
+            ],
+            "real": [
+              {
+                "kind": "text",
+                "text": "https://example.invalid/hello"
+              }
+            ]
+          },
+          {
+            "kind": "text",
+            "text": "."
+          }
+        ]
+      }
+    ],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Count the README lines"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Steplet corpus"
+          }
+        ]
+      },
+      "expires": "2026-12-31",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/octocat/Hello-World.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Count the lines in the README file."
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Report the count."
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 14,
+          "text": [
+            {
+              "kind": "text",
+              "text": "wc -l README"
+            }
+          ]
+        }
+      ],
+      "domains": [],
+      "read": [],
+      "write": [],
+      "never": [
+        {
+          "line": 16,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change any file."
+            }
+          ]
+        }
+      ],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# Count the README lines\n\nRun `wc -l README` and report the number.\n\nSee "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "https://github.com/octocat/Hello-World"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://example.invalid/hello"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": ".\n"
+        }
+      ],
+      "body_line": 18
+    },
+    "counts": {
+      "steps": 2,
+      "commands": 1,
+      "domains": 0,
+      "read": 0,
+      "write": 0,
+      "never": 1
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": {
+    "runners": [
+      {
+        "kind": "own",
+        "name": "Steplet's agent",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "models": [
+          {
+            "id": "nvidia/nemotron-3-super-120b-a12b",
+            "name": "Nemotron 3 Super",
+            "price": "$0.30 per million tokens read, $0.90 per million written"
+          }
+        ],
+        "limits": {
+          "text": "Stops at $0.25 or 40 steps.",
+          "items": [],
+          "tests": [
+            "the_spending_cap_ends_the_run_before_the_call_that_could_pass_it",
+            "the_step_limit_ends_the_run"
+          ]
+        },
+        "promises": [
+          {
+            "text": "Steplet's checker decides every move the agent asks for before it happens, and what runs is exactly what it checked. A move it refuses does not run.",
+            "items": [],
+            "tests": [
+              "every_call_goes_through_the_checker",
+              "what_runs_is_what_was_checked",
+              "a_refusal_goes_back_to_the_model",
+              "a_malformed_tool_call_is_answered_not_run"
+            ]
+          },
+          {
+            "text": "Even a move the checker allows can change files only inside the working copy.",
+            "items": [],
+            "tests": [
+              "the_fence_holds_without_the_checker",
+              "each_file_tool_works_inside_the_copy"
+            ]
+          },
+          {
+            "text": "The agent's moves cannot read the folder where Linux would show your Windows drives.",
+            "items": [],
+            "tests": [
+              "the_fence_holds_without_the_checker"
+            ]
+          },
+          {
+            "text": "Programs the agent runs can reach only the web sites this file declares, and it declares none.",
+            "items": [],
+            "tests": [
+              "a_command_reaches_only_declared_sites"
+            ]
+          },
+          {
+            "text": "Anything the agent leaves running is ended before its next move.",
+            "items": [],
+            "tests": [
+              "a_program_left_running_is_ended_before_the_next_move"
+            ]
+          },
+          {
+            "text": "The report shows whether each command worked as Steplet saw it, not as the agent claims.",
+            "items": [],
+            "tests": [
+              "a_command_cannot_forge_its_exit_code",
+              "the_report_shows_steplets_exit_code_not_the_models_claim"
+            ]
+          }
+        ],
+        "needs": null,
+        "data_leaves": "Steplet's agent sends what it reads, the commands' output and this task to Nebius, using your Nebius key."
+      },
+      {
+        "kind": "claude_code",
+        "name": "Claude Code, in Steplet's own Linux",
+        "model": null,
+        "models": [],
+        "limits": null,
+        "promises": [
+          {
+            "text": "Steplet checks the agent's commands that change something, its file writes and its web fetches before they happen. If Steplet's checker does not decide in time, or its gate stops working, the action is refused.",
+            "items": [],
+            "tests": [
+              "a_declared_command_runs_and_what_the_file_did_not_ask_for_does_not",
+              "a_gate_that_dies_mid_request_refuses_it_and_the_restarted_gate_answers_the_next",
+              "a_decision_that_never_comes_is_refused_at_the_deadline_in_a_real_run",
+              "a_writing_command_made_to_skip_the_gate_stops_the_run",
+              "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+              "a_web_fetch_is_allowed_only_to_a_site_the_file_declares"
+            ]
+          },
+          {
+            "text": "The agent cannot fetch any web address, unless you say yes to that exact address.",
+            "items": [],
+            "tests": [
+              "a_web_fetch_is_allowed_only_to_a_site_the_file_declares",
+              "a_yes_allows_exactly_the_request_shown"
+            ]
+          },
+          {
+            "text": "The agent and the programs this task runs can change files only inside the working copy (the programs also in the run's own temporary folder, which Steplet deletes after the run).",
+            "items": [],
+            "tests": [
+              "every_try_of_the_hostile_fixture_is_contained",
+              "a_write_into_steplets_own_folder_is_refused_before_the_gate",
+              "the_run_s_temporary_folder_holds_no_key_or_token_and_is_gone_after"
+            ]
+          },
+          {
+            "text": "Your own files are not inside Steplet's Linux, where this task runs.",
+            "items": [],
+            "tests": [
+              "use_case_1_runs_with_none_of_the_receiver_s_files_present"
+            ]
+          },
+          {
+            "text": "Programs this task runs cannot connect to the internet, or to other programs on this computer.",
+            "items": [],
+            "tests": [
+              "every_try_of_the_hostile_fixture_is_contained",
+              "a_run_that_lists_a_site_leading_to_this_computer_is_refused",
+              "a_program_listening_on_windows_cannot_be_reached"
+            ]
+          },
+          {
+            "text": "Programs this task runs cannot start Windows programs.",
+            "items": [],
+            "tests": [
+              "every_try_of_the_hostile_fixture_is_contained"
+            ]
+          }
+        ],
+        "needs": null,
+        "data_leaves": "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
+      }
+    ],
+    "codex_reason": "Not available for files that run code on this computer: Steplet has not shown that Codex keeps a task's programs away from the other programs on this computer."
+  },
+  "setup": {
+    "wsl": {
+      "status": "ready",
+      "text": "Windows' Linux feature (WSL 2.6.3.0).",
+      "detail": null
+    },
+    "linux": {
+      "status": "ready",
+      "text": "Steplet's own Linux is installed.",
+      "detail": null
+    },
+    "tools": {
+      "status": "ready",
+      "text": "Its tools are there: git, Python, Claude Code and the rest.",
+      "detail": null
+    },
+    "gate": {
+      "status": "ready",
+      "text": "The gate program for this Steplet is in its Linux.",
+      "detail": null
+    },
+    "keys": {
+      "nebius": true,
+      "anthropic": true
+    },
+    "opens_steplet_files": "off",
+    "ready": true,
+    "wsl_fix": null,
+    "install": "none"
+  },
+  "setup_lines": [],
+  "setup_error": null,
+  "setup_changes": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null,
+  "switch_error": null,
+  "key_error": null,
+  "allowed_switch": []
+}

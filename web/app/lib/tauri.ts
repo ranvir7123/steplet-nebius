@@ -18,7 +18,8 @@ export const backend: Backend = {
   saveKey: (which, key) => invoke<SetupView>("save_key", { which, key }),
   forgetKey: (which) => invoke<SetupView>("forget_key", { which }),
   setOpensStepletFiles: (on) => invoke<SetupView>("set_opens_steplet_files", { on }),
-  startRun: (sha256, typed, allowModelSwitch) => invoke<void>("start_run", { sha256, typed, allowModelSwitch }),
+  startRun: (sha256, typed, allowModelSwitch, runner) =>
+    invoke<void>("start_run", { sha256, typed, allowModelSwitch, runner }),
   answer: (question, yes, fingerprint) => invoke<boolean>("answer", { question, yes, fingerprint }),
   stopRun: () => invoke<void>("stop_run"),
   stopAndClose: () => invoke<void>("stop_and_close"),

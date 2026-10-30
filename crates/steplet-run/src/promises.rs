@@ -177,3 +177,82 @@ pub fn promises(s: &Steplet, network: NetworkMode) -> Vec<Promise> {
     };
     vec![CHECKS, fetch, WRITES, YOUR_FILES, network, WINDOWS_PROGRAMS]
 }
+
+/// Who runs the file: Steplet's own agent (Nemotron on Nebius Token Factory, the Nebius plan) or Claude Code. Each has
+/// lines of its own, because different parts of Steplet hold each, and different tests show it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunnerKind {
+    Own,
+    ClaudeCode,
+}
+
+/// The tests behind Steplet's agent's limits line ("Stops at $0.25 or 40 steps."), which the app writes from its own
+/// numbers.
+pub const LIMIT_TESTS: &[&str] =
+    &["the_spending_cap_ends_the_run_before_the_call_that_could_pass_it", "the_step_limit_ends_the_run"];
+
+const AGENT_CHECKS: Promise = Promise {
+    text: "Steplet's checker decides every move the agent asks for before it happens, and what runs is exactly what it \
+           checked. A move it refuses does not run.",
+    items: Vec::new(),
+    tests: &[
+        "every_call_goes_through_the_checker",
+        "what_runs_is_what_was_checked",
+        "a_refusal_goes_back_to_the_model",
+        "a_malformed_tool_call_is_answered_not_run",
+    ],
+};
+
+const AGENT_WRITES: Promise = Promise {
+    text: "Even a move the checker allows can change files only inside the working copy.",
+    items: Vec::new(),
+    tests: &["the_fence_holds_without_the_checker", "each_file_tool_works_inside_the_copy"],
+};
+
+const AGENT_DRIVES: Promise = Promise {
+    text: "The agent's moves cannot read the folder where Linux would show your Windows drives.",
+    items: Vec::new(),
+    tests: &["the_fence_holds_without_the_checker"],
+};
+
+// Not shown yet: "Your Nebius key stays on Windows: it is sent only to Nebius, never into Steplet's Linux." It goes
+// after the drives line once its tests pass: the_nebius_key_never_reaches_linux (the Nebius plan, Task 9) and
+// the_nebius_key_never_appears_in_the_report_or_logs. A line with no passing test is not shown (R20).
+
+const AGENT_SITES_TESTS: &[&str] = &["a_command_reaches_only_declared_sites"];
+
+const LEFT_RUNNING: Promise = Promise {
+    text: "Anything the agent leaves running is ended before its next move.",
+    items: Vec::new(),
+    tests: &["a_program_left_running_is_ended_before_the_next_move"],
+};
+
+const EXIT_CODES: Promise = Promise {
+    text: "The report shows whether each command worked as Steplet saw it, not as the agent claims.",
+    items: Vec::new(),
+    tests: &["a_command_cannot_forge_its_exit_code", "the_report_shows_steplets_exit_code_not_the_models_claim"],
+};
+
+/// The lines Steplet may show for a run of `s` by `runner`, in order. Claude Code's are `promises`. Steplet's agent's
+/// do not depend on WSL's network mode: its network line is shown only as wide as its test, the sites the file
+/// declares.
+pub fn promises_for(runner: RunnerKind, s: &Steplet, network: NetworkMode) -> Vec<Promise> {
+    if runner == RunnerKind::ClaudeCode {
+        return promises(s, network);
+    }
+    let sites: Vec<String> = s.allow.domains.iter().map(|d| d.text.clone()).collect();
+    let sites = if sites.is_empty() {
+        Promise {
+            text: "Programs the agent runs can reach only the web sites this file declares, and it declares none.",
+            items: Vec::new(),
+            tests: AGENT_SITES_TESTS,
+        }
+    } else {
+        Promise {
+            text: "Programs the agent runs can reach only the web sites this file declares:",
+            items: sites,
+            tests: AGENT_SITES_TESTS,
+        }
+    };
+    vec![AGENT_CHECKS, AGENT_WRITES, AGENT_DRIVES, sites, LEFT_RUNNING, EXIT_CODES]
+}

@@ -10,6 +10,11 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+/// The models Steplet's agent offers, the default first: only Nemotron 3 Super for now. Task 4's real check against
+/// Nebius confirms this list or widens it. Each model here must have a price (`price::price`), or a run refuses it,
+/// and a name (`price::model_name`).
+pub const OFFERED: &[&str] = &["nvidia/nemotron-3-super-120b-a12b"];
+
 /// Who said a message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {

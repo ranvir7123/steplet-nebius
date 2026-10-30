@@ -418,8 +418,22 @@ fn with_preview(screen: &str, p: PreviewView) -> Fixture {
     Fixture { preview: Some(p), ..fixture(screen) }
 }
 
+/// The chooser for `raw`, with everything set up (`ready`) or Steplet's Linux not installed yet.
 fn chooser_for(raw: &[u8], ready: bool) -> ChooserView {
-    views::chooser(&promises(&steplet_of(raw), NetworkMode::Nat), ready)
+    let setup = if ready {
+        setup_all_ready(Switch::Off)
+    } else {
+        setup_view(&state(ready_wsl(), false, &[], false, None), Keys::NONE, Switch::Off)
+    };
+    chooser_offering(raw, steplet_run::OFFERED, &setup)
+}
+
+/// The chooser for `raw` with the models in `offered` and the computer as `setup` shows it: Steplet's agent's lines
+/// and Claude Code's (the Nebius plan, Task 8).
+fn chooser_offering(raw: &[u8], offered: &[&str], setup: &SetupView) -> ChooserView {
+    let file = steplet_of(raw);
+    let own = steplet_run::promises_for(steplet_run::RunnerKind::Own, &file, NetworkMode::Nat);
+    views::chooser(&own, &promises(&file, NetworkMode::Nat), offered, setup)
 }
 
 fn scenarios() -> BTreeMap<&'static str, Fixture> {
@@ -508,29 +522,44 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         with_preview("preview", preview_with(&no_repo, &[pin(&steplet_of(&no_repo).sender.text, OTHER_KEY, 1)])),
     );
 
-    // Run chooser
-    let chooser = |raw: &[u8], ready: bool, setup: Option<SetupView>| Fixture {
+    // Run chooser: each card says what it still needs from the setup the Setup screen shows.
+    let chooser_with = |raw: &[u8], offered: &[&str], setup: SetupView| Fixture {
         preview: Some(plain_preview(raw)),
-        chooser: Some(chooser_for(raw, ready)),
-        setup,
+        chooser: Some(chooser_offering(raw, offered, &setup)),
+        setup: Some(setup),
         ..fixture("chooser")
     };
-    s.insert("chooser-ready-no-sites", chooser(&example, true, Some(setup_all_ready(Switch::Off))));
-    s.insert("chooser-ready-15-sites", chooser(longest.as_bytes(), true, Some(setup_all_ready(Switch::Off))));
+    let chooser = |raw: &[u8], setup: SetupView| chooser_with(raw, steplet_run::OFFERED, setup);
+    s.insert("chooser-ready-no-sites", chooser(&example, setup_all_ready(Switch::Off)));
+    s.insert("chooser-ready-15-sites", chooser(longest.as_bytes(), setup_all_ready(Switch::Off)));
     s.insert(
         "chooser-needs-setup",
-        chooser(
-            &example,
-            false,
-            Some(setup_view(&state(ready_wsl(), false, &[], false, None), Keys::NONE, Switch::Off)),
-        ),
+        chooser(&example, setup_view(&state(ready_wsl(), false, &[], false, None), Keys::NONE, Switch::Off)),
     );
     s.insert(
         "chooser-wsl-missing",
-        chooser(
+        chooser(&example, setup_view(&state(Wsl::Missing, false, &[], false, None), Keys::NONE, Switch::Off)),
+    );
+    // The Nebius plan, Task 8: Steplet's Linux is ready but neither key is saved; a red file; and every model Steplet
+    // can price on offer, the longest name among them.
+    s.insert(
+        "chooser-no-keys",
+        chooser(&example, setup_view(&state(ready_wsl(), true, &[], true, None), Keys::NONE, Switch::Off)),
+    );
+    s.insert(
+        "chooser-red",
+        chooser(&read("corpus/hostile/hide.link-mismatch.hit.steplet"), setup_all_ready(Switch::Off)),
+    );
+    s.insert(
+        "chooser-longest-model",
+        chooser_with(
             &example,
-            false,
-            Some(setup_view(&state(Wsl::Missing, false, &[], false, None), Keys::NONE, Switch::Off)),
+            &[
+                "nvidia/nemotron-3-super-120b-a12b",
+                "nvidia/Nemotron-3-Ultra-550b-a55b",
+                "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+            ],
+            setup_all_ready(Switch::Off),
         ),
     );
 
@@ -959,8 +988,9 @@ fn the_screen_types_are_current() {
     let _ = std::fs::remove_dir_all(&out);
     let cfg = Config::new().with_out_dir(&out).with_large_int("number");
     Fixture::export_all(&cfg).unwrap();
-    // The screens send this one to Rust, so no fixture holds it.
+    // The screens send these to Rust, so no fixture holds them.
     KeyFor::export_all(&cfg).unwrap();
+    steplet_app::session::Runner::export_all(&cfg).unwrap();
     let wanted: BTreeMap<String, String> = std::fs::read_dir(&out)
         .unwrap()
         .map(|e| {

@@ -11,6 +11,7 @@
   import Setup from "./screens/Setup.svelte";
   import type { PreviewView } from "../shared/types/PreviewView";
   import type { ReportView } from "../shared/types/ReportView";
+  import type { Runner } from "../shared/types/Runner";
 
   const backend = getContext<Backend>("backend");
 
@@ -19,8 +20,9 @@
     | { kind: "preview"; view: PreviewView }
     // `typed`: the red file's sentence, for Rust to check again when the run starts.
     | { kind: "chooser"; view: PreviewView; typed: string | null }
-    | { kind: "run"; view: PreviewView; typed: string | null; allowModelSwitch: boolean }
-    | { kind: "report"; view: PreviewView; typed: string | null; report: ReportView }
+    // `runner`: who runs the file, as chosen on the chooser; "Run again" keeps it.
+    | { kind: "run"; view: PreviewView; typed: string | null; runner: Runner; allowModelSwitch: boolean }
+    | { kind: "report"; view: PreviewView; typed: string | null; runner: Runner; report: ReportView }
     // `back`: the screen Setup was opened from.
     | { kind: "setup"; back: Screen };
   let screen = $state<Screen>({ kind: "open" });
@@ -114,28 +116,34 @@
     {:else if screen.kind === "chooser"}
       {@const view = screen.view}
       {@const typed = screen.typed}
-      <Chooser onback={() => back({ kind: "preview", view })} onsetup={setup} onrun={() => back({ kind: "run", view, typed, allowModelSwitch: false })}
+      <Chooser
+        onback={() => back({ kind: "preview", view })}
+        onsetup={setup}
+        onrun={(runner) => back({ kind: "run", view, typed, runner, allowModelSwitch: false })}
       />
     {:else if screen.kind === "run"}
       {@const view = screen.view}
       {@const typed = screen.typed}
+      {@const runner = screen.runner}
       {#key screen}
         <Run
           {view}
           {typed}
+          {runner}
           allowModelSwitch={screen.allowModelSwitch}
           onback={() => back({ kind: "preview", view })}
           onopen={() => back({ kind: "open" })}
-          onreport={(report) => back({ kind: "report", view, typed, report })}
+          onreport={(report) => back({ kind: "report", view, typed, runner, report })}
           onbusy={(b) => (busy = b)}
         />
       {/key}
     {:else if screen.kind === "report"}
       {@const view = screen.view}
       {@const typed = screen.typed}
+      {@const runner = screen.runner}
       <Report
         report={screen.report}
-        onrun={(allowModelSwitch) => back({ kind: "run", view, typed, allowModelSwitch })}
+        onrun={(allowModelSwitch) => back({ kind: "run", view, typed, runner, allowModelSwitch })}
         onopen={() => back({ kind: "open" })}
       />
     {:else}

@@ -5,13 +5,17 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use steplet_app::views::{
-    Here, Keys, LineStatus, ProgressView, Seg, Switch, event_view, failure, line, preview, question_view, report_view,
-    run_failure, setup_failure, setup_line, setup_view,
+    Here, KeyFor, Keys, LineStatus, ModelView, ProgressView, PromiseView, RunnerKind, Seg, Switch, chooser, event_view,
+    failure, line, preview, question_view, report_view, run_failure, setup_failure, setup_line, setup_view,
 };
+use steplet_core::header::Steplet;
 use steplet_core::report::check;
 use steplet_run::setup::SetupError;
 use steplet_run::setup::{State, Wsl};
-use steplet_run::{Answer, Event, GateError, Question, Reply, RunError, RunOutcome, Trust, build_report};
+use steplet_run::{
+    Answer, Event, GateError, LIMIT_TESTS, NetworkMode, OFFERED, Promise, Question, Reply, RunError, RunOutcome, Trust,
+    build_report, promises_for,
+};
 
 /// The corpus's own time of viewing (crates/steplet-core/tests/corpus.rs), so expiry findings are the expected ones.
 const NOW: i64 = 1_791_720_000;
@@ -383,6 +387,116 @@ fn setup_says_what_went_wrong_once() {
     assert_eq!(view.gate.text, "Steplet could not look at its gate program either.");
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// The run chooser (the Nebius plan, Task 8)
+
+const SUPER: &str = "nvidia/nemotron-3-super-120b-a12b";
+const NEEDS_NEBIUS: &str = "Needs a Nebius key. Add it in Setup.";
+const NEEDS_ANTHROPIC: &str = "Needs an Anthropic key. Add it in Setup.";
+const NOT_SET_UP: &str = "Steplet's own Linux is not ready yet. Setup shows what is missing.";
+
+fn all_ready() -> State {
+    State {
+        wsl: ready(),
+        linux: Some("{44f36236-99b1-42c0-84bd-7ff8392d51ba}".into()),
+        missing: Vec::new(),
+        gate: true,
+        trouble: None,
+    }
+}
+
+/// Steplet's agent's lines and Claude Code's, for the file `s`.
+fn lines_for(s: &Steplet) -> (Vec<Promise>, Vec<Promise>) {
+    (
+        promises_for(steplet_run::RunnerKind::Own, s, NetworkMode::Nat),
+        promises_for(steplet_run::RunnerKind::ClaudeCode, s, NetworkMode::Nat),
+    )
+}
+
+fn texts(ps: &[PromiseView]) -> Vec<&str> {
+    ps.iter().map(|p| p.text.as_str()).collect()
+}
+
+/// Steplet's own agent comes first, on Nemotron 3 Super with its price, the limits it stops at and the lines tested
+/// for it; Claude Code comes second, as before. Only the models Steplet offers, each priced and named, are listed.
+#[test]
+fn chooser_offers_steplets_agent_first() {
+    let example = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/run-tests.steplet")).unwrap();
+    let file = check(&example, NOW).steplet.unwrap();
+    let (own, claude) = lines_for(&file);
+    let view = chooser(&own, &claude, OFFERED, &setup_view(&all_ready(), Keys::BOTH, Switch::Off));
+    let [agent, code] = &view.runners[..] else { panic!("two runners: {:?}", view.runners) };
+
+    assert_eq!((agent.kind, agent.name.as_str()), (RunnerKind::Own, "Steplet's agent"));
+    assert_eq!(agent.model.as_deref(), Some(SUPER), "Nemotron 3 Super, chosen at first");
+    assert_eq!(
+        agent.models,
+        [ModelView {
+            id: SUPER.into(),
+            name: "Nemotron 3 Super".into(),
+            price: "$0.30 per million tokens read, $0.90 per million written".into(),
+        }]
+    );
+    let limits = agent.limits.as_ref().expect("the agent's limits");
+    assert_eq!(limits.text, "Stops at $0.25 or 40 steps.");
+    assert_eq!(limits.tests, LIMIT_TESTS);
+    assert_eq!(texts(&agent.promises), own.iter().map(|p| p.text).collect::<Vec<_>>());
+    assert!(agent.promises.iter().all(|p| !p.tests.is_empty()), "every line names its tests");
+    assert_eq!(agent.needs, None);
+    assert_eq!(
+        agent.data_leaves,
+        "Steplet's agent sends what it reads, the commands' output and this task to Nebius, using your Nebius key."
+    );
+
+    assert_eq!((code.kind, code.name.as_str()), (RunnerKind::ClaudeCode, "Claude Code, in Steplet's own Linux"));
+    assert_eq!((code.model.as_deref(), code.models.len(), code.limits.as_ref()), (None, 0, None));
+    assert_eq!(texts(&code.promises), claude.iter().map(|p| p.text).collect::<Vec<_>>());
+    assert_eq!(code.needs, None);
+    assert_eq!(
+        code.data_leaves,
+        "Claude Code sends what the agent reads, the commands' output and this task to Anthropic, using your API key."
+    );
+
+    // A model Steplet cannot price or name is never listed; the others keep their order.
+    let nano = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
+    let more = chooser(&own, &claude, &[SUPER, "gpt-4o", nano], &setup_view(&all_ready(), Keys::BOTH, Switch::Off));
+    let listed: Vec<(&str, &str, &str)> =
+        more.runners[0].models.iter().map(|m| (m.id.as_str(), m.name.as_str(), m.price.as_str())).collect();
+    assert_eq!(
+        listed,
+        [
+            (SUPER, "Nemotron 3 Super", "$0.30 per million tokens read, $0.90 per million written"),
+            (nano, "Nemotron 3 Nano", "$0.06 per million tokens read, $0.24 per million written"),
+        ]
+    );
+}
+
+/// Each card says what it still needs before it can run, in Steplet's words, and the screen sends the receiver to
+/// Setup for it: the agent needs Steplet's Linux and the Nebius key; Claude Code also needs the gate and the Anthropic
+/// key.
+#[test]
+fn the_agent_card_says_what_it_needs_without_a_key() {
+    let needs = |state: State, keys: Keys| {
+        let view = chooser(&[], &[], OFFERED, &setup_view(&state, keys, Switch::Off));
+        (view.runners[0].needs.clone(), view.runners[1].needs.clone())
+    };
+    let some = |s: &str| Some(s.to_string());
+    assert_eq!(needs(all_ready(), Keys::BOTH.with(KeyFor::Nebius, false)), (some(NEEDS_NEBIUS), None));
+    assert_eq!(needs(all_ready(), Keys::NONE), (some(NEEDS_NEBIUS), some(NEEDS_ANTHROPIC)));
+    assert_eq!(needs(all_ready(), Keys::BOTH.with(KeyFor::Anthropic, false)), (None, some(NEEDS_ANTHROPIC)));
+    // Steplet's Linux comes first: a key is no use without it.
+    for state in [
+        State { linux: None, ..all_ready() },
+        State { wsl: Wsl::Missing, linux: None, gate: false, ..all_ready() },
+        State { missing: vec!["git".into()], ..all_ready() },
+        State { trouble: Some("WSL did not answer".into()), ..all_ready() },
+    ] {
+        assert_eq!(needs(state, Keys::NONE), (some(NOT_SET_UP), some(NOT_SET_UP)));
+    }
+    // The gate is Claude Code's alone: Steplet's agent decides every move inside Steplet.
+    assert_eq!(needs(State { gate: false, ..all_ready() }, Keys::BOTH), (None, some(NOT_SET_UP)));
+}
+
 #[test]
 fn steplets_own_words_carry_no_decision_codes() {
     // "(D1)", "(R16)" and the like are the decision log's names, not words for a receiver.
@@ -402,11 +516,10 @@ fn steplets_own_words_carry_no_decision_codes() {
     };
     let example = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/run-tests.steplet")).unwrap();
     let file = check(&example, NOW).steplet.unwrap();
-    let chooser = serde_json::to_string(&steplet_app::views::chooser(
-        &steplet_run::promises(&file, steplet_run::NetworkMode::Nat),
-        true,
-    ))
-    .unwrap();
+    let (own, claude) = lines_for(&file);
+    let chooser =
+        serde_json::to_string(&chooser(&own, &claude, OFFERED, &setup_view(&all_ready(), Keys::NONE, Switch::Off)))
+            .unwrap();
     let mut setups = String::new();
     for (wsl, linux, trouble) in [
         (Wsl::Missing, false, None),

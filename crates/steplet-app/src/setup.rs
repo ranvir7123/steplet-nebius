@@ -79,29 +79,49 @@ pub fn install(line: &dyn Fn(Shown)) -> Result<(), FailureView> {
         .map_err(|e| views::setup_failure(&e))
 }
 
-/// What a run needs from setup, if everything is there: Steplet's Linux by its id, this build's gate program on its
-/// disk, and the receiver's key. Otherwise Steplet's sentence saying what to do.
-pub fn ready_for_run(state: &State) -> Result<crate::session::Ready, String> {
-    if !view(state, key::ENTRIES, Switch::Off).ready {
-        return Err("Set up Steplet first: Setup shows what is missing.".into());
-    }
-    let distro_id = state.linux.clone().ok_or("Set up Steplet first: its own Linux is not installed.")?;
-    let gate = gate_program()?;
-    let key = match key::load(key::ANTHROPIC_TARGET) {
-        Ok(Some(key)) => key,
-        Ok(None) => return Err("Steplet needs your Anthropic key. Add it in Setup.".into()),
-        Err(e) => {
-            return Err(format!(
-                "Steplet could not read your key from Windows' Credential Manager. {}",
-                crate::views::windows_says(e)
-            ));
-        }
+/// What a run by `runner` needs from setup, if everything is there: Steplet's Linux by its id, and the runner's own
+/// part, read now: for Claude Code this build's gate program on its disk and the Anthropic key, for Steplet's agent
+/// the Nebius key (the key saved in Setup is all it needs). The keys are read from `entries` in Windows' Credential
+/// Manager. Otherwise Steplet's sentence saying what to do, the same the chooser shows (`views::needs`).
+pub fn ready_for(
+    state: &State,
+    runner: &crate::session::Runner,
+    entries: key::Entries,
+) -> Result<crate::session::Ready, String> {
+    use crate::session::Runner;
+    let kind = match runner {
+        Runner::Own { .. } => views::RunnerKind::Own,
+        Runner::ClaudeCode => views::RunnerKind::ClaudeCode,
     };
-    Ok(crate::session::Ready {
-        distro_id,
-        gate_exe: format!("/opt/steplet/gate/{}", steplet_run::gate_file_name(&gate)),
-        key,
-    })
+    if let Some(needs) = views::needs(&view(state, entries, Switch::Off), kind) {
+        return Err(needs);
+    }
+    let distro_id = state.linux.clone().ok_or(views::NOT_SET_UP)?;
+    let load = |target: &str, missing: &str| match key::load(target) {
+        Ok(Some(key)) => Ok(key),
+        Ok(None) => Err(missing.to_string()),
+        Err(e) => Err(format!(
+            "Steplet could not read your key from Windows' Credential Manager. {}",
+            crate::views::windows_says(e)
+        )),
+    };
+    match kind {
+        views::RunnerKind::Own => Ok(crate::session::Ready {
+            distro_id,
+            gate_exe: None,
+            key: None,
+            nebius_key: Some(load(entries.nebius, views::NEEDS_NEBIUS_KEY)?),
+        }),
+        views::RunnerKind::ClaudeCode => {
+            let gate = gate_program()?;
+            Ok(crate::session::Ready {
+                distro_id,
+                gate_exe: Some(format!("/opt/steplet/gate/{}", steplet_run::gate_file_name(&gate))),
+                key: Some(load(entries.anthropic, views::NEEDS_ANTHROPIC_KEY)?),
+                nebius_key: None,
+            })
+        }
+    }
 }
 
 /// One install or removal of Steplet's Linux at a time, and never while a file runs: each double-clicked file opens

@@ -14,6 +14,7 @@
   import type { PreviewView } from "../../shared/types/PreviewView";
   import type { ProgressView } from "../../shared/types/ProgressView";
   import type { QuestionView } from "../../shared/types/QuestionView";
+  import type { Runner } from "../../shared/types/Runner";
   import type { ReportView } from "../../shared/types/ReportView";
   import type { Backend, Shown, Unlisten } from "../lib/backend";
   import { outcomeIcon } from "../lib/end";
@@ -25,6 +26,7 @@
     view,
     typed,
     allowModelSwitch,
+    runner,
     onback,
     onopen,
     onreport,
@@ -35,6 +37,8 @@
     typed: string | null;
     /** "Run again, allowing another model" (E1): for this screen's first run only. */
     allowModelSwitch: boolean;
+    /** Who runs the file, as chosen on the chooser. */
+    runner: Runner;
     onback: () => void;
     onopen: () => void;
     onreport: (report: ReportView) => void;
@@ -199,7 +203,7 @@
     phase = "preparing";
     following = true;
     try {
-      await backend.startRun(view.sha256, typed, allow);
+      await backend.startRun(view.sha256, typed, allow, runner);
     } catch (e) {
       // Rust refused to start: its own sentence (the file changed, expired, another run goes on, …).
       take({
