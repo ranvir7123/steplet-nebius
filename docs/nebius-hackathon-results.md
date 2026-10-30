@@ -326,6 +326,33 @@ There is no Nebius key in Setup. Type it into Setup's Nebius box first.
 
 The normal build was then rebuilt for the owner, and its debugging port checked closed (`window running: True;
 debugging port open: False`).
+## Task 4, first part: the real Nebius server, with no key (30 Oct 2026, no spend)
+
+The rest of Task 4 waits for the Nebius key. This part needs none: Steplet's own client, at its built-in address
+(`https://api.tokenfactory.nebius.com/v1/`), asked the real server for its list of models without a key, then sent one
+chat request with a made-up key. Neither can cost anything. `nebius_check.rs` gained `--no-key` for this.
+
+```
+cargo run -p steplet-app --offline --example nebius_check -- --no-key
+```
+
+```
+Spending: none. No key is used.
+
+== 1. The list of models, without a key
+Refused, so the list needs the key: KeyRefused { status: 401, detail: "Couldn't authenticate. Reason: token is not present" }
+Steplet would say: Nebius did not accept the key. Change it in Setup.
+
+== 2. A made-up key
+KeyRefused { status: 401, detail: "Couldn't authenticate. Reason: Unable authenticate" }
+Steplet would say: Nebius did not accept the key. Change it in Setup.
+```
+
+What this shows: Steplet reaches the real Token Factory over HTTPS with Windows' own web library; the server's "wrong
+key" answer is read as a refused key, not as a network fault; and the owner is told, in plain words, to change it in
+Setup. What it does not show: anything about a real key, the models Nebius offers, tool calls, or prices. Those are the
+paid part of Task 4, once the key is in.
+
 ## Task 5: The agent's moves, inside the fence (29 Oct 2026)
 
 Each move Steplet's own agent asks for now runs in Steplet's Linux through `start-hands.sh`, one at a time: as the
