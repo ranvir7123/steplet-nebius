@@ -196,14 +196,23 @@ never ran the project's tests, so those cases show nothing either way.
 
 ## Install and run
 
-<!-- TODO after Task 12: the release's real file names and its SHA-256 sums. -->
+The release is [v0.2.0](https://github.com/ranvir7123/steplet-nebius/releases/tag/v0.2.0), built from commit
+`d994368` with `tools\release.ps1`:
 
-1. Download the installer from this repository's Releases page and run it. It installs for your Windows account
-   only.
+```
+2483f45940d29729e5bb602e2e1723fb29ee6de29ca67709e4cd1141de85bcb4  Steplet_0.2.0_x64-setup.exe
+f5bf573280d9db4a0c78dc8cfa2a8e1f0fccc5d020e17a4cabad297386967773  Steplet_0.2.0_x64.zip
+```
+
+The zip holds the same two programs and the licence, without an installer.
+
+1. Download `Steplet_0.2.0_x64-setup.exe` from the release and run it. It installs for your Windows account only,
+   into `%LOCALAPPDATA%\Steplet`, without admin rights.
 2. Windows will warn "Windows protected your PC" / unknown publisher, because the app is not signed with a paid
    certificate. Choose **More info**, then **Run anyway**.
 3. Open Steplet. The first time, Setup builds Steplet's own Linux and asks for your Nebius key.
-4. Double-click a `.steplet` file. To try one: [examples/sample-run.steplet](examples/sample-run.steplet).
+4. Choose **Open a file…** and pick a `.steplet` file. To try one: [examples/sample-run.steplet](examples/sample-run.steplet).
+   To open them with a double-click instead, turn on **Open .steplet files with Steplet** in Setup (it starts off).
 
 <!-- TODO after Task 12: steps 1 to 4 checked on this laptop from the installed app (use case 1). -->
 

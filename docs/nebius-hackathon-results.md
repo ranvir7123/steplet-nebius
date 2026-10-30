@@ -1325,3 +1325,37 @@ under exactly those names; every Nemotron model made the right tool call (`list_
 answered from its result; Super's thinking comes back separately from its answer, and its answer is empty on a tool
 call; Nano used 1,721 tokens of thinking for one short answer. Not checked: whether the dashboard's charge matches
 these counts (the dashboard was not read).
+
+## The release, and where the installs really went (30 Oct 2026, 19:05 IST)
+
+Correction to "the release build" above: the trial install there, and a second one at 18:58, ran from a shell started
+by the Claude desktop app. That app is a packaged Windows app, and Windows quietly redirects files its child programs
+write under `%LOCALAPPDATA%` into the app's own storage (`...\Packages\Claude_...\LocalCache\Local\Steplet`). So both
+installs landed there, not in the real `%LOCALAPPDATA%\Steplet`; a listing from the same shell could not tell the two
+apart. A listing made by Windows' process service (outside the packaged app) showed the real folder with Steplet's
+Linux disk, logs and senders list, but no `steplet.exe`, while the Start menu's Steplet shortcut was there.
+
+The installer was then run through the process service, outside the packaged app:
+
+```
+installer exit 0
+ Directory of C:\Users\RANVIR\AppData\Local\Steplet
+21-10-2026  18:17    <DIR>          logs
+21-10-2026  18:17               167 senders.json
+30-10-2026  18:09           398,848 steplet-gate.exe
+30-10-2026  18:53        11,213,312 steplet.exe
+30-10-2026  19:05            79,255 uninstall.exe
+13-10-2026  17:56    <DIR>          wsl
+```
+
+Steplet's own data kept its dates: the install wrote only its three files. The release build is from commit
+`d994368` (`tools\release.ps1`, exit 0), published as
+[v0.2.0](https://github.com/ranvir7123/steplet-nebius/releases/tag/v0.2.0) with sizes 2,580,096 (installer),
+3,656,117 (zip) and 184 (sums), the same as the files built here:
+
+```
+2483f45940d29729e5bb602e2e1723fb29ee6de29ca67709e4cd1141de85bcb4  Steplet_0.2.0_x64-setup.exe
+f5bf573280d9db4a0c78dc8cfa2a8e1f0fccc5d020e17a4cabad297386967773  Steplet_0.2.0_x64.zip
+```
+
+Not tried: an uninstall; the installed app clicked through by a person.

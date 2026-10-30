@@ -33,7 +33,7 @@ Windows Credential Manager, Playwright, NVIDIA Nemotron 3 Super, Nebius Token Fa
 ## Links
 
 - Code: https://github.com/ranvir7123/steplet-nebius
-- Test build (the installer): <!-- TODO after Task 12: the v0.2.0 release page -->
+- Test build (the installer): https://github.com/ranvir7123/steplet-nebius/releases/tag/v0.2.0
 - Video: <!-- TODO after the video is uploaded: the public YouTube link -->
 
 ---
