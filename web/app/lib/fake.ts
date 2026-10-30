@@ -151,6 +151,14 @@ export const backend: Backend = {
     return f.saved_to;
   },
   async openHelp() {},
+  async explainFile() {
+    const f = await fixture();
+    if (t.explain === null) return never();
+    await wait(t.explain);
+    if (f.advice_error) throw f.advice_error;
+    if (!f.advice) throw new Error(`${STAND_IN_MARK}: scenario ${name} has no advice`);
+    return f.advice;
+  },
   onRunProgress: (cb) => listenTo(progressListeners, cb),
   onSetupLine: (cb) => listenTo(lineListeners, cb),
   onCloseAsked(cb) {

@@ -15,6 +15,7 @@ pub const COMMANDS: &[&str] = &[
     "forget_key",
     "set_opens_steplet_files",
     "open_help",
+    "explain_file",
     "start_run",
     "answer",
     "stop_run",

@@ -2,6 +2,7 @@
 // (tauri.ts, the app's own commands and events) and a stand-in for screen tests (fake.ts, which replays data saved
 // from real Rust output). The screens import `backend` from "$backend"; the build picks the version (vite.config.ts),
 // so the app never holds the stand-in.
+import type { AdviceView } from "../../shared/types/AdviceView";
 import type { ChooserView } from "../../shared/types/ChooserView";
 import type { KeyFor } from "../../shared/types/KeyFor";
 import type { PreviewView } from "../../shared/types/PreviewView";
@@ -51,6 +52,9 @@ export interface Backend {
   saveReport(): Promise<string | null>;
   /** Opens one of Steplet's own help pages in the browser, from a fixed list (S11). */
   openHelp(topic: string): Promise<void>;
+  /** Asks Nemotron on Nebius what the file previewed with this SHA-256 will do: advice beside the rating, never part
+   * of it. A failure rejects with Steplet's sentence. */
+  explainFile(sha256: string): Promise<AdviceView>;
   onRunProgress(cb: (p: ProgressView) => void): Promise<Unlisten>;
   onSetupLine(cb: (line: Shown) => void): Promise<Unlisten>;
   /** Windows asked to close the window while a file runs: the page asks the receiver first. */

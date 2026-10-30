@@ -1,0 +1,3154 @@
+{
+  "screen": "preview",
+  "preview": {
+    "sha256": "72ac1c271d225f8b376993d55cc3bd393b542a94d2bd805005366dc0367d20bb",
+    "outcome": "red",
+    "colour": "red",
+    "run_status": {
+      "kind": "red"
+    },
+    "identity": {
+      "kind": "unsigned"
+    },
+    "key_changed": false,
+    "red_sentence": "I understand the risks and want to run this file",
+    "findings": [
+      {
+        "rule": "hide.invisible-in-text",
+        "severity": "red",
+        "line": 214,
+        "title": "Invisible characters in the text",
+        "detail": null,
+        "advice": "They can hide words from you that the agent still reads. Each one is shown as a badge; check them before running.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "A word with an invisible character inside: pay"
+          },
+          {
+            "kind": "invisible",
+            "codepoint": 8203
+          },
+          {
+            "kind": "text",
+            "text": "ments."
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 42,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_01 tests.test_part_01.Case01 tests.test_part_01.Case02 tests.test_part_01.Case03 tests.test_part_01.Case04 tests.test_part_01.Case05 tests.test_part_01.Case06 tests.test_part_01.Case07 tests.test_part_01.Case08 tests.test_part_01.Case09 tests.test_part_01.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 43,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_02 tests.test_part_02.Case01 tests.test_part_02.Case02 tests.test_part_02.Case03 tests.test_part_02.Case04 tests.test_part_02.Case05 tests.test_part_02.Case06 tests.test_part_02.Case07 tests.test_part_02.Case08 tests.test_part_02.Case09 tests.test_part_02.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 44,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_03 tests.test_part_03.Case01 tests.test_part_03.Case02 tests.test_part_03.Case03 tests.test_part_03.Case04 tests.test_part_03.Case05 tests.test_part_03.Case06 tests.test_part_03.Case07 tests.test_part_03.Case08 tests.test_part_03.Case09 tests.test_part_03.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 45,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_04 tests.test_part_04.Case01 tests.test_part_04.Case02 tests.test_part_04.Case03 tests.test_part_04.Case04 tests.test_part_04.Case05 tests.test_part_04.Case06 tests.test_part_04.Case07 tests.test_part_04.Case08 tests.test_part_04.Case09 tests.test_part_04.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 46,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_05 tests.test_part_05.Case01 tests.test_part_05.Case02 tests.test_part_05.Case03 tests.test_part_05.Case04 tests.test_part_05.Case05 tests.test_part_05.Case06 tests.test_part_05.Case07 tests.test_part_05.Case08 tests.test_part_05.Case09 tests.test_part_05.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 47,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_06 tests.test_part_06.Case01 tests.test_part_06.Case02 tests.test_part_06.Case03 tests.test_part_06.Case04 tests.test_part_06.Case05 tests.test_part_06.Case06 tests.test_part_06.Case07 tests.test_part_06.Case08 tests.test_part_06.Case09 tests.test_part_06.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 48,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_07 tests.test_part_07.Case01 tests.test_part_07.Case02 tests.test_part_07.Case03 tests.test_part_07.Case04 tests.test_part_07.Case05 tests.test_part_07.Case06 tests.test_part_07.Case07 tests.test_part_07.Case08 tests.test_part_07.Case09 tests.test_part_07.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 49,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_08 tests.test_part_08.Case01 tests.test_part_08.Case02 tests.test_part_08.Case03 tests.test_part_08.Case04 tests.test_part_08.Case05 tests.test_part_08.Case06 tests.test_part_08.Case07 tests.test_part_08.Case08 tests.test_part_08.Case09 tests.test_part_08.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 50,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_09 tests.test_part_09.Case01 tests.test_part_09.Case02 tests.test_part_09.Case03 tests.test_part_09.Case04 tests.test_part_09.Case05 tests.test_part_09.Case06 tests.test_part_09.Case07 tests.test_part_09.Case08 tests.test_part_09.Case09 tests.test_part_09.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 51,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_10 tests.test_part_10.Case01 tests.test_part_10.Case02 tests.test_part_10.Case03 tests.test_part_10.Case04 tests.test_part_10.Case05 tests.test_part_10.Case06 tests.test_part_10.Case07 tests.test_part_10.Case08 tests.test_part_10.Case09 tests.test_part_10.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 52,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_11 tests.test_part_11.Case01 tests.test_part_11.Case02 tests.test_part_11.Case03 tests.test_part_11.Case04 tests.test_part_11.Case05 tests.test_part_11.Case06 tests.test_part_11.Case07 tests.test_part_11.Case08 tests.test_part_11.Case09 tests.test_part_11.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 53,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_12 tests.test_part_12.Case01 tests.test_part_12.Case02 tests.test_part_12.Case03 tests.test_part_12.Case04 tests.test_part_12.Case05 tests.test_part_12.Case06 tests.test_part_12.Case07 tests.test_part_12.Case08 tests.test_part_12.Case09 tests.test_part_12.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 54,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_13 tests.test_part_13.Case01 tests.test_part_13.Case02 tests.test_part_13.Case03 tests.test_part_13.Case04 tests.test_part_13.Case05 tests.test_part_13.Case06 tests.test_part_13.Case07 tests.test_part_13.Case08 tests.test_part_13.Case09 tests.test_part_13.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 55,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_14 tests.test_part_14.Case01 tests.test_part_14.Case02 tests.test_part_14.Case03 tests.test_part_14.Case04 tests.test_part_14.Case05 tests.test_part_14.Case06 tests.test_part_14.Case07 tests.test_part_14.Case08 tests.test_part_14.Case09 tests.test_part_14.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 56,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_15 tests.test_part_15.Case01 tests.test_part_15.Case02 tests.test_part_15.Case03 tests.test_part_15.Case04 tests.test_part_15.Case05 tests.test_part_15.Case06 tests.test_part_15.Case07 tests.test_part_15.Case08 tests.test_part_15.Case09 tests.test_part_15.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 57,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_16 tests.test_part_16.Case01 tests.test_part_16.Case02 tests.test_part_16.Case03 tests.test_part_16.Case04 tests.test_part_16.Case05 tests.test_part_16.Case06 tests.test_part_16.Case07 tests.test_part_16.Case08 tests.test_part_16.Case09 tests.test_part_16.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 58,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_17 tests.test_part_17.Case01 tests.test_part_17.Case02 tests.test_part_17.Case03 tests.test_part_17.Case04 tests.test_part_17.Case05 tests.test_part_17.Case06 tests.test_part_17.Case07 tests.test_part_17.Case08 tests.test_part_17.Case09 tests.test_part_17.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 59,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_18 tests.test_part_18.Case01 tests.test_part_18.Case02 tests.test_part_18.Case03 tests.test_part_18.Case04 tests.test_part_18.Case05 tests.test_part_18.Case06 tests.test_part_18.Case07 tests.test_part_18.Case08 tests.test_part_18.Case09 tests.test_part_18.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 60,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_19 tests.test_part_19.Case01 tests.test_part_19.Case02 tests.test_part_19.Case03 tests.test_part_19.Case04 tests.test_part_19.Case05 tests.test_part_19.Case06 tests.test_part_19.Case07 tests.test_part_19.Case08 tests.test_part_19.Case09 tests.test_part_19.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 61,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_20 tests.test_part_20.Case01 tests.test_part_20.Case02 tests.test_part_20.Case03 tests.test_part_20.Case04 tests.test_part_20.Case05 tests.test_part_20.Case06 tests.test_part_20.Case07 tests.test_part_20.Case08 tests.test_part_20.Case09 tests.test_part_20.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 62,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_21 tests.test_part_21.Case01 tests.test_part_21.Case02 tests.test_part_21.Case03 tests.test_part_21.Case04 tests.test_part_21.Case05 tests.test_part_21.Case06 tests.test_part_21.Case07 tests.test_part_21.Case08 tests.test_part_21.Case09 tests.test_part_21.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 63,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_22 tests.test_part_22.Case01 tests.test_part_22.Case02 tests.test_part_22.Case03 tests.test_part_22.Case04 tests.test_part_22.Case05 tests.test_part_22.Case06 tests.test_part_22.Case07 tests.test_part_22.Case08 tests.test_part_22.Case09 tests.test_part_22.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 64,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_23 tests.test_part_23.Case01 tests.test_part_23.Case02 tests.test_part_23.Case03 tests.test_part_23.Case04 tests.test_part_23.Case05 tests.test_part_23.Case06 tests.test_part_23.Case07 tests.test_part_23.Case08 tests.test_part_23.Case09 tests.test_part_23.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 65,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_24 tests.test_part_24.Case01 tests.test_part_24.Case02 tests.test_part_24.Case03 tests.test_part_24.Case04 tests.test_part_24.Case05 tests.test_part_24.Case06 tests.test_part_24.Case07 tests.test_part_24.Case08 tests.test_part_24.Case09 tests.test_part_24.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "cap.runs-code",
+        "severity": "amber",
+        "line": 66,
+        "title": "A command runs the repository's own code",
+        "detail": null,
+        "advice": "Tests, builds and scripts run code from the repository. Steplet runs them only inside the fence.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "python3 -m unittest tests.test_part_25 tests.test_part_25.Case01 tests.test_part_25.Case02 tests.test_part_25.Case03 tests.test_part_25.Case04 tests.test_part_25.Case05 tests.test_part_25.Case06 tests.test_part_25.Case07 tests.test_part_25.Case08 tests.test_part_25.Case09 tests.test_part_25.Case10"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 68,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-01.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 69,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-02.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 70,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-03.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 71,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-04.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 72,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-05.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 73,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-06.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 74,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-07.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 75,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-08.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 76,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-09.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 77,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-10.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 78,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-11.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 79,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-12.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 80,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-13.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 81,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-14.example.org"
+          }
+        ]
+      },
+      {
+        "rule": "net.other-domain",
+        "severity": "amber",
+        "line": 82,
+        "title": "The file lets the agent and its programs reach a web site",
+        "detail": null,
+        "advice": "Data can be sent to every site on this list. Package registries Steplet knows are not shown here.",
+        "quote": [
+          {
+            "kind": "text",
+            "text": "docs-15.example.org"
+          }
+        ]
+      }
+    ],
+    "here": [],
+    "file": {
+      "title": {
+        "line": 3,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Run the whole test suite of the payments service at the pinned commit and report every failing test"
+          }
+        ]
+      },
+      "sender": {
+        "line": 4,
+        "text": [
+          {
+            "kind": "text",
+            "text": "Ana Lee, payments team, Example Company Limited (Lisbon office)"
+          }
+        ]
+      },
+      "expires": "2026-12-31",
+      "repository": {
+        "url": {
+          "line": 7,
+          "text": [
+            {
+              "kind": "link",
+              "shown": null,
+              "real": [
+                {
+                  "kind": "text",
+                  "text": "https://github.com/example/payments-service.git"
+                }
+              ]
+            }
+          ]
+        },
+        "commit": {
+          "line": 8,
+          "text": [
+            {
+              "kind": "text",
+              "text": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "line": 10,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 1, run the checks of part 1 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 2, run the checks of part 2 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 12,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 3, run the checks of part 3 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 13,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 4, run the checks of part 4 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 14,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 5, run the checks of part 5 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 15,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 6, run the checks of part 6 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 16,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 7, run the checks of part 7 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 17,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 8, run the checks of part 8 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 18,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 9, run the checks of part 9 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 19,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 10, run the checks of part 10 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 20,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 11, run the checks of part 11 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 21,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 12, run the checks of part 12 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 22,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 13, run the checks of part 13 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 23,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 14, run the checks of part 14 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 24,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 15, run the checks of part 15 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 25,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 16, run the checks of part 16 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 26,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 17, run the checks of part 17 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 27,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 18, run the checks of part 18 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 28,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 19, run the checks of part 19 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 29,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 20, run the checks of part 20 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 30,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 21, run the checks of part 21 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 31,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 22, run the checks of part 22 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 32,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 23, run the checks of part 23 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 33,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 24, run the checks of part 24 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 34,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 25, run the checks of part 25 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 35,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 26, run the checks of part 26 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 36,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 27, run the checks of part 27 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 37,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 28, run the checks of part 28 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 38,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 29, run the checks of part 29 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        },
+        {
+          "line": 39,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Step 30, run the checks of part 30 of the service, keep the output, and write down every test that fails with its name and the first line of its error message"
+            }
+          ]
+        }
+      ],
+      "commands": [
+        {
+          "line": 42,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_01 tests.test_part_01.Case01 tests.test_part_01.Case02 tests.test_part_01.Case03 tests.test_part_01.Case04 tests.test_part_01.Case05 tests.test_part_01.Case06 tests.test_part_01.Case07 tests.test_part_01.Case08 tests.test_part_01.Case09 tests.test_part_01.Case10"
+            }
+          ]
+        },
+        {
+          "line": 43,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_02 tests.test_part_02.Case01 tests.test_part_02.Case02 tests.test_part_02.Case03 tests.test_part_02.Case04 tests.test_part_02.Case05 tests.test_part_02.Case06 tests.test_part_02.Case07 tests.test_part_02.Case08 tests.test_part_02.Case09 tests.test_part_02.Case10"
+            }
+          ]
+        },
+        {
+          "line": 44,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_03 tests.test_part_03.Case01 tests.test_part_03.Case02 tests.test_part_03.Case03 tests.test_part_03.Case04 tests.test_part_03.Case05 tests.test_part_03.Case06 tests.test_part_03.Case07 tests.test_part_03.Case08 tests.test_part_03.Case09 tests.test_part_03.Case10"
+            }
+          ]
+        },
+        {
+          "line": 45,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_04 tests.test_part_04.Case01 tests.test_part_04.Case02 tests.test_part_04.Case03 tests.test_part_04.Case04 tests.test_part_04.Case05 tests.test_part_04.Case06 tests.test_part_04.Case07 tests.test_part_04.Case08 tests.test_part_04.Case09 tests.test_part_04.Case10"
+            }
+          ]
+        },
+        {
+          "line": 46,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_05 tests.test_part_05.Case01 tests.test_part_05.Case02 tests.test_part_05.Case03 tests.test_part_05.Case04 tests.test_part_05.Case05 tests.test_part_05.Case06 tests.test_part_05.Case07 tests.test_part_05.Case08 tests.test_part_05.Case09 tests.test_part_05.Case10"
+            }
+          ]
+        },
+        {
+          "line": 47,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_06 tests.test_part_06.Case01 tests.test_part_06.Case02 tests.test_part_06.Case03 tests.test_part_06.Case04 tests.test_part_06.Case05 tests.test_part_06.Case06 tests.test_part_06.Case07 tests.test_part_06.Case08 tests.test_part_06.Case09 tests.test_part_06.Case10"
+            }
+          ]
+        },
+        {
+          "line": 48,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_07 tests.test_part_07.Case01 tests.test_part_07.Case02 tests.test_part_07.Case03 tests.test_part_07.Case04 tests.test_part_07.Case05 tests.test_part_07.Case06 tests.test_part_07.Case07 tests.test_part_07.Case08 tests.test_part_07.Case09 tests.test_part_07.Case10"
+            }
+          ]
+        },
+        {
+          "line": 49,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_08 tests.test_part_08.Case01 tests.test_part_08.Case02 tests.test_part_08.Case03 tests.test_part_08.Case04 tests.test_part_08.Case05 tests.test_part_08.Case06 tests.test_part_08.Case07 tests.test_part_08.Case08 tests.test_part_08.Case09 tests.test_part_08.Case10"
+            }
+          ]
+        },
+        {
+          "line": 50,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_09 tests.test_part_09.Case01 tests.test_part_09.Case02 tests.test_part_09.Case03 tests.test_part_09.Case04 tests.test_part_09.Case05 tests.test_part_09.Case06 tests.test_part_09.Case07 tests.test_part_09.Case08 tests.test_part_09.Case09 tests.test_part_09.Case10"
+            }
+          ]
+        },
+        {
+          "line": 51,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_10 tests.test_part_10.Case01 tests.test_part_10.Case02 tests.test_part_10.Case03 tests.test_part_10.Case04 tests.test_part_10.Case05 tests.test_part_10.Case06 tests.test_part_10.Case07 tests.test_part_10.Case08 tests.test_part_10.Case09 tests.test_part_10.Case10"
+            }
+          ]
+        },
+        {
+          "line": 52,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_11 tests.test_part_11.Case01 tests.test_part_11.Case02 tests.test_part_11.Case03 tests.test_part_11.Case04 tests.test_part_11.Case05 tests.test_part_11.Case06 tests.test_part_11.Case07 tests.test_part_11.Case08 tests.test_part_11.Case09 tests.test_part_11.Case10"
+            }
+          ]
+        },
+        {
+          "line": 53,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_12 tests.test_part_12.Case01 tests.test_part_12.Case02 tests.test_part_12.Case03 tests.test_part_12.Case04 tests.test_part_12.Case05 tests.test_part_12.Case06 tests.test_part_12.Case07 tests.test_part_12.Case08 tests.test_part_12.Case09 tests.test_part_12.Case10"
+            }
+          ]
+        },
+        {
+          "line": 54,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_13 tests.test_part_13.Case01 tests.test_part_13.Case02 tests.test_part_13.Case03 tests.test_part_13.Case04 tests.test_part_13.Case05 tests.test_part_13.Case06 tests.test_part_13.Case07 tests.test_part_13.Case08 tests.test_part_13.Case09 tests.test_part_13.Case10"
+            }
+          ]
+        },
+        {
+          "line": 55,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_14 tests.test_part_14.Case01 tests.test_part_14.Case02 tests.test_part_14.Case03 tests.test_part_14.Case04 tests.test_part_14.Case05 tests.test_part_14.Case06 tests.test_part_14.Case07 tests.test_part_14.Case08 tests.test_part_14.Case09 tests.test_part_14.Case10"
+            }
+          ]
+        },
+        {
+          "line": 56,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_15 tests.test_part_15.Case01 tests.test_part_15.Case02 tests.test_part_15.Case03 tests.test_part_15.Case04 tests.test_part_15.Case05 tests.test_part_15.Case06 tests.test_part_15.Case07 tests.test_part_15.Case08 tests.test_part_15.Case09 tests.test_part_15.Case10"
+            }
+          ]
+        },
+        {
+          "line": 57,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_16 tests.test_part_16.Case01 tests.test_part_16.Case02 tests.test_part_16.Case03 tests.test_part_16.Case04 tests.test_part_16.Case05 tests.test_part_16.Case06 tests.test_part_16.Case07 tests.test_part_16.Case08 tests.test_part_16.Case09 tests.test_part_16.Case10"
+            }
+          ]
+        },
+        {
+          "line": 58,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_17 tests.test_part_17.Case01 tests.test_part_17.Case02 tests.test_part_17.Case03 tests.test_part_17.Case04 tests.test_part_17.Case05 tests.test_part_17.Case06 tests.test_part_17.Case07 tests.test_part_17.Case08 tests.test_part_17.Case09 tests.test_part_17.Case10"
+            }
+          ]
+        },
+        {
+          "line": 59,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_18 tests.test_part_18.Case01 tests.test_part_18.Case02 tests.test_part_18.Case03 tests.test_part_18.Case04 tests.test_part_18.Case05 tests.test_part_18.Case06 tests.test_part_18.Case07 tests.test_part_18.Case08 tests.test_part_18.Case09 tests.test_part_18.Case10"
+            }
+          ]
+        },
+        {
+          "line": 60,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_19 tests.test_part_19.Case01 tests.test_part_19.Case02 tests.test_part_19.Case03 tests.test_part_19.Case04 tests.test_part_19.Case05 tests.test_part_19.Case06 tests.test_part_19.Case07 tests.test_part_19.Case08 tests.test_part_19.Case09 tests.test_part_19.Case10"
+            }
+          ]
+        },
+        {
+          "line": 61,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_20 tests.test_part_20.Case01 tests.test_part_20.Case02 tests.test_part_20.Case03 tests.test_part_20.Case04 tests.test_part_20.Case05 tests.test_part_20.Case06 tests.test_part_20.Case07 tests.test_part_20.Case08 tests.test_part_20.Case09 tests.test_part_20.Case10"
+            }
+          ]
+        },
+        {
+          "line": 62,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_21 tests.test_part_21.Case01 tests.test_part_21.Case02 tests.test_part_21.Case03 tests.test_part_21.Case04 tests.test_part_21.Case05 tests.test_part_21.Case06 tests.test_part_21.Case07 tests.test_part_21.Case08 tests.test_part_21.Case09 tests.test_part_21.Case10"
+            }
+          ]
+        },
+        {
+          "line": 63,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_22 tests.test_part_22.Case01 tests.test_part_22.Case02 tests.test_part_22.Case03 tests.test_part_22.Case04 tests.test_part_22.Case05 tests.test_part_22.Case06 tests.test_part_22.Case07 tests.test_part_22.Case08 tests.test_part_22.Case09 tests.test_part_22.Case10"
+            }
+          ]
+        },
+        {
+          "line": 64,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_23 tests.test_part_23.Case01 tests.test_part_23.Case02 tests.test_part_23.Case03 tests.test_part_23.Case04 tests.test_part_23.Case05 tests.test_part_23.Case06 tests.test_part_23.Case07 tests.test_part_23.Case08 tests.test_part_23.Case09 tests.test_part_23.Case10"
+            }
+          ]
+        },
+        {
+          "line": 65,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_24 tests.test_part_24.Case01 tests.test_part_24.Case02 tests.test_part_24.Case03 tests.test_part_24.Case04 tests.test_part_24.Case05 tests.test_part_24.Case06 tests.test_part_24.Case07 tests.test_part_24.Case08 tests.test_part_24.Case09 tests.test_part_24.Case10"
+            }
+          ]
+        },
+        {
+          "line": 66,
+          "text": [
+            {
+              "kind": "text",
+              "text": "python3 -m unittest tests.test_part_25 tests.test_part_25.Case01 tests.test_part_25.Case02 tests.test_part_25.Case03 tests.test_part_25.Case04 tests.test_part_25.Case05 tests.test_part_25.Case06 tests.test_part_25.Case07 tests.test_part_25.Case08 tests.test_part_25.Case09 tests.test_part_25.Case10"
+            }
+          ]
+        }
+      ],
+      "domains": [
+        {
+          "line": 68,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-01.example.org"
+            }
+          ]
+        },
+        {
+          "line": 69,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-02.example.org"
+            }
+          ]
+        },
+        {
+          "line": 70,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-03.example.org"
+            }
+          ]
+        },
+        {
+          "line": 71,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-04.example.org"
+            }
+          ]
+        },
+        {
+          "line": 72,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-05.example.org"
+            }
+          ]
+        },
+        {
+          "line": 73,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-06.example.org"
+            }
+          ]
+        },
+        {
+          "line": 74,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-07.example.org"
+            }
+          ]
+        },
+        {
+          "line": 75,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-08.example.org"
+            }
+          ]
+        },
+        {
+          "line": 76,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-09.example.org"
+            }
+          ]
+        },
+        {
+          "line": 77,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-10.example.org"
+            }
+          ]
+        },
+        {
+          "line": 78,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-11.example.org"
+            }
+          ]
+        },
+        {
+          "line": 79,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-12.example.org"
+            }
+          ]
+        },
+        {
+          "line": 80,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-13.example.org"
+            }
+          ]
+        },
+        {
+          "line": 81,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-14.example.org"
+            }
+          ]
+        },
+        {
+          "line": 82,
+          "text": [
+            {
+              "kind": "text",
+              "text": "docs-15.example.org"
+            }
+          ]
+        }
+      ],
+      "read": [
+        {
+          "line": 84,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_01"
+            }
+          ]
+        },
+        {
+          "line": 85,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_02"
+            }
+          ]
+        },
+        {
+          "line": 86,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_03"
+            }
+          ]
+        },
+        {
+          "line": 87,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_04"
+            }
+          ]
+        },
+        {
+          "line": 88,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_05"
+            }
+          ]
+        },
+        {
+          "line": 89,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_06"
+            }
+          ]
+        },
+        {
+          "line": 90,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_07"
+            }
+          ]
+        },
+        {
+          "line": 91,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_08"
+            }
+          ]
+        },
+        {
+          "line": 92,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_09"
+            }
+          ]
+        },
+        {
+          "line": 93,
+          "text": [
+            {
+              "kind": "text",
+              "text": "src/part_10"
+            }
+          ]
+        }
+      ],
+      "write": [
+        {
+          "line": 95,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_01"
+            }
+          ]
+        },
+        {
+          "line": 96,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_02"
+            }
+          ]
+        },
+        {
+          "line": 97,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_03"
+            }
+          ]
+        },
+        {
+          "line": 98,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_04"
+            }
+          ]
+        },
+        {
+          "line": 99,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_05"
+            }
+          ]
+        },
+        {
+          "line": 100,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_06"
+            }
+          ]
+        },
+        {
+          "line": 101,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_07"
+            }
+          ]
+        },
+        {
+          "line": 102,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_08"
+            }
+          ]
+        },
+        {
+          "line": 103,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_09"
+            }
+          ]
+        },
+        {
+          "line": 104,
+          "text": [
+            {
+              "kind": "text",
+              "text": "build/part_10"
+            }
+          ]
+        }
+      ],
+      "never": [
+        {
+          "line": 106,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 1, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 107,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 2, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 108,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 3, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 109,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 4, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 110,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 5, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 111,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 6, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 112,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 7, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 113,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 8, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 114,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 9, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 115,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 10, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 116,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 11, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 117,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 12, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 118,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 13, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 119,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 14, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 120,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 15, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 121,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 16, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 122,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 17, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 123,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 18, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 124,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 19, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 125,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 20, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 126,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 21, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 127,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 22, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 128,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 23, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 129,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 24, and do not send its data anywhere"
+            }
+          ]
+        },
+        {
+          "line": 130,
+          "text": [
+            {
+              "kind": "text",
+              "text": "Do not change the configuration of part 25, and do not send its data anywhere"
+            }
+          ]
+        }
+      ],
+      "body": [
+        {
+          "kind": "text",
+          "text": "# The payments service tests\n\nParagraph 1. The checks of this part read the files in src/part_01 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 2. The checks of this part read the files in src/part_02 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 3. The checks of this part read the files in src/part_03 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 4. The checks of this part read the files in src/part_04 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 5. The checks of this part read the files in src/part_05 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 6. The checks of this part read the files in src/part_06 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 7. The checks of this part read the files in src/part_07 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 8. The checks of this part read the files in src/part_08 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 9. The checks of this part read the files in src/part_09 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 10. The checks of this part read the files in src/part_10 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 11. The checks of this part read the files in src/part_11 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 12. The checks of this part read the files in src/part_12 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 13. The checks of this part read the files in src/part_13 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 14. The checks of this part read the files in src/part_14 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 15. The checks of this part read the files in src/part_15 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 16. The checks of this part read the files in src/part_16 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 17. The checks of this part read the files in src/part_17 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 18. The checks of this part read the files in src/part_18 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 19. The checks of this part read the files in src/part_19 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 20. The checks of this part read the files in src/part_20 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 21. The checks of this part read the files in src/part_21 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 22. The checks of this part read the files in src/part_22 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 23. The checks of this part read the files in src/part_23 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 24. The checks of this part read the files in src/part_24 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 25. The checks of this part read the files in src/part_25 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 26. The checks of this part read the files in src/part_26 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 27. The checks of this part read the files in src/part_27 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 28. The checks of this part read the files in src/part_28 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 29. The checks of this part read the files in src/part_29 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 30. The checks of this part read the files in src/part_30 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 31. The checks of this part read the files in src/part_31 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 32. The checks of this part read the files in src/part_32 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 33. The checks of this part read the files in src/part_33 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 34. The checks of this part read the files in src/part_34 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 35. The checks of this part read the files in src/part_35 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 36. The checks of this part read the files in src/part_36 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 37. The checks of this part read the files in src/part_37 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 38. The checks of this part read the files in src/part_38 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 39. The checks of this part read the files in src/part_39 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nParagraph 40. The checks of this part read the files in src/part_40 and write their results under build. See "
+        },
+        {
+          "kind": "link",
+          "shown": [
+            {
+              "kind": "text",
+              "text": "the guide"
+            }
+          ],
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-01.example.org/guide"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " or "
+        },
+        {
+          "kind": "link",
+          "shown": null,
+          "real": [
+            {
+              "kind": "text",
+              "text": "https://docs-02.example.org/notes"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "text": " for what each test means.\n\nA word with an invisible character inside: pay"
+        },
+        {
+          "kind": "invisible",
+          "codepoint": 8203
+        },
+        {
+          "kind": "text",
+          "text": "ments.\n"
+        }
+      ],
+      "body_line": 132
+    },
+    "counts": {
+      "steps": 30,
+      "commands": 25,
+      "domains": 15,
+      "read": 10,
+      "write": 10,
+      "never": 25
+    }
+  },
+  "open_error": null,
+  "note": null,
+  "chooser": null,
+  "setup": null,
+  "setup_lines": [],
+  "setup_error": null,
+  "setup_changes": null,
+  "progress": [],
+  "after_stop": [],
+  "replies": {
+    "yes": "You said yes to this exact request.",
+    "no": "You said no."
+  },
+  "saved_to": null,
+  "save_error": null,
+  "switch_error": null,
+  "key_error": null,
+  "allowed_switch": [],
+  "advice": {
+    "summary": [
+      {
+        "kind": "text",
+        "text": "Running this file asks an agent to fetch the payments service from github.com at one fixed commit and run its whole test suite, part by part, thirty steps in all, keeping the output of each part and writing down every failing test with the first line of its error.\nIt may run 25 long unittest commands, fetch 15 documentation sites such as "
+      },
+      {
+        "kind": "link",
+        "shown": null,
+        "real": [
+          {
+            "kind": "text",
+            "text": "https://docs-01.example.org/guide/a-very-long-address-that-has-no-place-to-break-at-all-0123456789"
+          }
+        ]
+      },
+      {
+        "kind": "text",
+        "text": ", read ten source folders and write ten build folders."
+      }
+    ],
+    "watch_out": [
+      [
+        {
+          "kind": "text",
+          "text": "Part 1: the commands of this part read src/part_01 and write build/part_01; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 2: the commands of this part read src/part_02 and write build/part_02; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 3: the commands of this part read src/part_03 and write build/part_03; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 4: the commands of this part read src/part_04 and write build/part_04; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 5: the commands of this part read src/part_05 and write build/part_05; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 6: the commands of this part read src/part_06 and write build/part_06; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 7: the commands of this part read src/part_07 and write build/part_07; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 8: the commands of this part read src/part_08 and write build/part_08; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 9: the commands of this part read src/part_09 and write build/part_09; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 10: the commands of this part read src/part_10 and write build/part_10; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 11: the commands of this part read src/part_11 and write build/part_11; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ],
+      [
+        {
+          "kind": "text",
+          "text": "Part 12: the commands of this part read src/part_12 and write build/part_12; look at what each command does before you run the file, because the file's own notes say what it means."
+        }
+      ]
+    ],
+    "model": "Nemotron 3 Super on Nebius",
+    "cost": "less than $0.01"
+  }
+}

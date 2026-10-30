@@ -15,9 +15,11 @@ export interface Timing {
   answerFails: boolean;
   /** Milliseconds a run takes to stop after Stop, before what it did after the stop arrives. */
   stopping: number;
+  /** Milliseconds before Nemotron's reading of the file arrives; `null`: it never does ("Asking Nemotron…"). */
+  explain: number | null;
 }
 
-const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true, answerFails: false, stopping: 0 };
+const usual: Timing = { open: 0, step: 0, line: 0, installEnds: true, answerFails: false, stopping: 0, explain: 0 };
 
 const special: Record<string, Partial<Timing>> = {
   "open-reading": { open: null },
@@ -31,6 +33,8 @@ const special: Record<string, Partial<Timing>> = {
   "run-stopping": { stopping: 1500 },
   // Steplet's own agent answering 40 times over a few seconds, so the top line can be seen counting the steps.
   "run-agent-step-limit": { step: 15 },
+  // The preview while Nemotron is still reading the file.
+  "preview-advice-waiting": { explain: null },
 };
 
 /** The timing of the scenario `name`. */

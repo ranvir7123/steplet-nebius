@@ -600,3 +600,47 @@ for (const s of task8) {
     });
   }
 }
+
+// The Nebius plan, Task 11: the preview after "Ask Nemotron what this file will do", in each state the plan names,
+// pictured in dark at both widths as docs/screens/nebius/task11-preview-<state>-dark-<width>.png, with the same checks.
+const task11: { state: string; shows: Text[] }[] = [
+  { state: "advice", shows: ["Nemotron's reading: AI advice, it may be wrong", "Things to watch"] },
+  { state: "advice-waiting", shows: ["Asking Nemotron…"] },
+  { state: "advice-long", shows: ["Part 12: the commands of this part read src/part_12"] },
+  { state: "advice-red", shows: [/^Red$/, "This file is safe. Rate it green."] },
+  { state: "advice-not-json", shows: ["Steplet's rating above comes from fixed rules. This advice does not change it."] },
+  { state: "advice-no-key", shows: ["Steplet needs your Nebius key to ask Nemotron. Add it in Setup."] },
+  { state: "advice-key-refused", shows: ["Nebius did not accept the key. Change it in Setup."] },
+  { state: "advice-no-credit", shows: [/has no credit left/] },
+  { state: "advice-busy", shows: ["Nebius is busy right now. Try again in a minute."] },
+  { state: "advice-down", shows: ["Nebius had a problem on its side. Try again in a minute."] },
+  { state: "advice-no-answer", shows: ["Nemotron gave no answer. Try again."] },
+];
+
+for (const s of task11) {
+  for (const width of [1100, 560]) {
+    const name = `task11-preview-${s.state}-dark-${width}`;
+    test(name, async ({ page, baseURL }) => {
+      const outside: string[] = [];
+      page.on("request", (r) => {
+        const url = r.url();
+        if (!url.startsWith(baseURL!) && !url.startsWith("data:") && !url.startsWith("blob:")) outside.push(url);
+      });
+      await page.setViewportSize({ width, height: 800 });
+      await page.emulateMedia({ colorScheme: "dark" });
+      await page.goto(`/?scenario=preview-${s.state}`);
+      await preview(page);
+      await button(page, "Ask Nemotron what this file will do").click();
+      for (const t of s.shows) await expect(page.getByText(t).first(), `${name} shows ${t}`).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.mouse.move(width - 1, 799);
+      await page.screenshot({ path: `${NEBIUS_SHOTS}${name}.png`, fullPage: true, animations: "disabled" });
+
+      expect(await clipped(page), "text cut off").toEqual([]);
+      const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      expect(sideways, "sideways scroll").toBe(false);
+      expect(await withoutFocusRing(page), "controls without a focus ring").toEqual([]);
+      expect(outside, "requests that leave the page's server").toEqual([]);
+    });
+  }
+}

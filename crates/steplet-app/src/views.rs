@@ -1260,6 +1260,28 @@ pub fn spend_view(s: &Spent) -> SpendView {
     }
 }
 
+/// Nemotron's reading of a file (the Nebius plan, Task 11), beside the rating and never part of it: there is no
+/// colour or rating here. Its words are the model's, so they reach the screen only as display pieces.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+pub struct AdviceView {
+    pub summary: Shown,
+    /// "Things to watch", one entry each.
+    pub watch_out: Vec<Shown>,
+    /// The model's name and where it runs: "Nemotron 3 Super on Nebius".
+    pub model: String,
+    /// What the call cost: "less than $0.01".
+    pub cost: String,
+}
+
+pub fn advice_view(a: &crate::explain::Advice) -> AdviceView {
+    AdviceView {
+        summary: shown(&a.summary),
+        watch_out: a.watch_out.iter().map(|w| line(w)).collect(),
+        model: format!("{} on Nebius", model_name(&a.model)),
+        cost: money(a.cost),
+    }
+}
+
 /// An amount of money in Steplet's words: dollars to the nearest cent, or "less than $0.01" for less than a cent
 /// that is not nothing.
 pub fn money(n: Nanodollars) -> String {
@@ -1584,4 +1606,12 @@ pub struct Fixture {
     pub key_error: Option<String>,
     /// What the run sends when the receiver pressed "Run again, allowing another model" (E1).
     pub allowed_switch: Vec<ProgressView>,
+    /// What `explain_file` answers: Nemotron's reading of the file (the Nebius plan, Task 11).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub advice: Option<AdviceView>,
+    /// `explain_file`'s refusal instead, in Steplet's words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub advice_error: Option<String>,
 }
