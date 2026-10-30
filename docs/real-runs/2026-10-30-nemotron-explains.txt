@@ -1,0 +1,16 @@
+﻿Recorded 30 Oct 2026 on this laptop, at commit 209f4f7 plus the test file crates/steplet-app/tests/nemotron_live.rs.
+Model: nvidia/nemotron-3-super-120b-a12b on Nebius Token Factory, with the real key read from Windows' Credential Manager.
+The test checks each line for the key before printing it. A question from Steplet is answered No by the test.
+
+> cargo test -p steplet-app --offline --test nemotron_live -- --ignored --nocapture --test-threads=1 nemotron_explains_the_sample_file
+     Running tests\nemotron_live.rs (target\debug\deps\nemotron_live-07a1395e1624759d.exe)
+running 1 test
+test nemotron_explains_the_sample_file ... model: nvidia/nemotron-3-super-120b-a12b
+summary: Running the file will execute the project's unit tests using 'python3 -m unittest discover -s tests -t .' once in the checked-out repository and then report the number of tests run and whether they all passed. It will not modify any files, install packages, or access the network.
+watch out: Repository URL: https://github.com/ranvir7123/steplet-sample.git
+watch out: Commit hash: 7e36d77a95ea1f36acf2aa906e27bc2903d93e61
+watch out: Allowed command: python3 -m unittest discover -s tests -t .
+watch out: Restrictions: no file changes, no installations, no network use
+cost: 571800 nanodollars; took 3.6 s
+ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 3.65s

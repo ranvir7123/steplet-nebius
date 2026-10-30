@@ -1,0 +1,23 @@
+﻿Recorded 30 Oct 2026 on this laptop, at commit 209f4f7 plus the test file crates/steplet-app/tests/nemotron_live.rs.
+Model: nvidia/nemotron-3-super-120b-a12b on Nebius Token Factory, with the real key read from Windows' Credential Manager.
+The test checks each line for the key before printing it. A question from Steplet is answered No by the test.
+Started 19:57:29 IST.
+
+> cargo test -p steplet-app --offline --test nemotron_live -- --ignored --nocapture --test-threads=1 nemotron_runs_the_sample_file
+     Running tests\nemotron_live.rs (target\debug\deps\nemotron_live-07a1395e1624759d.exe)
+running 1 test
+test nemotron_runs_the_sample_file ... took 40 s
+--- {"kind":"prepared","commit":"7e36d77a95ea1f36acf2aa906e27bc2903d93e61","removed":[],"limit_ms":1800000}
+--- {"kind":"spent","spent":{"model":"Nemotron 3 Super on Nebius","money":"$0.00 of $0.25","steps":"step 1 of 40","tokens":"The model gave no answer.","unsure":null}}
+--- {"kind":"event","event":{"kind":"started","model":[{"kind":"text","text":"nvidia/nemotron-3-super-120b-a12b"}]}}
+--- {"kind":"spent","spent":{"model":"Nemotron 3 Super on Nebius","money":"less than $0.01 of $0.25","steps":"step 1 of 40","tokens":"1,861 tokens sent and 55 received, in 1 model turn.","unsure":null}}
+--- {"kind":"event","event":{"kind":"call","id":"chatcmpl-tool-9b67d87243211ddb","tool":[{"kind":"text","text":"Bash"}],"what":[{"kind":"text","text":"python3 -m unittest discover -s tests -t ."}],"fields":[{"name":[{"kind":"text","text":"command"}],"value":[{"kind":"text","text":"python3 -m unittest discover -s tests -t ."}]}]}}
+--- {"kind":"checked","call":"chatcmpl-tool-9b67d87243211ddb","check":{"kind":"allowed","words":"Allowed by Steplet's checker"},"reason":null}
+--- {"kind":"event","event":{"kind":"result","id":"chatcmpl-tool-9b67d87243211ddb","is_error":false,"exit_code":0,"ended":"Exit code 0","failed":false,"output":[{"kind":"text","text":"Exit code 0\n.....\n----------------------------------------------------------------------\nRan 5 tests in 0.001s\n\nOK\n"}],"lines":6}}
+--- {"kind":"spent","spent":{"model":"Nemotron 3 Super on Nebius","money":"less than $0.01 of $0.25","steps":"step 2 of 40","tokens":"3,799 tokens sent and 100 received, in 2 model turns.","unsure":null}}
+--- {"kind":"event","event":{"kind":"agent_says","text":[{"kind":"text","text":"5 tests ran and all passed."}]}}
+--- {"kind":"event","event":{"kind":"ended","models":[[{"kind":"text","text":"nvidia/nemotron-3-super-120b-a12b"}]]}}
+--- {"kind":"finished","report":{"end":{"kind":"finished"},"end_words":{"title":"Finished","text":"The run finished.","icon":"green"},"offers_model_switch":false,"completed":true,"stopped_by_you":false,"commands":[{"tool":[{"kind":"text","text":"Bash"}],"command":[{"kind":"text","text":"python3 -m unittest discover -s tests -t ."}],"check":{"kind":"allowed","words":"Allowed by Steplet's checker"},"exit_code":0,"ended":"Exit code 0","failed":false,"output":[{"kind":"text","text":"Exit code 0\n.....\n----------------------------------------------------------------------\nRan 5 tests in 0.001s\n\nOK\n"}],"lines":6,"after_stop":false}],"refused":[],"answers":[],"models":[[{"kind":"text","text":"nvidia/nemotron-3-super-120b-a12b"}]],"refusals":[],"changed_files":[[{"kind":"text","text":"?? __pycache__/calc.cpython-314.pyc"}],[{"kind":"text","text":"?? tests/__pycache__/__init__.cpython-314.pyc"}],[{"kind":"text","text":"?? tests/__pycache__/test_calc.cpython-314.pyc"}]],"faults":[],"notes":["Blocked fence attempts are not visible to Steplet: the fence stops a program without telling Steplet, so this report never says the fence stopped a particular thing."],"agent_says":[{"kind":"text","text":"5 tests ran and all passed."}],"spent":{"model":"Nemotron 3 Super on Nebius","money":"less than $0.01 of $0.25","steps":"step 2 of 40","tokens":"3,799 tokens sent and 100 received, in 2 model turns.","unsure":null}}}
+the key in the run's logs: 0 times
+ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 40.32s
