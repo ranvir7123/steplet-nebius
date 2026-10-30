@@ -6,7 +6,7 @@ use std::path::Path;
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
-use steplet_run::{NetworkMode, promises};
+use steplet_run::{NetworkMode, RunnerKind, promises, promises_for};
 use steplet_suite::catalogue::{CASES, Case, Layer, Line, Needs, Runner, TestRef, cases_for, for_runner, select};
 
 fn steplet(allow: &str) -> Steplet {
@@ -51,6 +51,16 @@ fn line_of(text: &str) -> Line {
     }
 }
 
+/// The suite's line for one of Steplet's agent's chooser lines, for the two lines that are the agent's alone (the
+/// Nebius plan, Task 9). The agent's other lines rest on tests the suite does not replay as cases of their own.
+fn agent_line_of(text: &str) -> Option<Line> {
+    match text {
+        t if t.starts_with("Your Nebius key stays on Windows") => Some(Line::KeyOnWindows),
+        t if t.starts_with("Anything the agent leaves running is ended") => Some(Line::EndedBeforeNextMove),
+        _ => None,
+    }
+}
+
 #[test]
 fn every_case_names_tests_that_exist() {
     for case in CASES {
@@ -92,6 +102,21 @@ fn the_chooser_and_the_suite_name_the_same_tests() {
                 assert!(backed, "the chooser's {line:?} line names {test}, which no case of that line replays");
             }
         }
+    }
+    // Steplet's agent's own two lines, the same way.
+    let mut seen = Vec::new();
+    for s in [steplet(""), steplet("allow:\n  domains:\n    - example.org\n")] {
+        for p in modes.iter().flat_map(|m| promises_for(RunnerKind::Own, &s, *m)) {
+            let Some(line) = agent_line_of(p.text) else { continue };
+            seen.push(line);
+            for test in p.tests {
+                let backed = CASES.iter().any(|c| c.lines.contains(&line) && c.tests.iter().any(|t| t.name == *test));
+                assert!(backed, "Steplet's agent's {line:?} line names {test}, which no case of that line replays");
+            }
+        }
+    }
+    for line in [Line::KeyOnWindows, Line::EndedBeforeNextMove] {
+        assert!(seen.contains(&line), "the chooser shows Steplet's agent's {line:?} line");
     }
 }
 
@@ -138,11 +163,12 @@ fn a_test_name_means_one_test() {
     }
 }
 
-/// Steplet's own agent's cases are the ones whose tests run it (`agent_linux.rs`); every other case runs Claude Code.
+/// Steplet's own agent's cases are the ones whose tests run it (`agent_linux.rs` in Steplet's Linux, `agent.rs` with a
+/// stand-in model); every other case runs Claude Code.
 #[test]
 fn each_case_says_which_agent_its_tests_run() {
     for case in CASES {
-        let own = case.tests.iter().filter(|t| t.program == "agent_linux").count();
+        let own = case.tests.iter().filter(|t| matches!(t.program, "agent_linux" | "agent")).count();
         assert!(own == 0 || own == case.tests.len(), "{}: its tests run one agent", case.id);
         let runner = if own > 0 { Runner::Own } else { Runner::Claude };
         assert_eq!(case.runner, runner, "{}", case.id);

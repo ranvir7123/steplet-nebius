@@ -215,16 +215,22 @@ const AGENT_DRIVES: Promise = Promise {
     tests: &["the_fence_holds_without_the_checker"],
 };
 
-// Not shown yet: "Your Nebius key stays on Windows: it is sent only to Nebius, never into Steplet's Linux." It goes
-// after the drives line once its tests pass: the_nebius_key_never_reaches_linux (the Nebius plan, Task 9) and
-// the_nebius_key_never_appears_in_the_report_or_logs. A line with no passing test is not shown (R20).
+/// Worded no wider than its tests: the key is counted in Steplet's Linux before, during and after a run (Task 9), and in
+/// the report and the logs. Where it is sent is the Setup screen's line, not this one.
+const KEY_ON_WINDOWS: Promise = Promise {
+    text: "Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.",
+    items: Vec::new(),
+    tests: &["a2_the_key_never_reaches_linux", "the_nebius_key_never_appears_in_the_report_or_logs"],
+};
 
 const AGENT_SITES_TESTS: &[&str] = &["a_command_reaches_only_declared_sites"];
 
+/// Rests on Task 9's test, whose control shows the same program keeps running outside the fence once its shell has
+/// ended; `a_program_left_running_is_ended_before_the_next_move` (Task 5) has no such control.
 const LEFT_RUNNING: Promise = Promise {
     text: "Anything the agent leaves running is ended before its next move.",
     items: Vec::new(),
-    tests: &["a_program_left_running_is_ended_before_the_next_move"],
+    tests: &["a7_a_program_left_running_is_ended_before_the_next_move"],
 };
 
 const EXIT_CODES: Promise = Promise {
@@ -254,5 +260,5 @@ pub fn promises_for(runner: RunnerKind, s: &Steplet, network: NetworkMode) -> Ve
             tests: AGENT_SITES_TESTS,
         }
     };
-    vec![AGENT_CHECKS, AGENT_WRITES, AGENT_DRIVES, sites, LEFT_RUNNING, EXIT_CODES]
+    vec![AGENT_CHECKS, AGENT_WRITES, AGENT_DRIVES, KEY_ON_WINDOWS, sites, LEFT_RUNNING, EXIT_CODES]
 }

@@ -76,6 +76,7 @@ fn steplets_agent_has_lines_of_its_own() {
              it checked. A move it refuses does not run.",
             "Even a move the checker allows can change files only inside the working copy.",
             "The agent's moves cannot read the folder where Linux would show your Windows drives.",
+            "Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.",
             "Programs the agent runs can reach only the web sites this file declares, and it declares none.",
             "Anything the agent leaves running is ended before its next move.",
             "The report shows whether each command worked as Steplet saw it, not as the agent claims.",
@@ -84,11 +85,12 @@ fn steplets_agent_has_lines_of_its_own() {
     assert!(none.iter().all(|p| p.items.is_empty()));
     let one = promises_for(RunnerKind::Own, &steplet(site), NetworkMode::Nat);
     assert_eq!(
-        (one[3].text, one[3].items.clone()),
+        (one[4].text, one[4].items.clone()),
         ("Programs the agent runs can reach only the web sites this file declares:", vec!["example.org".to_owned()])
     );
-    assert_eq!(one[3].tests, ["a_command_reaches_only_declared_sites"]);
-    assert_eq!(none[4].tests, ["a_program_left_running_is_ended_before_the_next_move"]);
+    assert_eq!(one[4].tests, ["a_command_reaches_only_declared_sites"]);
+    assert_eq!(none[3].tests, ["a2_the_key_never_reaches_linux", "the_nebius_key_never_appears_in_the_report_or_logs"]);
+    assert_eq!(none[5].tests, ["a7_a_program_left_running_is_ended_before_the_next_move"]);
     for mode in [NetworkMode::Other, NetworkMode::Unknown] {
         assert_eq!(promises_for(RunnerKind::Own, &steplet(site), mode), one, "{mode:?}: the same lines");
     }
@@ -103,8 +105,6 @@ fn steplets_agent_has_lines_of_its_own() {
             assert!(!claude.contains(test), "{:?} rests on {test}, a Claude Code run's test", p.text);
         }
     }
-    // Not shown yet: the line about the Nebius key waits for its test (Task 9).
-    assert!(none.iter().all(|p| !p.text.contains("Nebius key")));
 }
 
 /// The chooser offers only models Steplet can price and name, Nemotron 3 Super first: a run refuses a model with no

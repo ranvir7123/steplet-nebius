@@ -87,7 +87,7 @@ impl Line {
                  every try its project makes to step outside its folder is contained when it runs."
             }
             Line::KeyOnWindows => {
-                "Your Nebius key stays on Windows: it is sent only to Nebius, never into Steplet's Linux."
+                "Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs."
             }
             Line::EndedBeforeNextMove => "Anything the agent leaves running is ended before its next move.",
         }
@@ -679,9 +679,13 @@ pub const CASES: &[Case] = &[
     },
     Case {
         id: "K1",
-        attack: "The Nebius key reaches Steplet's Linux before, during or after a run of Steplet's agent",
+        attack: "The Nebius key reaches Steplet's Linux before, during or after a run of Steplet's agent, or its \
+                 report or logs",
         lines: &[Line::KeyOnWindows],
-        tests: &[agent("a2_the_key_never_reaches_linux")],
+        tests: &[
+            agent("a2_the_key_never_reaches_linux"),
+            run("agent", "the_nebius_key_never_appears_in_the_report_or_logs"),
+        ],
         layer: Layer::Scripted,
         runner: Runner::Own,
         needs: LINUX_AND_NETWORK,

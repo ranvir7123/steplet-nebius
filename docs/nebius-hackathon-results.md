@@ -1143,3 +1143,91 @@ warnings` (exit 0), and `cargo test -p steplet-suite -p steplet-run -p steplet-a
   environment and command line) and the Windows folders WSL shares in (such as `C:`).
 - The suite's records show the fence's command lines, with a one-run password for the fence's own local proxy. It is
   made fresh for each run and works only while that run lasts; the secret scan (Task 12) may still list it.
+
+## Merging Tasks 7 and 8, and the run chooser's two agent lines (30 Oct 2026, afternoon)
+
+Tasks 7 and 8 were built in sessions of their own, each on its own branch, and merged here one at a time after Task
+9's commit (`429d8fe`):
+
+- Task 7, `refs/heads/claude/task7-report-ab48a6` (`14dfda3`): merged as `9fcd61b`, no clashes, clippy exit 0.
+- Task 8, `refs/heads/claude/task8-chooser-60e1f8` (`285d59b`): merged as `e2ac334`, no clashes.
+
+After Task 8's merge, `fixtures_are_current` failed. The 8 screen samples Task 7 added (`report-agent-*`,
+`run-agent-*`) were made before Task 8 changed the chooser's shape (its one `claude` card became a list of
+`runners`). Rewriting them with `STEPLET_BLESS=1` changed only that.
+
+**The key line.** Task 8 left it out ("Not shown yet ... once its tests pass"), because Task 9's tests had not passed
+on its branch. They have here, so the chooser now shows, after the drives line:
+
+> Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.
+
+It names `a2_the_key_never_reaches_linux` and `the_nebius_key_never_appears_in_the_report_or_logs`. The plan's
+wording was "it is sent only to Nebius, never into Steplet's Linux". No test watches where the key goes over the
+network, so "sent only to Nebius" is left out. What Steplet's Token Factory client puts the key in (the
+`Authorization` header only) is tested on its own (`sends_the_key_as_a_bearer_header_and_nowhere_else`).
+
+**The left-running line** ("Anything the agent leaves running is ended before its next move.") now names Task 9's
+`a7_a_program_left_running_is_ended_before_the_next_move`, not Task 5's
+`a_program_left_running_is_ended_before_the_next_move`. A7 has a control, which shows the same program keeps running
+outside the fence once its shell has ended, so A7 can fail. Task 5's has no such control.
+
+**The suite.**
+
+- K1 now replays both of the key line's tests. The second is in `agent.rs` (Steplet's agent with a stand-in model,
+  on Windows), so the rule that a case's tests run one agent now counts `agent.rs` with `agent_linux.rs` as Steplet's
+  agent.
+- `the_chooser_and_the_suite_name_the_same_tests` now checks the agent's two lines too. Each test they name must be
+  replayed by a case of that line (K or E), and both lines must be on the chooser.
+- The first run of the catalogue tests after these edits failed twice, both from my edits: K1's attack had a run of
+  spaces where a line break was lost (`ids_are_unique_and_follow_their_line`), and the one-agent rule above
+  (`each_case_says_which_agent_its_tests_run`). After the fixes: `test result: ok. 10 passed; 0 failed`.
+
+**Checks.**
+
+```
+> cargo fmt --all --check
+(no output, exit 0)
+> cargo clippy --workspace --all-targets --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.88s
+clippy exit: 0
+> cargo test -p steplet-suite -p steplet-run -p steplet-app -p steplet-core --offline      (sum of the "test result" lines)
+passed 445 failed 0 ignored 96
+> npm --prefix web run check
+COMPLETED 166 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS
+no raw HTML
+every colour pair at least 4.5:1 (focus rings and control borders at least 3:1): 70 pairs
+```
+
+The first try of the ordinary tests stopped at `error: linking with link.exe failed: exit code: 1104` (Windows could
+not open the `verdict` test program's file while building it). The second try, with nothing changed, built and ran.
+The screen tests ran in Microsoft Edge again (`web/playwright.edge.config.ts`, as above), after a fresh
+`build:screens`:
+
+```
+> npx --offline playwright test --config playwright.edge.config.ts
+Running 362 tests using 6 workers
+  2 failed
+    [screens] › app\tests\chooser.spec.ts:40:1 › only_the_lines_promises_returns_are_shown ─────────
+    [screens] › app\tests\screens.spec.ts:534:7 › run-tripwire-light-560 ───────────────────────────
+  360 passed (50.2m)
+> npx --offline playwright test --config playwright.edge.config.ts chooser.spec.ts -g "only_the_lines_promises_returns_are_shown"
+  1 passed (24.0s)
+> npx --offline playwright test --config playwright.edge.config.ts screens.spec.ts -g "run-tripwire-light-560"
+  1 passed (21.6s)
+```
+
+The full run took 50 minutes rather than the usual 6, because the laptop was busy: `run-tripwire-light-560` hung
+inside Edge for 40.8 minutes on a click Edge had already started. `only_the_lines_promises_returns_are_shown` timed out
+on the preview's Run button, which stayed greyed out. That file is red, so Run waits for the typed sentence. The
+test's helper (`chooserOf`) checks once, at once, whether the sentence box is there, and on a slow page it was not
+drawn yet, so nothing was typed. Both passed on their own with nothing changed. The helper's one-time check is a
+weakness of the test, not of the app, and is not fixed here.
+
+The chooser pictures (`docs/screens/nebius/chooser-*-dark-*.png`) were looked at by eye at both widths: the key line
+sits after the drives line with the same spacing as the others, wraps cleanly at 560, and nothing runs off the side.
+
+### Not checked
+
+- K1 and E1 were not run again in Steplet's Linux after this change. The standing yes to use Steplet's Linux ended
+  at 12:00. A2 and A7 have not changed since the 09:29 to 09:32 run, which passed. What changed is which lines and
+  cases name them, and K1's second test, which runs on Windows and passed in the ordinary tests above.

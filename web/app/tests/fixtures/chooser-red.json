@@ -225,6 +225,14 @@
             ]
           },
           {
+            "text": "Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.",
+            "items": [],
+            "tests": [
+              "a2_the_key_never_reaches_linux",
+              "the_nebius_key_never_appears_in_the_report_or_logs"
+            ]
+          },
+          {
             "text": "Programs the agent runs can reach only the web sites this file declares, and it declares none.",
             "items": [],
             "tests": [
@@ -235,7 +243,7 @@
             "text": "Anything the agent leaves running is ended before its next move.",
             "items": [],
             "tests": [
-              "a_program_left_running_is_ended_before_the_next_move"
+              "a7_a_program_left_running_is_ended_before_the_next_move"
             ]
           },
           {

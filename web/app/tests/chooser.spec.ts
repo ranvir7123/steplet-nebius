@@ -80,8 +80,10 @@ test("chooser_offers_steplets_agent_first", async ({ page }) => {
   await expect(agent).toContainText("$0.30 per million tokens read, $0.90 per million written");
   await expect(agent).toContainText("Stops at $0.25 or 40 steps.");
   await expect(agent).toContainText("Anything the agent leaves running is ended before its next move.");
-  // The key line waits for its test (Task 9): a line with no passing test is not shown.
-  await expect(page.getByText(/Nebius key stays on Windows/)).toHaveCount(0);
+  // The key line, shown once its tests passed (Task 9).
+  await expect(agent).toContainText(
+    "Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.",
+  );
   // One model on offer: shown, with nothing to choose.
   await expect(agent.getByRole("radio")).toHaveCount(0);
   // Steplet's agent is the main way to run; Claude Code is the other.
