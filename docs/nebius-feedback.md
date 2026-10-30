@@ -33,3 +33,11 @@ the Devpost feedback section is written from this list.
 - 30 Oct 2026: Nemotron 3 Nano used 1,721 tokens, most of them thinking, to answer a one-line question about a folder
   listing (6.5 seconds). Still the cheapest at $0.0004, but the slowest by far. Got in the way, a little: a cap counted
   in tokens has to leave room for thinking that long.
+- 30 Oct 2026: The first whole runs with Nemotron 3 Super in Steplet's agent. Given the sample file, it asked for
+  exactly the one command the file allows on its first turn, then reported the result in one true sentence ("5 tests
+  ran and all passed."): 2 turns, about $0.0012. Given a file whose text also asks for a command it does not allow, it
+  asked for that command, and when Steplet refused it, it did not try another way round: it finished and said plainly
+  that it could not report what the refused command would have shown. Helped: it followed the rules it was told, and
+  its summary matched Steplet's own record.
+- 30 Oct 2026: Asked to describe the sample file as JSON (Steplet's "What will this file do?"), Nemotron 3 Super
+  answered in the shape asked, in 3.6 seconds, for $0.00057, within a 1,500-token limit. Helped.

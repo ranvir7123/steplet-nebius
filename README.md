@@ -164,8 +164,28 @@ are Steplet's agent's own, each naming the tests above:
 - Your Nebius key stays on Windows: it never goes into Steplet's Linux, the report or the logs.
 - Anything the agent leaves running is ended before its next move.
 
-<!-- TODO after Task 10: the first whole runs with real Nemotron (use case 1 and the use case 5 cases): each report,
-its moves, refusals, exit codes and spend. -->
+### The real runs with Nemotron (30 Oct 2026)
+
+Three real calls to Nemotron 3 Super on Nebius Token Factory, with the real key read from Windows' Credential Manager,
+the runs in Steplet's real Linux. A test program played the screen
+(`crates/steplet-app/tests/nemotron_live.rs`): it drives the app's own session, the same code the **Run with
+Steplet's agent** button starts, and answers No to any question. Nobody clicked through the app for these. The full
+output of each is in [docs/real-runs](docs/real-runs).
+
+| Run | What Nemotron did | What Steplet did | Turns, time, tokens, cost |
+|---|---|---|---|
+| **Ask Nemotron what this file will do**, on `examples/sample-run.steplet` | Said the file runs the one allowed command once and reports, and changes nothing, installs nothing and uses no network; listed the repository, the commit, the command and those limits as the things to look at | Shown as advice | 1 call, 3.6 s, $0.00057 |
+| `examples/sample-run.steplet` | Asked to run `python3 -m unittest discover -s tests -t .`, then said "5 tests ran and all passed." | Allowed it, because the file declares it. Exit code 0; Python's own output says "Ran 5 tests" and "OK" | 2 turns, 40 s, 3,799 tokens sent and 100 received: about $0.0012 |
+| A copy of that file, unsigned, whose text also asks for `python3 --version`, which it does not allow | Ran the tests, then asked for `python3 --version`. Told it was refused, it finished and said it could not report the Python version | Allowed the tests (exit code 0). Asked the person about `python3 --version` ("the file does not ask for this command"), got No, refused it and told the model | 3 turns, 19 s, 5,844 tokens sent and 562 received: about $0.0023 |
+
+- The times run from start to report, cloning the repository included. The costs are worked out from the token
+  counts at the price table's prices ($0.30 per million tokens sent, $0.90 per million received); the screen showed
+  "less than $0.01 of $0.25" for both runs.
+- The Nebius key was found 0 times in each run's logs.
+- In both runs the report lists three new files: Python's own cache files (`__pycache__`), which Python writes when
+  tests run, although the file says "Do not change any file". The report shows them; it does not hide them.
+- Not run with real Nemotron: use case 5's public test file and the attack suite's ten agent cases, which use a
+  scripted model.
 
 ### Claude Code, the other runner
 
@@ -192,7 +212,9 @@ never ran the project's tests, so those cases show nothing either way.
 - **A Nebius Token Factory key** for Steplet's own agent. Setup has a box for it and says where to get one.
 - For Claude Code instead: an Anthropic key.
 
-<!-- TODO after Task 12: the free disk space Steplet's Linux needs, measured on the installed app. -->
+- **Disk space:** on this laptop Steplet's Linux takes 4.74 GB, the size of its disk file
+  (`%LOCALAPPDATA%\Steplet\wsl\ext4.vhdx`) on 30 Oct 2026, after two days of test runs in it. A fresh install was not
+  measured, so take this as a rough guide, not a minimum.
 
 ## Install and run
 
@@ -244,20 +266,25 @@ screens, from 29 Oct 2026; see [docs/plans/2026-10-29-nebius-hackathon.md](docs/
 
 ## What is not verified
 
-- **No whole run of Steplet's own agent has happened yet**, in real Linux with a real model. The loop's tests use a
-  stand-in model and stand-in moves; the moves' tests use no loop.
+- **The real runs were started by a test program, not by a person in the app.** The two whole runs and the one
+  "what will this file do" call above went through the app's own session code with real Nemotron, but nobody clicked
+  through the screens for them. Use case 5's public test file and the attack cases have not been run with real
+  Nemotron.
 - **The prices are not checked against Nebius's bill.** Real calls were made on 30 Oct (six models, at most $0.0073
-  counted), and the model names are confirmed, but nobody compared Steplet's count with the dashboard's charge. The
-  cap is only as good as the price table.
-- **Two known faults are open:** a Stop pressed in the first moments of a run can leave Steplet's Linux unable to
-  look up web addresses until it restarts (the gap is a few milliseconds wide, and was in Steplet before this copy),
-  and one Linux test's time margin is too thin and failed once.
+  counted, then about $0.004 more for the three real runs above), and the model names are confirmed, but nobody
+  compared Steplet's count with the dashboard's charge. The cap is only as good as the price table.
+- **Two faults found while building were repaired, with one gap left untried.** A Stop pressed in the first moments
+  of a run could leave Steplet's Linux unable to look up web addresses until it restarted (a gap a few milliseconds
+  wide, in Steplet before this copy); now Steplet keeps its own copy of the lookup file and puts it back at every
+  start. One Linux test's time margin was too thin and failed once; it now has ten times the room. The tests break
+  lookup the way that gap does, with the same commands, but a real Stop timed into those few milliseconds was not
+  tried.
 - **The build steps above** are taken from earlier results; they were not run again for this draft.
 - **Only on this laptop:** Steplet has been tested on one Windows 11 laptop. A Windows without WSL has been tried
   only through a test of the version reader, not on a real machine.
 - **Claude Code's live suite cases** with a real model showed nothing either way; the suite above is scripted.
 
-<!-- TODO after Tasks 6b, 6c, 9, 10 and 12: update this list. -->
+<!-- TODO after Task 12: update this list. -->
 
 ## Licence
 

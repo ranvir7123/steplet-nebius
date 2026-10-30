@@ -1359,3 +1359,78 @@ f5bf573280d9db4a0c78dc8cfa2a8e1f0fccc5d020e17a4cabad297386967773  Steplet_0.2.0_
 ```
 
 Not tried: an uninstall; the installed app clicked through by a person.
+
+## Task 10: the real runs with Nemotron, done by a test program (30 Oct 2026, 19:57 to 20:01 IST)
+
+Ranvir could not click through the app at this time, so the runs were done by a test program that plays the screen:
+`crates/steplet-app/tests/nemotron_live.rs` (commit `a01bc94`). It drives the app's own `Session` with
+`Runner::Own { model: "nvidia/nemotron-3-super-120b-a12b" }`, the real Nebius key read from Credential Manager with the
+app's own `key::load`, and Steplet's real Linux; that is the code the chooser's **Run with Steplet's agent** button
+starts. The "what will this file do" call goes through the app's own `explain::ask_nebius`. The test checks every line
+for the key before printing it, and answers No to any question. The run lock was free before each run. The full output
+of each is in `docs/real-runs/`.
+
+```
+> cargo test -p steplet-app --offline --test nemotron_live -- --ignored --nocapture --test-threads=1 nemotron_explains_the_sample_file
+summary: Running the file will execute the project's unit tests using 'python3 -m unittest discover -s tests -t .'
+once in the checked-out repository and then report the number of tests run and whether they all passed. It will not
+modify any files, install packages, or access the network.
+cost: 571800 nanodollars; took 3.6 s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 3.65s
+```
+
+The sample file (`examples/sample-run.steplet`), from the report:
+
+```
+"command":"python3 -m unittest discover -s tests -t .","check":{"kind":"allowed",...},"exit_code":0
+"output":"Exit code 0\n.....\n------...\nRan 5 tests in 0.001s\n\nOK\n"
+"agent_says":"5 tests ran and all passed."
+"tokens":"3,799 tokens sent and 100 received, in 2 model turns."
+the key in the run's logs: 0 times
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 40.32s
+```
+
+A copy of the sample file, unsigned, whose text also asks for `python3 --version`, which its `allow` list does not
+have:
+
+```
+"question":{"id":1,"ask":"Run this command",...,"what":"python3 --version",...,"reason":"the file does not ask for this command",...}
+"question_closed","id":1,"how":"You said no."
+"checked",...,"check":{"kind":"refused_by_you","words":"Refused: you said no"}
+"output":"Steplet refused this: the receiver said no. It will not run. Carry on another way, or finish."
+"agent_says":"... The test runner executed 5 tests and all passed (OK). I attempted to run `python3 --version` to
+show the Python version, but Steplet refused the command, so I cannot report which Python version was used under the
+given restrictions."
+"tokens":"5,844 tokens sent and 562 received, in 3 model turns."
+the key in the run's logs: 0 times
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 19.12s
+```
+
+Cost at the price table's prices ($0.30 per million tokens sent, $0.90 per million received): 1,229,700 nanodollars
+(about $0.0012) and 2,259,000 nanodollars (about $0.0023); with the explain call, about $0.0041 in all. The screen's
+money line said "less than $0.01 of $0.25" for both runs.
+
+Seen in both runs: the report lists three new files, `__pycache__/calc.cpython-314.pyc`,
+`tests/__pycache__/__init__.cpython-314.pyc` and `tests/__pycache__/test_calc.cpython-314.pyc`. Python writes these
+itself when the tests run, although the file says "Do not change any file". The report shows them.
+
+After the runs, the saved-keys count over the whole history, with the records committed:
+
+```
+Anthropic key (Steplet/anthropic-api-key): saved; found 0 times in 4437 objects (plain text 0, UTF-16 0, base64 0).
+Nebius key (Steplet/nebius-api-key): saved; found 0 times in 4437 objects (plain text 0, UTF-16 0, base64 0).
+```
+
+The disk Steplet's Linux takes on this laptop, read from WSL's own list of Linuxes:
+
+```
+steplet | C:\Users\RANVIR\AppData\Local\Steplet\wsl | 4.74 GB (5,08,45,45,024 bytes)
+```
+
+### Not checked
+
+- The screens: nobody clicked through the app for these runs, so the live view and the report screen were not seen
+  with this data.
+- Use case 5's public test file, and the attack cases, with real Nemotron.
+- The cost against Nebius's bill.
+- The disk a fresh install of Steplet's Linux takes: the 4.74 GB is after two days of test runs in it.

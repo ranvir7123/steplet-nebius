@@ -114,19 +114,41 @@ The README lists every test by name, and what is **not** verified yet.
 - 10 attack tests of Steplet's agent in Steplet's real Linux, each with a control that shows the test can fail. The
   attack suite replays them as ten cases next to the 39 cases it runs for Claude Code: on 30 Oct, **49 of 49 blocked,
   nothing left behind**, with a scripted model (the record is in the repository).
-<!-- TODO after Task 10: the real runs with Nemotron: what happened, refusals, exit codes, what each run cost. -->
+- **Real runs with Nemotron 3 Super on 30 Oct**, started by a test program that drives the app's own session, the
+  same code the "Run with Steplet's agent" button starts (nobody clicked through the screens for these):
+  - The sample file: Nemotron asked for the one command the file allows, Steplet allowed it, exit code 0, and
+    Python's own output says "Ran 5 tests" and "OK". Nemotron said "5 tests ran and all passed." 2 model turns, 40
+    seconds, about $0.0012.
+  - A copy whose text also asks for a command it does not allow (`python3 --version`): Steplet asked, the answer was
+    No, the move was refused and Nemotron was told. It finished and said it could not report the Python version
+    because Steplet refused the command. 3 model turns, 19 seconds, about $0.0023.
+  - "What will this file do?" on the sample file: a plain description in 3.6 seconds, for $0.00057.
+  - The Nebius key was found 0 times in the runs' logs. The full output is in the repository (`docs/real-runs`).
 
 ### Challenges
 
-<!-- TODO after Task 10: fill from what actually happened in Tasks 4 to 10. Candidates already recorded:
-- A Stop in the first milliseconds of a run could leave Steplet's Linux unable to look up web addresses (a fault
-  older than this copy, found while testing the agent; see docs/nebius-hackathon-results.md, Task 6).
-- The fence program keeps some folders read-only, so a move's temporary folder had to be the run's own
-  (docs/decisions.md, N17 and the rows after it). -->
+- **The key came on the last day.** Applying the hackathon's promo code failed at first with an error that said
+  nothing we could act on, so the first real Nemotron call was on 30 Oct, the deadline day. Everything before that was
+  built and tested against a stand-in model and a stand-in server. The first real runs then needed no change to
+  Steplet's code.
+- **Nemotron thinks before it answers, and thinking counts.** Nemotron 3 Nano used 1,721 tokens for a one-line answer.
+  A spending cap counted in tokens has to leave room for that, so Steplet's cap counts the longest answer allowed,
+  thinking included, before each call.
+- **A Stop at the wrong moment broke Steplet's Linux.** A Stop pressed in the first milliseconds of a run could leave
+  Steplet's Linux unable to look up web addresses until it restarted. The fault was in Steplet before the Nebius work
+  began; testing the agent found it, because the agent meets that moment at every move. Steplet now keeps its own
+  copy of the lookup file and puts it back at every start, and tests that break lookup the same way pass.
+- **The fence keeps some folders read-only**, so the temporary folder each move needs had to live inside the run's own
+  folder.
+- **"Change nothing" is harder than it sounds.** In the real runs, Python wrote its own cache files while running the
+  tests, although the file says "Do not change any file". Steplet's report lists them instead of hiding them.
 
 ### What's next
 
-<!-- TODO: Ranvir's words. Keep to what is planned, not promised. -->
+<!-- TODO: Ranvir's words. Keep to what is planned, not promised. A draft to approve or rewrite:
+- Run use case 5 and the attack cases with real Nemotron, not only a scripted model.
+- Compare Steplet's own cost count with what Nebius actually bills.
+- Try Steplet on more Windows laptops than one, and sign the installer so Windows stops warning about it. -->
 
 ---
 
