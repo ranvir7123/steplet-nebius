@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use steplet_suite::catalogue::Layer;
+use steplet_suite::catalogue::{Layer, Runner};
 use steplet_suite::record::{Day, keep, record_name};
 use steplet_suite::runner::MADE_UP_KEY;
 
@@ -17,15 +17,34 @@ fn empty_folder(name: &str) -> PathBuf {
 #[test]
 fn a_record_is_named_by_day_version_and_layer() {
     let day = Day { year: 2026, month: 10, day: 3 };
-    assert_eq!(record_name(&day, "2.1.220", Layer::Scripted, None), "2026-10-03-claude-2.1.220-scripted.txt");
-    assert_eq!(record_name(&day, "2.1.220", Layer::Live, None), "2026-10-03-claude-2.1.220-live.txt");
+    let claude = [Runner::Claude];
+    assert_eq!(record_name(&day, "2.1.220", Layer::Scripted, &claude, None), "2026-10-03-claude-2.1.220-scripted.txt");
+    assert_eq!(record_name(&day, "2.1.220", Layer::Live, &claude, None), "2026-10-03-claude-2.1.220-live.txt");
     assert_eq!(
-        record_name(&day, "2.1.220", Layer::Scripted, Some("G")),
+        record_name(&day, "2.1.220", Layer::Scripted, &claude, Some("G")),
         "2026-10-03-claude-2.1.220-scripted-only-G.txt"
     );
     assert_eq!(
-        record_name(&day, "2.1.220", Layer::Scripted, Some("I,M,R,Y")),
+        record_name(&day, "2.1.220", Layer::Scripted, &claude, Some("I,M,R,Y")),
         "2026-10-03-claude-2.1.220-scripted-only-I-M-R-Y.txt"
+    );
+}
+
+/// The record names the agents its cases ran: Claude Code by its version, Steplet's own agent, or both.
+#[test]
+fn a_record_names_the_agents_its_cases_ran() {
+    let day = Day { year: 2026, month: 10, day: 30 };
+    assert_eq!(
+        record_name(&day, "2.1.220", Layer::Scripted, &[Runner::Own], None),
+        "2026-10-30-steplet-agent-scripted.txt"
+    );
+    assert_eq!(
+        record_name(&day, "2.1.220", Layer::Scripted, &[Runner::Claude, Runner::Own], None),
+        "2026-10-30-claude-2.1.220-and-steplet-agent-scripted.txt"
+    );
+    assert_eq!(
+        record_name(&day, "2.1.220", Layer::Scripted, &[Runner::Own], Some("F4,U")),
+        "2026-10-30-steplet-agent-scripted-only-F4-U.txt"
     );
 }
 

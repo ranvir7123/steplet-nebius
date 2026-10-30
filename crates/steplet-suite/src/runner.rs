@@ -17,8 +17,9 @@ use crate::catalogue::{Case, Needs};
 use crate::support;
 use crate::verdict::{TestOutcome, Verdict, read_results, verdict};
 
-/// The made-up key the scripted layer's tests use; each record is counted for it before it is kept.
-pub use crate::support::MADE_UP_KEY;
+/// The made-up keys the scripted layer's tests use (Anthropic's, and Nebius's for Steplet's agent); each record is
+/// counted for them before it is kept.
+pub use crate::support::{MADE_UP_KEY, MADE_UP_NEBIUS_KEY};
 
 /// Why the suite does not start. Nothing is built or run, and nothing on Steplet's Linux is changed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,7 +84,8 @@ pub fn ready_to_run(look: &State, claude_found: Option<&str>, lock_free: bool) -
 }
 
 /// The files of `/opt/steplet-test` kept on purpose: the helpers each test puts there again, and their logs.
-const KEPT_TEST_FILES: &[&str] = &["listener.py", "fake_model.py", "made-up-key.sha256", "count_key.py", "m0-fixture"];
+const KEPT_TEST_FILES: &[&str] =
+    &["listener.py", "fake_model.py", "made-up-key.sha256", "count_key.py", "count_everywhere.py", "m0-fixture"];
 const KEPT_TEST_ENDINGS: &[&str] = &[".script.json", ".model.log", ".listener.log"];
 
 /// What a case left, from the look after it (`support::after_case_look`, records ended by a NUL): each path, or

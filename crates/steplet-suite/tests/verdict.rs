@@ -12,7 +12,7 @@ use std::path::Path;
 use std::process::Command;
 
 use steplet_run::setup::{CLAUDE_VERSION, State, Wsl};
-use steplet_suite::catalogue::{Case, Layer, Line, Needs, TestRef};
+use steplet_suite::catalogue::{Case, Layer, Line, Needs, Runner, TestRef};
 use steplet_suite::runner::{
     CaseResult, Machine, NotReady, leftovers, output_of, passed, ready_to_run, removal_script, run_cases,
     test_environment,
@@ -29,6 +29,7 @@ static TWO: Case = Case {
     lines: &[Line::Checks],
     tests: &[test("first_check"), test("second_check")],
     layer: Layer::Scripted,
+    runner: Runner::Claude,
     needs: &[Needs::Windows],
 };
 
@@ -38,6 +39,7 @@ static ON_LINUX: Case = Case {
     lines: &[Line::ChangeFiles],
     tests: &[test("a_linux_check")],
     layer: Layer::Scripted,
+    runner: Runner::Claude,
     needs: &[Needs::StepletLinux],
 };
 
@@ -47,6 +49,7 @@ static SHARING: Case = Case {
     lines: &[Line::YourFiles],
     tests: &[test("a_linux_check"), test("another_linux_check")],
     layer: Layer::Scripted,
+    runner: Runner::Claude,
     needs: &[Needs::StepletLinux],
 };
 
@@ -329,7 +332,8 @@ fn leftovers_after_a_case_are_named_and_fail_the_suite() {
     // The helpers each test puts back when it needs them (seen in the first replay on Steplet's Linux, 22 Oct 2026).
     let clean = "test-file\t/opt/steplet-test/fake_model.py\0test-file\t/opt/steplet-test/t7a.script.json\0\
                  test-file\t/opt/steplet-test/t7a.model.log\0test-file\t/opt/steplet-test/made-up-key.sha256\0\
-                 test-file\t/opt/steplet-test/count_key.py\0test-file\t/opt/steplet-test/m0-fixture\0";
+                 test-file\t/opt/steplet-test/count_key.py\0test-file\t/opt/steplet-test/m0-fixture\0\
+                 test-file\t/opt/steplet-test/count_everywhere.py\0";
     assert_eq!(leftovers(clean), Vec::<String>::new());
     assert_eq!(
         leftovers(

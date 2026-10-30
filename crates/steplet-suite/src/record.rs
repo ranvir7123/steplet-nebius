@@ -1,11 +1,12 @@
 //! The suite's records (phase 5): the whole output of a run, kept as plain text in `docs/suite/`, one file per layer,
-//! Claude Code version and day, and never written over. Each record is counted for a key's text before it is kept.
+//! agent (Claude Code by its version, Steplet's own agent) and day, and never written over. Each record is counted for
+//! a key's text before it is kept.
 
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::catalogue::Layer;
+use crate::catalogue::{Layer, Runner};
 
 /// A day in this computer's time.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,12 +28,20 @@ pub fn now() -> (Day, String) {
     (Day { year: t.wYear, month: t.wMonth, day: t.wDay }, format!("{:02}:{:02}", t.wHour, t.wMinute))
 }
 
-/// `<date>-claude-<version>-<layer>.txt`; a run of some cases only says which (`…-scripted-only-G-W1.txt`).
-pub fn record_name(day: &Day, version: &str, layer: Layer, only: Option<&str>) -> String {
+/// `<date>-<agents>-<layer>.txt`, where `<agents>` names the agents the cases ran: `claude-<version>`,
+/// `steplet-agent`, or both joined by `-and-`. A run of some cases only says which (`…-scripted-only-G-W1.txt`).
+pub fn record_name(day: &Day, version: &str, layer: Layer, runners: &[Runner], only: Option<&str>) -> String {
+    let agents: Vec<String> = runners
+        .iter()
+        .map(|r| match r {
+            Runner::Claude => format!("claude-{version}"),
+            Runner::Own => "steplet-agent".to_owned(),
+        })
+        .collect();
     let only = only
         .map(|o| format!("-only-{}", o.split(',').map(str::trim).collect::<Vec<_>>().join("-")))
         .unwrap_or_default();
-    format!("{:04}-{:02}-{:02}-claude-{version}-{}{only}.txt", day.year, day.month, day.day, layer.name())
+    format!("{:04}-{:02}-{:02}-{}-{}{only}.txt", day.year, day.month, day.day, agents.join("-and-"), layer.name())
 }
 
 /// A kept record, and how many times each key's text was in it before it was kept.

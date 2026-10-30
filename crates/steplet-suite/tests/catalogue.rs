@@ -1,12 +1,13 @@
 //! The catalogue (phase 5 Task 1): every known attack names tests that exist, every line on screen has a scripted
-//! case, and the run chooser and the suite name the same tests. None of these needs Steplet's Linux.
+//! case, the run chooser and the suite name the same tests, and each case says which agent its tests run (the Nebius
+//! plan, Task 9). None of these needs Steplet's Linux.
 
 use std::path::Path;
 
 use steplet_core::canon::canonicalize;
 use steplet_core::header::{Steplet, parse};
 use steplet_run::{NetworkMode, promises};
-use steplet_suite::catalogue::{CASES, Case, Layer, Line, Needs, TestRef, cases_for, select};
+use steplet_suite::catalogue::{CASES, Case, Layer, Line, Needs, Runner, TestRef, cases_for, for_runner, select};
 
 fn steplet(allow: &str) -> Steplet {
     let f = format!("---\nsteplet: 1\ntitle: t\nsender: s\nexpires: 2026-12-31\nsteps:\n  - a\n{allow}---\n");
@@ -107,6 +108,8 @@ fn ids_are_unique_and_follow_their_line() {
         assert_eq!(letters, letter.to_string(), "{}: its letter follows its first line", case.id);
         assert!(number.chars().all(|c| c.is_ascii_digit()) && !number.starts_with('0'), "{}", case.id);
         assert!(!case.attack.is_empty() && !case.needs.is_empty(), "{}", case.id);
+        // An attack is one row of the suite's table.
+        assert!(!case.attack.contains('\n') && !case.attack.contains("  "), "{}: {:?}", case.id, case.attack);
     }
 }
 
@@ -133,6 +136,45 @@ fn a_test_name_means_one_test() {
         let place = *seen.entry(t.name).or_insert((t.package, t.program));
         assert_eq!(place, (t.package, t.program), "{} names two tests", t.name);
     }
+}
+
+/// Steplet's own agent's cases are the ones whose tests run it (`agent_linux.rs`); every other case runs Claude Code.
+#[test]
+fn each_case_says_which_agent_its_tests_run() {
+    for case in CASES {
+        let own = case.tests.iter().filter(|t| t.program == "agent_linux").count();
+        assert!(own == 0 || own == case.tests.len(), "{}: its tests run one agent", case.id);
+        let runner = if own > 0 { Runner::Own } else { Runner::Claude };
+        assert_eq!(case.runner, runner, "{}", case.id);
+    }
+    for runner in [Runner::Claude, Runner::Own] {
+        assert!(cases_for(Layer::Scripted).iter().any(|c| c.runner == runner), "{runner:?} has scripted cases");
+    }
+}
+
+/// The agent's own lines on the run chooser are backed by its cases only: Claude Code runs never send a Nebius key,
+/// and the agent's moves are what end anything left running.
+#[test]
+fn the_agents_own_lines_are_backed_by_its_cases() {
+    for line in [Line::KeyOnWindows, Line::EndedBeforeNextMove] {
+        let backing: Vec<&Case> = CASES.iter().filter(|c| c.lines.contains(&line)).collect();
+        assert!(!backing.is_empty(), "{line:?} has a case");
+        assert!(backing.iter().all(|c| c.runner == Runner::Own), "{line:?}");
+    }
+}
+
+#[test]
+fn runner_picks_the_cases_of_one_agent() {
+    let ids = |cases: Vec<&Case>| cases.iter().map(|c| c.id).collect::<Vec<_>>();
+    let all = cases_for(Layer::Scripted);
+    let own = for_runner(&all, Some(Runner::Own));
+    let claude = for_runner(&all, Some(Runner::Claude));
+    assert!(!own.is_empty() && own.iter().all(|c| c.runner == Runner::Own), "{:?}", ids(own));
+    assert!(!claude.is_empty() && claude.iter().all(|c| c.runner == Runner::Claude), "{:?}", ids(claude));
+    assert_eq!(own.len() + claude.len(), all.len());
+    assert_eq!(ids(for_runner(&all, None)), ids(all.clone()), "all: every case, in the catalogue's order");
+    let in_order: Vec<&str> = all.iter().filter(|c| c.runner == Runner::Own).map(|c| c.id).collect();
+    assert_eq!(ids(for_runner(&all, Some(Runner::Own))), in_order, "in the catalogue's order");
 }
 
 #[test]

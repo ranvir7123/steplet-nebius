@@ -361,8 +361,8 @@ Cases, each judged from outside with a control, and each backing a chooser line:
 - A9, a refusal goes back to the model and the run still ends with its report.
 - `stop_during_a_move_kills_it`: Stop during `sleep 600` ends the run within 5 s, and no steplet process is left.
 
-- [ ] Write; run `cargo test -p steplet-run --offline --test agent_linux -- --ignored` and `cargo suite scripted --runner all`; paste the suite's table and save its record in `docs/suite/`.
-- [ ] Any case not blocked: fix the product test-first; the case stays. Commit: "The attack suite runs on Steplet's agent: every case blocked".
+- [x] Write; run `cargo test -p steplet-run --offline --test agent_linux -- --ignored` and `cargo suite scripted --runner all`; paste the suite's table and save its record in `docs/suite/`.
+- [x] Any case not blocked: fix the product test-first; the case stays. Commit: "The attack suite runs on Steplet's agent: every case blocked".
 
 ### Task 10: Real runs (N4)
 

@@ -3,6 +3,9 @@
 //! only.
 #![allow(dead_code)] // each test file uses part of it
 
+pub mod net;
+pub mod stand_in;
+
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -122,6 +125,9 @@ pub fn install_gate(distro: &str) -> String {
 
 /// A made-up key the gate's key mode serves in tests; never a real one.
 pub const MADE_UP_KEY: &str = "sk-ant-api03-STEPLET-TEST-MADE-UP-NOT-A-KEY";
+
+/// A made-up Nebius key the tests of Steplet's own agent give a run, as the app gives the real one; never a real one.
+pub const MADE_UP_NEBIUS_KEY: &str = "v1.STEPLET-TEST-MADE-UP-NEBIUS-KEY-NOT-REAL";
 
 /// The gate for run `run_id`: the gate program on Steplet's Linux disk, and the service on Windows answering with
 /// `decide` within `deadline` and serving the made-up key (the scripted layer; the live layer serves the real key
