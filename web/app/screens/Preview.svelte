@@ -7,10 +7,32 @@
   import Findings from "../../shared/Findings.svelte";
   import Icon from "../../shared/Icon.svelte";
   import Outcome, { type Colour } from "../../shared/Outcome.svelte";
+  import { getContext } from "svelte";
+  import type { AdviceView } from "../../shared/types/AdviceView";
   import type { EntryView } from "../../shared/types/EntryView";
   import type { PreviewView } from "../../shared/types/PreviewView";
+  import type { Backend } from "../lib/backend";
 
   let { view, onrun }: { view: PreviewView; onrun: (typed: string | null) => void } = $props();
+
+  // "What this file will do" (the Nebius plan, Task 11): Nemotron's reading, asked for only when the receiver presses
+  // the button. It is advice beside the rating; the rating above comes from Rust's fixed rules and never changes here.
+  const backend = getContext<Backend>("backend");
+  let advice = $state<AdviceView | null>(null);
+  let adviceError = $state<string | null>(null);
+  let asking = $state(false);
+
+  async function ask() {
+    asking = true;
+    adviceError = null;
+    try {
+      advice = await backend.explainFile(view.sha256);
+    } catch (e) {
+      adviceError = typeof e === "string" ? e : "Steplet could not ask Nemotron. Try again.";
+    } finally {
+      asking = false;
+    }
+  }
 
   /** The sentence a red file needs before Run works (J3 A, R9); Rust checks it again. */
   // A red file's sentence comes from Rust, which checks it again when the run starts.
@@ -75,6 +97,35 @@
       <p class="key">Key {view.identity.key}</p>
     {/if}
   </section>
+
+  {#if view.file}
+    {#if advice}
+      <section class="advice" aria-labelledby="advice-title">
+        <h2 id="advice-title">Nemotron's reading: AI advice, it may be wrong</h2>
+        <div class="advice-summary"><FileText text={advice.summary} block /></div>
+        {#if advice.watch_out.length > 0}
+          <h3 id="watch-title">Things to watch</h3>
+          <ul class="watch" aria-labelledby="watch-title">
+            {#each advice.watch_out as w, i (i)}
+              <li><FileText text={w} /></li>
+            {/each}
+          </ul>
+        {/if}
+        <p class="advice-about">{advice.model} · cost of this answer: {advice.cost}</p>
+        <p class="advice-footer">Steplet's rating above comes from fixed rules. This advice does not change it.</p>
+      </section>
+    {:else}
+      <section class="ask" aria-label="Ask Nemotron what this file will do">
+        {#if asking}
+          <p class="asking" role="status">Asking Nemotron…</p>
+        {:else}
+          <button class="button" type="button" onclick={ask}>Ask Nemotron what this file will do</button>
+        {/if}
+        <p class="muted small">Sends the file's text to Nebius.</p>
+        {#if adviceError}<p class="message error" role="alert">{adviceError}</p>{/if}
+      </section>
+    {/if}
+  {/if}
 
   {#if view.file}
     <div class="numbers">
@@ -427,5 +478,72 @@
 
   .muted {
     color: var(--text-muted);
+  }
+
+  .ask {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  /* The same height as the button it stands in for, so nothing below moves while Nemotron reads. */
+  .asking {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+    font-weight: 600;
+  }
+
+  .small {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .message {
+    align-self: stretch;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid;
+    border-radius: var(--radius-panel);
+  }
+
+  .error {
+    border-color: var(--red-border);
+    background: var(--red-bg);
+    color: var(--red-fg);
+  }
+
+  .advice {
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+  }
+
+  .advice h3 {
+    margin-top: var(--space-4);
+  }
+
+  .watch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding-left: var(--space-5);
+  }
+
+  .advice-about,
+  .advice-footer {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .advice-about {
+    margin-top: var(--space-4);
+  }
+
+  .advice-footer {
+    margin-top: var(--space-1);
   }
 </style>

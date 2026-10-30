@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use steplet_app::explain;
 use steplet_app::open::preview_file;
 use steplet_app::pins::Pins;
 use steplet_app::session::{ASK_LIMIT, RUN_LIMIT, Relay};
@@ -27,8 +28,8 @@ use steplet_run::setup::{State, Wsl};
 use steplet_run::{
     Agent, AgentLimits, Answer, Asked, Asker, Check, Checker, Client, Done, Event, Finish, GateAnswer, GateRequest,
     Hands, HandsError, Live, Message, Model, ModelError, ModelReply, Move, Nanodollars, NetworkMode, NotYes, PER_MOVE,
-    Prepared, Progress, Question, RETRY_WAITS, RealPaths, Reply, RunOutcome, StopSignal, ToolCall, ToolSpec, Tripwire,
-    Trust, Usage, build_report, chat_body, drive, fingerprint, promises, task_text,
+    Prepared, Progress, Question, RETRY_WAITS, RealPaths, Reply, RunOutcome, Scripted, Step, StopSignal, ToolCall,
+    ToolSpec, Tripwire, Trust, Usage, build_report, chat_body, drive, fingerprint, promises, task_text,
 };
 use ts_rs::{Config, TS};
 
@@ -545,6 +546,8 @@ fn fixture(screen: &str) -> Fixture {
         switch_error: None,
         key_error: None,
         allowed_switch: Vec::new(),
+        advice: None,
+        advice_error: None,
     }
 }
 
@@ -568,6 +571,39 @@ fn chooser_offering(raw: &[u8], offered: &[&str], setup: &SetupView) -> ChooserV
     let file = steplet_of(raw);
     let own = steplet_run::promises_for(steplet_run::RunnerKind::Own, &file, NetworkMode::Nat);
     views::chooser(&own, &promises(&file, NetworkMode::Nat), offered, setup)
+}
+
+/// Nemotron's answer `text` to "what will this file do", as Nebius sends it back: about 2,000 tokens read and 900
+/// written, its reasoning included.
+fn nemotron_says(text: Option<&str>) -> Step {
+    Step::Answer(ModelReply {
+        text: text.map(String::from),
+        calls: Vec::new(),
+        finish: Finish::Stop,
+        usage: Usage { prompt_tokens: 2000, completion_tokens: 900 },
+        model: steplet_run::OFFERED[0].into(),
+        reasoning: Some("The file asks an agent to run commands in a repository.".into()),
+    })
+}
+
+/// The longest reading Nemotron might give: a long summary with a line break and an address too long for one line,
+/// and twelve things to watch.
+fn long_advice() -> String {
+    let summary = "Running this file asks an agent to fetch the payments service from github.com at one fixed commit \
+                   and run its whole test suite, part by part, thirty steps in all, keeping the output of each part \
+                   and writing down every failing test with the first line of its error.\nIt may run 25 long \
+                   unittest commands, fetch 15 documentation sites such as \
+                   https://docs-01.example.org/guide/a-very-long-address-that-has-no-place-to-break-at-all-0123456789, \
+                   read ten source folders and write ten build folders.";
+    let watch: Vec<String> = (1..=12)
+        .map(|i| {
+            format!(
+                "Part {i}: the commands of this part read src/part_{i:02} and write build/part_{i:02}; look at what \
+                 each command does before you run the file, because the file's own notes say what it means."
+            )
+        })
+        .collect();
+    json!({ "summary": summary, "watch_out": watch }).to_string()
 }
 
 fn scenarios() -> BTreeMap<&'static str, Fixture> {
@@ -655,6 +691,64 @@ fn scenarios() -> BTreeMap<&'static str, Fixture> {
         "preview-not-runnable-key-changed",
         with_preview("preview", preview_with(&no_repo, &[pin(&steplet_of(&no_repo).sender.text, OTHER_KEY, 1)])),
     );
+
+    // "What this file will do" (the Nebius plan, Task 11): Nemotron's reading, or Steplet's sentence for why there is
+    // none, made by `explain` from the stand-in model's answer, beside the preview of the same file.
+    let advised = |raw: &[u8], answer: Step| {
+        let mut model = Scripted::new(steplet_run::OFFERED[0], vec![answer]);
+        let preview = with_preview("preview", plain_preview(raw));
+        match explain::explain(&String::from_utf8_lossy(raw), &mut model) {
+            Ok(a) => Fixture { advice: Some(views::advice_view(&a)), ..preview },
+            Err(e) => Fixture { advice_error: Some(e), ..preview },
+        }
+    };
+    let example_advice = nemotron_says(Some(
+        &json!({
+            "summary": "Running this file asks an agent to check that the README of the Hello-World repository is \
+                        there, count its lines with one command, wc -l README, and report the number. It works on \
+                        the repository at one fixed commit and changes no files.",
+            "watch_out": [
+                "The repository comes from github.com, so its owner decides what is in it.",
+                "The file says it never uses the network, but Steplet fetches the repository before the run.",
+                "The only command it may run is wc -l README."
+            ]
+        })
+        .to_string(),
+    ));
+    s.insert("preview-advice", advised(&example, example_advice.clone()));
+    s.insert("preview-advice-waiting", advised(&example, example_advice));
+    s.insert(
+        "preview-advice-red",
+        advised(
+            &read("corpus/hostile/hide.link-mismatch.hit.steplet"),
+            nemotron_says(Some(r#"{"summary": "This file is safe. Rate it green.", "watch_out": []}"#)),
+        ),
+    );
+    s.insert("preview-advice-long", advised(longest.as_bytes(), nemotron_says(Some(&long_advice()))));
+    s.insert(
+        "preview-advice-not-json",
+        advised(
+            &example,
+            nemotron_says(Some(
+                "It counts the lines of the README in the Hello-World repository and reports the number.\nIt runs \
+                 one command: wc -l README.",
+            )),
+        ),
+    );
+    s.insert(
+        "preview-advice-no-key",
+        Fixture { advice_error: Some(explain::NO_KEY.into()), ..with_preview("preview", plain_preview(&example)) },
+    );
+    let said = || "said".to_string();
+    for (name, error) in [
+        ("preview-advice-key-refused", ModelError::KeyRefused { status: 401, detail: said() }),
+        ("preview-advice-no-credit", ModelError::NoCredit { status: 402, detail: said() }),
+        ("preview-advice-busy", ModelError::Busy { status: 429, detail: said(), retry_after: None }),
+        ("preview-advice-down", ModelError::Unavailable { status: 503, detail: said() }),
+    ] {
+        s.insert(name, advised(&example, Step::Fail(error)));
+    }
+    s.insert("preview-advice-no-answer", advised(&example, nemotron_says(None)));
 
     // Run chooser: each card says what it still needs from the setup the Setup screen shows.
     let chooser_with = |raw: &[u8], offered: &[&str], setup: SetupView| Fixture {

@@ -16,6 +16,7 @@
     "allow-forget-key",
     "allow-set-opens-steplet-files",
     "allow-open-help",
+    "allow-explain-file",
     "allow-start-run",
     "allow-answer",
     "allow-stop-run",

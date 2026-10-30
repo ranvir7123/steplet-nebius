@@ -1,6 +1,7 @@
 // The real backend: the app's own Tauri commands and events (plan section 6). Only the app build holds it.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { AdviceView } from "../../shared/types/AdviceView";
 import type { ChooserView } from "../../shared/types/ChooserView";
 import type { PreviewView } from "../../shared/types/PreviewView";
 import type { ProgressView } from "../../shared/types/ProgressView";
@@ -25,6 +26,7 @@ export const backend: Backend = {
   stopAndClose: () => invoke<void>("stop_and_close"),
   saveReport: () => invoke<string | null>("save_report"),
   openHelp: (topic) => invoke<void>("open_help", { topic }),
+  explainFile: (sha256) => invoke<AdviceView>("explain_file", { sha256 }),
   onRunProgress: (cb) => listen<ProgressView>("run-progress", (e) => cb(e.payload)),
   onSetupLine: (cb) => listen<Shown>("setup-line", (e) => cb(e.payload)),
   onCloseAsked: (cb) => listen("close-asked", () => cb()),

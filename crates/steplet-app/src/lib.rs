@@ -9,6 +9,7 @@ use tauri::{Url, WebviewWindowBuilder};
 
 include!("commands.rs");
 
+pub mod explain;
 pub mod help;
 pub mod key;
 pub mod open;
@@ -281,6 +282,15 @@ fn set_opens_steplet_files(state: tauri::State<AppState>, on: bool) -> Result<vi
     Ok(state.setup_view())
 }
 
+/// "Ask Nemotron what this file will do" (the Nebius plan, Task 11): one call to Nemotron on Nebius Token Factory with
+/// the text of the file on screen, previewed with the SHA-256 `sha256`. The answer is advice shown beside the rating;
+/// it never changes it. The Nebius key is read from Credential Manager now and goes only to Nebius.
+#[tauri::command(async)]
+fn explain_file(state: tauri::State<AppState>, sha256: String) -> Result<views::AdviceView, String> {
+    let raw = state.opened.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("Steplet has no file open.")?;
+    explain::ask_nebius(&raw, &sha256, key::ENTRIES).map(|a| views::advice_view(&a))
+}
+
 /// Opens one of Steplet's own help pages in the browser, from a fixed list (S11).
 #[tauri::command]
 fn open_help(topic: String) -> Result<(), String> {
@@ -335,6 +345,7 @@ pub fn run() {
             forget_key,
             set_opens_steplet_files,
             open_help,
+            explain_file,
             start_run,
             answer,
             stop_run,
