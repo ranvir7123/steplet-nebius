@@ -301,6 +301,32 @@ Each step: Stop, time and step checks; the worst case against the cap; the model
 - [ ] Code; `cargo test -p steplet-run --offline`; the Claude Code runner's own tests still pass.
 - [ ] Commit: "Steplet's own agent: Nemotron proposes, the checker decides, the fence runs".
 
+### Task 6b: Name lookup survives a Stop at any moment (Linux, N3; proposed and approved 29 Oct)
+
+**Who meets it:** a receiver who presses Stop in the first second of a run. Before the agent starts, root's start step swaps WSL's `/mnt/wsl` for Steplet's own folder, which holds the only copy of the name lookup file. A Stop that kills the step in the few milliseconds between "remove" and "put back" leaves Steplet's Linux unable to look up any web address, and every later run fails at the site lookup or the clone until Windows or WSL restarts. Found in Task 6's Linux rerun; the gap is the same at 956e4ab. Steplet's own agent meets it once per move, not once per run: `start-hands.sh` runs the same step at the start of every move, and a Stop ends the move by killing `wsl.exe` from Windows, which hangs up the script inside Linux at once (shown in Task 6's results: a script without a trap died at the kill). After this task, the next run puts name lookup back by itself.
+
+**Files:**
+- Modify `crates/steplet-run/src/root-common.sh`: `LOOKUP_COPY=/var/lib/steplet/resolv.conf`, and `keep_name_lookup`. When `/etc/resolv.conf` reads and is not empty, it saves that text to the copy (written beside it, then moved over it; root, 644). Otherwise it reads the copy, unmounts whatever is at `/mnt/wsl`, mounts Steplet's folder and writes the copy into it; with no copy, it ends with exit code 30 and "the name lookup file is gone, and Steplet has no copy of it". `close_shared_folders` calls it first and takes the lookup text from the copy.
+- Modify `crates/steplet-run/src/launch.rs`: `pub(crate) fn keep_name_lookup(distro: &str) -> Result<(), String>`: one bounded WSL call as root, `bash -s`, whose standard input is this build's `root-common.sh` text followed by the call, so it never depends on an older installed copy.
+- Modify `crates/steplet-run/src/run.rs`: `pin_listed_sites`, which both runners call before anything else needs name lookup, calls it first. A failure refuses the run as `RunError::ListedSite { site: "", why: "Steplet will not run this file: Steplet could not keep name lookup working in its Linux (<reason>)." }`, which the app already shows as it is (changed from "cannot look up web addresses" after review, since a copy that could not be saved does not mean lookup is broken).
+- Test: `crates/steplet-run/tests/launch.rs` and `hands.rs` (`#[ignore]`, Steplet's Linux). Each test puts back the lookup file it read at its start, whatever happens.
+
+- [x] Linux tests first, seen failing before the code:
+  - `a_run_after_a_stop_in_the_gap_still_looks_up_names`: break it as the gap does (`umount -R -l /mnt/wsl` as root) and show `getent hosts github.com` fails; then a full scripted run clones and ends with exit code 0; afterwards `/mnt/wsl` is `steplet-wsl` holding only `resolv.conf`, and the lookup answers;
+  - `a_run_after_a_stop_just_after_the_new_folder_still_looks_up_names`: the same from the second gap, an empty `steplet-wsl` mounted;
+  - `the_lookup_copy_is_roots_alone`: the copy is root's, 644, and the steplet account cannot change it;
+  - `hands.rs`: `a_move_after_a_stop_in_the_gap_still_runs`: break it, then one move of Steplet's own agent runs (exit 0) and name lookup works after it.
+- [x] Code; rerun the `launch`, `hands` and `contain` groups (contain checks what is mounted under `/mnt`), then every Linux group; `cargo test -p steplet-run --offline`; fmt; clippy.
+- [x] Decision row N36. Commit: "A Stop at any moment no longer breaks name lookup in Steplet's Linux".
+
+### Task 6c: The hook tripwire test is not a race against the stand-in model (proposed and approved 29 Oct)
+
+`a_hook_in_the_run_s_settings_stops_the_run` failed once in Task 6's Linux rerun: the gate refused all 30 requests after the tripwire, as it must, but the stand-in model reached its 31st and last step at 4.1 s, before Steplet's Stop ended Claude Code; three reruns passed (Stop at 3.0 to 3.1 s, after 12 or 13 requests). The test's last checks assume Stop lands within 31 quick steps.
+
+**Files:** `crates/steplet-run/tests/tripwires.rs` only: `script_after` sends 300 refused steps instead of 30, and the two `tool_calls(..) < 31` checks become `< 301`, so a slow moment in Steplet's Linux no longer lets the script finish first. What the test protects (from the tripwire on, the gate refuses everything; the run is stopped) is unchanged.
+
+- [x] Run the `tripwires` group three times; each passes. Commit with Task 6b.
+
 ### Task 7: Report and live view
 
 **Files:** `crates/steplet-run/src/report.rs` (`Report` gains `spent: Option<Spent>`, `limit: Option<Limit>`; new `Trust::NotApplicable`, which shows no line); `crates/steplet-app/src/views.rs` (`ReportView`, `ProgressView`); `save.rs` (`report_text`); `web/app/screens/Run.svelte`, `Report.svelte`; `fake.ts`, `scenarios.ts`; tests in `crates/steplet-app/tests/views.rs`, `save.rs`, `web/app/tests/run.spec.ts`, `report.spec.ts`.

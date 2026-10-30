@@ -115,12 +115,17 @@ fn which_actions_ask_the_gate() {
 /// The scripted model's last words; a run stopped early never gets to them.
 const NOT_REACHED: &str = "Task 9: the end of the script.";
 
-/// A script of `first`, then `then` 30 times (each a turn of its own, so the run is still going when the tripwire
-/// stops it), then the last words.
+/// How many times `script_after` repeats its second step. Each is a turn of its own, so the run is still going when the
+/// tripwire stops it. 30 was once too few (the Nebius plan, Task 6c): in one run of the hook test the stand-in model
+/// reached its last step at 4.1 s, before Steplet's stop ended Claude Code, which usually takes 3 s. 300 widens the
+/// margin tenfold; it does not remove the race, so a much slower Linux could still let the script finish first.
+const REPEATS: usize = 300;
+
+/// A script of `first`, then `then` `REPEATS` times, then the last words.
 fn script_after(first: Value, then: &str) -> Value {
     let mut steps = vec![first];
     steps.extend(
-        (0..30).map(|i| json!({"tool": "Bash", "input": {"command": then, "description": format!("Step {i}")}})),
+        (0..REPEATS).map(|i| json!({"tool": "Bash", "input": {"command": then, "description": format!("Step {i}")}})),
     );
     steps.push(json!({"text": NOT_REACHED}));
     json!({"steps": steps})
@@ -140,7 +145,10 @@ allow:
     - touch allowed.txt
 ---
 ";
-    RunRequest { steplet: parse(&canonicalize(f.as_bytes()).unwrap()).unwrap(), max_turns: 60, ..request() }
+    // Turns enough for all of `script_after`'s steps, so a run Steplet did not stop would reach the script's end, and
+    // "stopped before the script's end" shows the stop, not the turn limit.
+    let max_turns = REPEATS as u32 + 100;
+    RunRequest { steplet: parse(&canonicalize(f.as_bytes()).unwrap()).unwrap(), max_turns, ..request() }
 }
 
 /// What `run` needs besides the request: the gate program installed as Steplet does, and the scripted model.
@@ -301,7 +309,7 @@ fn a_hook_in_the_run_s_settings_stops_the_run() {
         );
     }
     assert!(!reached_the_end(&outcome), "the run was stopped before the script's end");
-    assert!(tool_calls(&outcome) < 31, "{} of 31 tool calls were made", tool_calls(&outcome));
+    assert!(tool_calls(&outcome) < REPEATS + 1, "{} of {} tool calls were made", tool_calls(&outcome), REPEATS + 1);
 }
 
 #[test]
@@ -327,5 +335,5 @@ fn a_writing_command_made_to_skip_the_gate_stops_the_run() {
     };
     assert!(outcome.events.contains(&note));
     assert!(!reached_the_end(&outcome), "the run was stopped before the script's end");
-    assert!(tool_calls(&outcome) < 31, "{} of 31 tool calls were made", tool_calls(&outcome));
+    assert!(tool_calls(&outcome) < REPEATS + 1, "{} of {} tool calls were made", tool_calls(&outcome), REPEATS + 1);
 }

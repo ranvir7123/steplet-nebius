@@ -4,6 +4,8 @@
 //! appended to a text file, a stand-in model that refuses by script, and the made-up key. Each run goes the way the
 //! app's Run button sends it (`run_live_locked`, with the one-run lock the test holds), and is judged from Steplet's
 //! records, the stand-in model's log and root's looks from outside the fence, never from what the agent says (F47).
+//! Since the Nebius plan's Task 6b also: a run after a Stop at the wrong moment of a start step still looks up web
+//! addresses.
 //!
 //! Every test needs Steplet's Linux and the network (each run first fetches a small public repository), and they run
 //! one at a time: `cargo test -p steplet-run --offline --test restart -- --ignored --nocapture --test-threads=1`.
@@ -18,8 +20,8 @@ use steplet_core::canon::canonicalize;
 use steplet_core::header::parse;
 use steplet_core::policy::Policy;
 use steplet_run::{
-    ApiKey, Check, Event, Live, Progress, Refusal, Report, RunLock, RunPaths, RunRequest, RunSetup, StopSignal,
-    discard, run_live_locked, wsl,
+    ApiKey, Check, Event, Live, Progress, Refusal, Report, RunError, RunLock, RunPaths, RunRequest, RunSetup,
+    StopSignal, discard, run_live_locked, wsl,
 };
 use support::{MADE_UP_KEY, logs_dir, root_sh, scripted_model};
 
@@ -386,4 +388,140 @@ fn with_another_model_allowed_both_models_are_listed() {
     assert!(report.commands.is_empty(), "no tool call ran: {:?}", report.commands);
     assert_eq!(report.changed_files, Some(vec![]), "Steplet looked at the copy after the run: nothing changed");
     assert_eq!(left, NOTHING_LEFT, "Steplet removed the run");
+}
+
+/// The name lookup tests' declared command (the Nebius plan, Task 6b): it reads the repository's README.
+const READ_ME: &str = "cat README";
+
+/// A Stop that ends a start step just after it removed WSL's `/mnt/wsl`, before Steplet's own folder is back.
+const FIRST_GAP: &str = "umount -R -l /mnt/wsl";
+/// A Stop that ends a start step just after Steplet's own folder is back, before the lookup file is in it.
+const SECOND_GAP: &str = "umount -R -l /mnt/wsl && mount -t tmpfs -o size=64k,mode=755 steplet-wsl /mnt/wsl";
+
+/// One run that reads the README, as the app's Run button makes it. It must complete with no fault, its one command
+/// run and ended with exit code 0, and Steplet must have removed it.
+fn reads_its_readme(held: &RunLock, run_id: &str, port: u16) {
+    let Ran { report, left, .. } =
+        run_once(held, run_id, port, &request(&[READ_ME]), vec![bash(READ_ME)], Live::unattended());
+    assert!(report.completed && report.faults.is_empty(), "run {run_id} completed with no fault: {report:?}");
+    let ran = calls(&report);
+    assert_eq!(ran.len(), 1, "{ran:?}");
+    let (tool, command, _, code, output) = ran[0];
+    assert_eq!((tool, command, code), ("Bash", READ_ME, Some(0)), "{output}");
+    assert!(output.contains("Hello World"), "{output}");
+    assert_eq!(left, NOTHING_LEFT, "Steplet removed run {run_id}");
+}
+
+/// Breaks name lookup as a Stop at the wrong moment of a start step does, with `break_it` (root's shell). The control:
+/// the lookup file no longer reads, and no name looks up.
+fn stop_in_the_gap(distro: &str, break_it: &str) {
+    root_sh(distro, break_it);
+    let reads = root_sh(distro, "cat /etc/resolv.conf > /dev/null 2>&1 && echo reads || echo 'does not read'");
+    let lookup = support::lookup(distro);
+    println!("--- after the break ({break_it}): the lookup file {reads}; a lookup {lookup}");
+    assert_eq!((reads.as_str(), lookup.as_str()), ("does not read", "fails"), "the break took name lookup away");
+}
+
+/// Root's look at name lookup after a run: what is mounted at `/mnt/wsl`, what it holds, and the lookup file's text.
+const LOOKUP_LOOK: &str = "findmnt -rn -o SOURCE /mnt/wsl; ls -A /mnt/wsl; cat /etc/resolv.conf";
+
+/// The Nebius plan, Task 6b (N36), from the gap `break_it`. Run 1 reads the README, and so leaves Steplet's copy of the
+/// lookup file; the test then breaks name lookup as the Stop does (the control: nothing looks up). Pass: run 2
+/// completes, its command allowed and ended with exit code 0, and Steplet removed it; afterwards `/mnt/wsl` is
+/// Steplet's own folder holding only the lookup file, with the text it had before the Stop, and names look up.
+fn after_a_stop_the_next_run_looks_up_names(run_id: &str, port: u16, break_it: &str) {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let held = support::hold_linux();
+    let distro = support::steplet_linux();
+    let found = support::lookup_put_back(&distro);
+    reads_its_readme(&held, run_id, port);
+    stop_in_the_gap(&distro, break_it);
+    reads_its_readme(&held, run_id, port + 1);
+    let after = root_sh(&distro, LOOKUP_LOOK);
+    println!("--- after run 2 (/mnt/wsl's source, what it holds, the lookup file):\n{after}");
+    assert_eq!(after, format!("steplet-wsl\nresolv.conf\n{}", found.text));
+    assert_eq!(support::lookup(&distro), "works", "names look up after run 2");
+}
+
+/// A Stop that ends a run's start step just after it removed WSL's `/mnt/wsl` takes away the only lookup file. Before
+/// Task 6b every later run then failed at its first web address, until Windows or WSL restarted.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_run_after_a_stop_in_the_gap_still_looks_up_names() {
+    after_a_stop_the_next_run_looks_up_names("n6ba", 47972, FIRST_GAP);
+}
+
+/// The same from the start step's second gap: Steplet's own folder is back at `/mnt/wsl`, empty.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_run_after_a_stop_just_after_the_new_folder_still_looks_up_names() {
+    after_a_stop_the_next_run_looks_up_names("n6bb", 47974, SECOND_GAP);
+}
+
+/// N36: with name lookup broken and no copy of the lookup file to put back (a Stop that broke it before Steplet kept a
+/// copy), the run is refused before anything is fetched, with words that say why, and nothing is left. The test
+/// removes the copy; the next run that finds lookup working makes it again.
+#[test]
+#[ignore = "needs Steplet's Linux"]
+fn with_no_copy_a_run_after_a_stop_in_the_gap_is_refused_in_plain_words() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let held = support::hold_linux();
+    let distro = support::steplet_linux();
+    let _found = support::lookup_put_back(&distro);
+    root_sh(&distro, "rm -f /var/lib/steplet/resolv.conf");
+    stop_in_the_gap(&distro, FIRST_GAP);
+    let req = request(&[READ_ME]);
+    let paths = RunPaths::new(&distro, "n6bc").unwrap();
+    let _removed = RemovedAtTheEnd(&paths);
+    let policy = Policy::from_steplet(&req.steplet, paths.work_repo()).unwrap();
+    let got = run_live_locked(&held, &req, &paths, &policy, &setup(&distro, 47976), Arc::new(Live::unattended()));
+    println!("--- the run, with lookup broken and no copy: {:?}", got.as_ref().err());
+    match got {
+        Err(RunError::ListedSite { site, why }) => {
+            assert_eq!(site, "");
+            assert_eq!(
+                why,
+                "Steplet will not run this file: Steplet could not keep name lookup working in its Linux (the name \
+                 lookup file is gone, and Steplet has no copy of it)."
+            );
+        }
+        other => panic!("the run must be refused before it starts: {other:?}"),
+    }
+    assert_eq!(root_sh(&distro, LEFT), NOTHING_LEFT, "nothing was prepared");
+}
+
+/// N36: Steplet's copy of the lookup file is root's alone. The next run looks up web addresses with whatever it holds,
+/// so the steplet account, which runs the agent's commands, must not be able to change it. After a run, the copy is
+/// root's, 644, and holds the lookup text; the steplet account, outside the fence (where it reaches most), cannot add
+/// to it, remove it, or put another file in its place or beside it, and the copy is unchanged. The control: the same
+/// account writes and removes a file of its own in `/tmp`.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn the_lookup_copy_is_roots_alone() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let held = support::hold_linux();
+    let distro = support::steplet_linux();
+    let found = support::lookup_put_back(&distro);
+    reads_its_readme(&held, "n6bd", 47977);
+    const COPY_LOOK: &str = "stat -c '%U:%G %a' /var/lib/steplet/resolv.conf; cat /var/lib/steplet/resolv.conf";
+    let copy = root_sh(&distro, COPY_LOOK);
+    println!("--- Steplet's copy after a run (owner, mode, text):\n{copy}");
+    assert_eq!(copy, format!("root:root 644\n{}", found.text));
+
+    let as_steplet = |sh: &str| {
+        let out = wsl::run(&distro, "steplet", &["/bin/sh", "-c", sh], b"").unwrap();
+        println!("--- as the steplet account: {sh:?}: {:?} {}", out.status, out.stderr.trim());
+        out.status == Some(0)
+    };
+    assert!(as_steplet("echo x > /tmp/n6bd-control && rm /tmp/n6bd-control"), "the control");
+    for sh in [
+        "echo 'nameserver 192.0.2.1' >> /var/lib/steplet/resolv.conf",
+        "rm -f /var/lib/steplet/resolv.conf",
+        "echo 'nameserver 192.0.2.1' > /tmp/n6bd-other && mv -f /tmp/n6bd-other /var/lib/steplet/resolv.conf",
+        "ln -s /tmp/n6bd-other /var/lib/steplet/resolv.conf.new",
+    ] {
+        assert!(!as_steplet(sh), "the steplet account changed Steplet's copy: {sh}");
+    }
+    root_sh(&distro, "rm -f /tmp/n6bd-other");
+    assert_eq!(root_sh(&distro, COPY_LOOK), copy, "the copy is unchanged");
 }

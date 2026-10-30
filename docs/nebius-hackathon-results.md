@@ -663,3 +663,150 @@ is Task 6c in the plan, waiting for a yes.
 Not checked in this task: a whole run of Steplet's own agent in real Linux (`run_agent_locked` with `prepare_own`,
 `LinuxHands` and the loop together). The loop's tests use stand-in hands; the hands' tests (Task 5) use no loop. The
 first whole run is Task 10's, with Nemotron.
+
+## Task 6b and 6c: a Stop at any moment no longer breaks name lookup (29 to 30 Oct)
+
+### What was wrong
+
+Root's start step swaps WSL's `/mnt/wsl` for Steplet's own folder, and that folder held the only copy of the name
+lookup file. A Stop that killed the step between "take /mnt/wsl away" and "put the file back" left Steplet's Linux
+unable to look up any web address until Windows or WSL restarted. Steplet's own agent runs that step at every move, so
+it met the gap once per move. Now root keeps its own copy (`/var/lib/steplet/resolv.conf`, root's, 644), saves it
+whenever the lookup file reads, and puts the file back from it: at the start of every start step, and before every run
+needs a web address (decision N36).
+
+### The tests, seen failing before the repair
+
+The first failing run (all five new tests) had one mistake of my own: the helper expected `cat README` to be
+"allowed", but the checker rightly passes it as "not asked, harmless". That check was dropped from the helper. The
+other failures were the real ones:
+
+```
+--- the run, with lookup broken and no copy: Some(Prepare(Step { step: "clone the repository", detail: "fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Could not resolve host: github.com\nsteplet-prepare: could not clone https://github.com/octocat/Hello-World.git" }))
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 3 filtered out; finished in 55.29s
+Command { line: "true" }: Layout("steplet-hands: could not read the name lookup file")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 7.53s
+```
+
+The second failing run, with the helper fixed: both gap tests fail at the clone, and the copy test finds no copy
+(root's `cat` of it exits 1):
+
+```
+called `Result::unwrap()` on an `Err` value: Prepare(Step { step: "clone the repository", detail: "fatal: unable to access 'https://github.com/octocat/Hello-World.git/': Could not resolve host: github.com\nsteplet-prepare: could not clone https://github.com/octocat/Hello-World.git" })
+  left: Some(1)
+ right: Some(0)
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 4 filtered out; finished in 81.62s
+```
+
+### With the repair
+
+```
+test a_run_after_a_stop_in_the_gap_still_looks_up_names ... --- run n6ba: 12.4 s
+test a_run_after_a_stop_just_after_the_new_folder_still_looks_up_names ... --- run n6bb: 13.3 s
+test the_lookup_copy_is_roots_alone ... --- run n6bd: 9.6 s
+test with_no_copy_a_run_after_a_stop_in_the_gap_is_refused_in_plain_words ... --- after the break (umount -R -l /mnt/wsl): the lookup file does not read; a lookup fails
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 117.11s
+test a_move_after_a_stop_in_the_gap_still_runs ... --- Command { line: "true" }
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 9.68s
+```
+
+### Task 6c: the tripwire group, four times
+
+The hook test's script now has 300 refused steps instead of 30. The group passed every time it ran (once more than
+the three the plan asks for, because a background run was restarted part way):
+
+```
+--- requests that reached the gate after the hook: 13
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 53.16s
+--- requests that reached the gate after the hook: 16
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 69.72s
+--- requests that reached the gate after the hook: 15
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 58.51s
+--- requests that reached the gate after the hook: 32
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 90.80s
+```
+
+The 32 in the last run shows why the margin matters: that Stop came well after the old limit of 30 steps would have
+let the script finish.
+
+### Every Linux group, after 6b and 6c
+
+`--ignored --test-threads=1`, every group but `setup`:
+
+| Group | Result |
+|---|---|
+| ask_live | 4 passed, 112.51 s |
+| contain | 12 passed, 270.55 s |
+| gate | 6 passed, 93.58 s |
+| hands | 10 passed, 126.86 s |
+| launch | 6 passed, 92.38 s |
+| links | 5 passed, 85.53 s |
+| prepare | 8 passed, 49.17 s |
+| report | 2 passed, 31.79 s |
+| restart | 7 passed, 170.58 s |
+| settings_live | 3 passed, 88.38 s |
+| sites | 2 passed, 32.89 s |
+| tripwires | 4 passed, 60.03 s |
+| uc5 | 1 passed, 31.47 s |
+
+70 passed, none failed.
+
+### After review
+
+A reviewer read the whole change and found nothing blocking: no moment where a kill leaves lookup broken for good, and
+no way for the steplet account to change the copy. Four of its points were taken:
+
+1. The refusal said "Steplet's Linux cannot look up web addresses", which is wrong when only saving the copy failed
+   (a full disk, say). It now says "Steplet could not keep name lookup working in its Linux (<reason>)", which is true
+   either way. The test was changed first and seen failing:
+   ```
+    right: "Steplet will not run this file: Steplet could not keep name lookup working in its Linux (the name lookup file is gone, and Steplet has no copy of it)."
+   test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 21.68s
+   ```
+2. A step that failed without saying why gave an empty "()". It now gives the exit code. New unit test, seen failing
+   (`cannot find function plain_reason`), then:
+   ```
+   test launch::tests::a_root_step_s_reason_is_said_in_plain_words ... ok
+   ```
+3. The tests' put-back helper now says so if lookup still fails after it put the file back. It only says it, because
+   a panic there, while a failed test unwinds, would end the whole test program.
+4. The tripwire comment now says that 300 widens the margin; it does not remove the race.
+
+Two were declined: saving the copy only when it has a `nameserver` line (the lookup file is written in one small
+write, so a kill leaves it empty, which is already handled, or whole; and the check would refuse a Linux set up
+without that line), and syncing the copy to disk (that matters only after a full crash, and WSL rebuilds the lookup
+file when it restarts).
+
+### After the review changes
+
+Rerun of the four Linux groups the review changes touch, then the ordinary tests, format and lint (30 Oct, 05:45 to 06:16, the run lock free throughout):
+
+| Group | Command | Result |
+|---|---|---|
+| restart | `cargo test -p steplet-run --offline --test restart -- --ignored --test-threads=1` | `test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 550.88s` |
+| hands | `cargo test -p steplet-run --offline --test hands -- --ignored --test-threads=1` | `test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 257.09s` |
+| launch | `cargo test -p steplet-run --offline --test launch -- --ignored --test-threads=1` | `test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 203.99s` |
+| contain | `cargo test -p steplet-run --offline --test contain -- --ignored --test-threads=1` | `test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 651.10s` |
+| ordinary | `cargo test -p steplet-run -p steplet-app --offline` | every target `ok`; summed: 267 passed, 0 failed, 82 ignored (the Linux ones); `ordinary exit 0` |
+| format | `cargo fmt --all -- --check` | `fmt exit 0` |
+| lint | `cargo clippy --workspace --all-targets --offline -- -D warnings` | `` Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.15s ``; `clippy exit 0` |
+
+With `--ignored`, the launch group's one ordinary test is left out ("1 filtered out"); it runs with the ordinary tests.
+
+### Departures from the plan
+
+- The run tests went in `restart.rs`, not `launch.rs`: `restart.rs` already holds the "a run after an earlier run was
+  cut short" tests and their helpers.
+- One extra test: with no copy, the run is refused in plain words before anything is made.
+- The attack suite's look after each case now expects the copy in `/var/lib/steplet`.
+- `long_request`'s turn limit went from 60 to 400, so a run Steplet did not stop would reach the end of the 300-step
+  script rather than the turn limit.
+- The refusal's wording changed after review (above).
+- The `setup` group was not run: it reinstalls Steplet's Linux, and one of its tests installs a second Linux from the
+  internet, which needs the owner's yes.
+
+### Not checked
+
+- A real Stop landing inside the gap. The tests break lookup the way the gap does, with the same commands; they do not
+  time a real Stop into those few milliseconds.
+- The copy after a full crash of WSL: it is not synced to disk.

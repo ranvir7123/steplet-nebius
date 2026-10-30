@@ -230,13 +230,14 @@ pub fn hold_linux() -> steplet_run::RunLock {
 /// What a case left in Steplet's Linux, for the attack suite's look after each case (phase 5). One record each, as
 /// `<kind>\t<what>` ended by a NUL, the one character no file name can hold, so a name a task's program chose cannot
 /// pass for a record of its own: `left` for anything in `/work`, the runs folder or the per-run gate copies, anything
-/// in Steplet's own folder but its runs folder, and `steplet-*` in `/tmp` and `/var/tmp`; `test-file` for each file of
+/// in Steplet's own folder but its runs folder and its copy of the name lookup file (the Nebius plan, Task 6b), and
+/// `steplet-*` in `/tmp` and `/var/tmp`; `test-file` for each file of
 /// `/opt/steplet-test` (most are these helpers, kept on purpose); `program\t<pid>\t<command>` for anything the steplet
 /// account runs, and any listener or scripted model still running; `marker` for any file holding a marker's word.
 /// Changes nothing. Read from `stdout_bytes`: `stdout` drops the NULs.
 pub fn after_case_look(distro: &str) -> String {
     let body = "find /work /var/lib/steplet/runs /opt/steplet/gate/runs -mindepth 1 -maxdepth 1 -printf 'left\\t%p\\0' 2> /dev/null
-find /var/lib/steplet -mindepth 1 -maxdepth 1 ! -name runs -printf 'left\\t%p\\0'
+find /var/lib/steplet -mindepth 1 -maxdepth 1 ! -name runs ! -name resolv.conf -printf 'left\\t%p\\0'
 find /tmp /var/tmp -mindepth 1 -maxdepth 1 -name 'steplet-*' -printf 'left\\t%p\\0'
 find /opt/steplet-test -mindepth 1 -maxdepth 1 -printf 'test-file\\t%p\\0' 2> /dev/null
 for p in $(pgrep -u steplet; pgrep -f 'listener[.]py|fake_model[.]py'); do
@@ -286,6 +287,47 @@ impl AddedToHosts {
     pub fn before(&self) -> &[u8] {
         &self.before
     }
+}
+
+/// Name lookup in Steplet's Linux as a test found it, for the tests that break it as a Stop at the wrong moment of a
+/// start step does (the Nebius plan, Task 6b). When this is dropped, whether the test passed or failed, the lookup
+/// file reads as it did at the start: if it does not, Steplet's own folder is put at `/mnt/wsl` with that text in it,
+/// as a start step leaves it.
+pub struct LookupPutBack {
+    distro: String,
+    /// The lookup file's text when the test began.
+    pub text: String,
+}
+
+impl Drop for LookupPutBack {
+    fn drop(&mut self) {
+        let put_back = "saved=$(cat)
+[ \"$(cat /etc/resolv.conf 2> /dev/null)\" = \"$saved\" ] && exit 0
+umount -R -l /mnt/wsl 2> /dev/null
+mount -t tmpfs -o size=64k,mode=755 steplet-wsl /mnt/wsl && printf '%s\\n' \"$saved\" > /mnt/wsl/resolv.conf";
+        let _ = wsl::run(&self.distro, "root", &["/bin/bash", "-c", put_back], self.text.as_bytes());
+        // Said, not asserted: a panic here, while a failed test unwinds, would end the whole test program.
+        let check = wsl::run(&self.distro, "root", &["/bin/bash", "-c", "getent hosts github.com > /dev/null"], b"");
+        if !matches!(&check, Ok(out) if out.status == Some(0)) {
+            eprintln!(
+                "--- name lookup in {} still fails after the test put the lookup file back: {check:?}",
+                self.distro
+            );
+        }
+    }
+}
+
+/// Reads the lookup file as root; it must read and must not be empty, and a name must look up.
+pub fn lookup_put_back(distro: &str) -> LookupPutBack {
+    let text = run(distro, "root", &["/usr/bin/cat", "/etc/resolv.conf"]);
+    assert!(!text.is_empty(), "the lookup file is empty before the test");
+    assert_eq!(lookup(distro), "works", "name lookup works before the test");
+    LookupPutBack { distro: distro.into(), text }
+}
+
+/// Whether root can look up github.com in Steplet's Linux: "works" or "fails".
+pub fn lookup(distro: &str) -> String {
+    root_sh(distro, "getent hosts github.com > /dev/null && echo works || echo fails")
 }
 
 /// The bytes of `/etc/hosts` in Steplet's Linux, read as root, so a test can snapshot it and check it is restored.

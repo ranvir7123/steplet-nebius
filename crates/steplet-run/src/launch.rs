@@ -125,6 +125,32 @@ pub(crate) fn install(distro_id: &str, files: &[(&str, &str, &str)]) -> Result<(
     Ok(())
 }
 
+/// Keeps name lookup working in Steplet's Linux (`keep_name_lookup` in `root-common.sh`, the Nebius plan, Task 6b):
+/// saves Steplet's copy of the lookup file while it reads, and puts it back from that copy when a Stop at the wrong
+/// moment of a start step took it away. Called before anything of a run needs a web address. This build's
+/// `root-common.sh` goes in on standard input, so an older installed copy never decides. The error is the reason, in
+/// plain words.
+pub(crate) fn keep_name_lookup(distro_id: &str) -> Result<(), String> {
+    const WHO: &str = "steplet-lookup";
+    let script = format!("WHO={WHO}\n{ROOT_COMMON}\nkeep_name_lookup < /dev/null\n");
+    let out = wsl::run_within(distro_id, "root", &["/bin/bash", "-s"], script.as_bytes(), QUICK_CALL)
+        .map_err(|e| format!("could not reach Steplet's Linux: {e}"))?;
+    if out.status == Some(0) {
+        return Ok(());
+    }
+    Err(plain_reason(WHO, &out.stderr, out.status))
+}
+
+/// The reason a root step gave, without its `<who>: ` start; a step that said nothing gets its exit code instead.
+fn plain_reason(who: &str, stderr: &str, status: Option<i32>) -> String {
+    let said = stderr.trim();
+    match (said.is_empty(), status) {
+        (false, _) => said.strip_prefix(&format!("{who}: ")).unwrap_or(said).to_owned(),
+        (true, Some(code)) => format!("its check ended with exit code {code} and gave no reason"),
+        (true, None) => "its check was ended before it gave a reason".to_owned(),
+    }
+}
+
 impl RunHandle {
     /// The run's events, in order. The channel closes when the agent has ended and both outputs are read.
     pub fn events(&self) -> &Receiver<Event> {
@@ -254,4 +280,22 @@ fn read_lines(
 fn is_local_model(url: &str) -> bool {
     url.strip_prefix("http://127.0.0.1:")
         .is_some_and(|port| (1..=5).contains(&port.len()) && port.bytes().all(|b| b.is_ascii_digit()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_root_step_s_reason_is_said_in_plain_words() {
+        assert_eq!(
+            plain_reason("steplet-lookup", "steplet-lookup: could not close /mnt/wsl\n", Some(30)),
+            "could not close /mnt/wsl"
+        );
+        assert_eq!(
+            plain_reason("steplet-lookup", "  \n", Some(7)),
+            "its check ended with exit code 7 and gave no reason"
+        );
+        assert_eq!(plain_reason("steplet-lookup", "", None), "its check was ended before it gave a reason");
+    }
 }

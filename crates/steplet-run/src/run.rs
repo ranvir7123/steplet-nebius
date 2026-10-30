@@ -17,7 +17,7 @@ use crate::agent::{Limit, Spent};
 use crate::ask::{Answer, Asker};
 use crate::decide::{Checker, decide};
 use crate::gate::{ApiKey, Asked, GateError, GateService, gate_for_run, gate_on_windows, serve};
-use crate::launch::{LaunchError, RunHandle, launch};
+use crate::launch::{LaunchError, RunHandle, keep_name_lookup, launch};
 use crate::live::{Live, Progress, StopSignal};
 use crate::lock::RunLock;
 use crate::places::LinuxPaths;
@@ -273,6 +273,11 @@ pub fn run_live_on_pipe(
 /// explicitly at the end (and records any failure in the report), leaving the guard only as a backstop for the early
 /// returns and for panics.
 pub(crate) fn pin_listed_sites<'a>(req: &RunRequest, distro: &'a str) -> Result<Pinned<'a>, RunError> {
+    // A Stop at the wrong moment of an earlier run's start step can have taken name lookup away; put it back first.
+    keep_name_lookup(distro).map_err(|e| RunError::ListedSite {
+        site: String::new(),
+        why: format!("Steplet will not run this file: Steplet could not keep name lookup working in its Linux ({e})."),
+    })?;
     let domains: Vec<String> = req.steplet.allow.domains.iter().map(|d| d.text.clone()).collect();
     // Resolve every declared site in one bounded call; if the look-up itself cannot run, refuse the run (fail closed).
     let resolved = match sites::resolve_all_in_linux(distro, &domains) {

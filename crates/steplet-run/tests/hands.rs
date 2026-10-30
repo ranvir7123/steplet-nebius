@@ -395,3 +395,30 @@ fn the_run_folder_is_out_of_the_fences_reach() {
     let listed = run.command("ls -A /var/lib/steplet 2>&1; true");
     assert!(!listed.output.contains("runs"), "the private folder is hidden: {}", listed.output);
 }
+
+/// The Nebius plan, Task 6b (N36): Steplet's own agent meets a Stop's gap at every move, not once per run. Each move's
+/// start step closes WSL's shared folders again, and a Stop ends a move by ending `wsl.exe` from Windows, which ends
+/// that step at once. A first move leaves Steplet's copy of the lookup file; the test then breaks name lookup as a Stop
+/// just after "remove `/mnt/wsl`" does (the control: the lookup file does not read, and no name looks up). Pass: the
+/// next move runs and ends with exit code 0; afterwards `/mnt/wsl` is Steplet's own folder holding only the lookup
+/// file, with the text it had, and names look up.
+#[test]
+#[ignore = "needs Steplet's Linux and the network"]
+fn a_move_after_a_stop_in_the_gap_still_runs() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let mut run = ready("n6be", "");
+    let distro = run.distro();
+    let found = support::lookup_put_back(&distro);
+    assert_eq!(run.command("true").exit_code, Some(0), "a move before the Stop");
+
+    run.root("umount -R -l /mnt/wsl");
+    let reads = run.root("cat /etc/resolv.conf > /dev/null 2>&1 && echo reads || echo 'does not read'");
+    assert_eq!((reads.as_str(), support::lookup(&distro).as_str()), ("does not read", "fails"), "the control");
+
+    let next = run.command("true");
+    assert_eq!((next.exit_code, next.timed_out), (Some(0), false), "the move after the Stop");
+    let after = run.root("findmnt -rn -o SOURCE /mnt/wsl; ls -A /mnt/wsl; cat /etc/resolv.conf");
+    println!("--- after the next move (/mnt/wsl's source, what it holds, the lookup file):\n{after}");
+    assert_eq!(after, format!("steplet-wsl\nresolv.conf\n{}", found.text));
+    assert_eq!(support::lookup(&distro), "works", "names look up after the move");
+}

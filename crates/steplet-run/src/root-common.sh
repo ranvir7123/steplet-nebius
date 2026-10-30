@@ -14,12 +14,39 @@ reachable_mount() {
     [ -e "$1" ] && [ "$(stat -c %d -- "$1")" != "$(stat -c %d -- "$(dirname -- "$1")")" ]
 }
 
+# Steplet's own copy of the name lookup file, root's alone. A Stop can end close_shared_folders after it took WSL's
+# /mnt/wsl away and before the lookup file is back, which leaves Steplet's Linux unable to look up any web address;
+# keep_name_lookup puts the file back from this copy (the Nebius plan, Task 6b).
+LOOKUP_COPY=/var/lib/steplet/resolv.conf
+
+# While the lookup file reads, saves its text as Steplet's copy: written beside it, then moved over it, so a Stop never
+# leaves half a copy. When it does not read, puts Steplet's folder at /mnt/wsl with the copy in it.
+keep_name_lookup() {
+    local lookup
+    lookup=$(cat /etc/resolv.conf 2> /dev/null)
+    if [ -n "$lookup" ]; then
+        printf '%s\n' "$lookup" > "$LOOKUP_COPY.new" && chmod 644 "$LOOKUP_COPY.new" &&
+            mv -f -- "$LOOKUP_COPY.new" "$LOOKUP_COPY" ||
+            fail 30 "could not keep a copy of the name lookup file"
+        return 0
+    fi
+    [ -s "$LOOKUP_COPY" ] || fail 30 "the name lookup file is gone, and Steplet has no copy of it"
+    if reachable_mount /mnt/wsl; then umount -R -l /mnt/wsl 2> /dev/null; fi
+    if reachable_mount /mnt/wsl; then fail 30 "could not close /mnt/wsl"; fi
+    mount -t tmpfs -o size=64k,mode=755 steplet-wsl /mnt/wsl 2> /dev/null &&
+        cp -- "$LOOKUP_COPY" /mnt/wsl/resolv.conf 2> /dev/null ||
+        fail 30 "could not put the name lookup file back"
+    [ -n "$(cat /etc/resolv.conf 2> /dev/null)" ] || fail 30 "the name lookup file is still gone"
+}
+
 close_shared_folders() {
     # /etc/resolv.conf, the name lookup file, is WSL's link to /mnt/wsl/resolv.conf, and WSL puts that link back
     # whenever a new session starts. So /mnt/wsl is not just closed but replaced, by a small folder of Steplet's own
-    # holding a copy of that one file: the link keeps working, and nothing other systems share there is visible.
+    # holding a copy of that one file: the link keeps working, and nothing other systems share there is visible. The
+    # text comes from Steplet's copy, which a Stop in the middle of this step cannot take away.
     local lookup m
-    lookup=$(cat /etc/resolv.conf) || fail 30 "could not read the name lookup file"
+    keep_name_lookup
+    lookup=$(cat "$LOOKUP_COPY") || fail 30 "could not read Steplet's copy of the name lookup file"
     # WSL's own programs may still hold these, so each is detached now and freed when they let go.
     for m in /mnt/wslg /tmp/.X11-unix /mnt/wsl; do
         if reachable_mount "$m"; then umount -R -l "$m" 2> /dev/null; fi
